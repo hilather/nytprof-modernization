@@ -1,0 +1,36 @@
+# Oracle build products (rebuild via scripts/baseline/)
+baseline/6.15/src/
+baseline/6.15/install/
+baseline/6.15/logs/
+baseline/6.15/test-deps/
+baseline/6.15/src-*/
+
+# Editor / OS
+*~
+*.swp
+.DS_Store
+
+# Scratch / local
+/tmp/
+*.log
+__pycache__/
+*.py[cod]
+/nytprof.out
+
+# Future Rust
+/target/
+**/target/
+
+# Local native CLI install (scripts/packaging/install_native.sh)
+/prefix/
+
+# Candidate MakeMaker packaging entry products (root Makefile.PL)
+/Makefile
+/Makefile.old
+/MYMETA.json
+/MYMETA.yml
+/blib/
+/pm_to_blib
+/nytprof-packaging.mode
+/*.bs
+/inc/

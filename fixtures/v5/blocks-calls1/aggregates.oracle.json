@@ -1,0 +1,632 @@
+{
+  "schema": "aggregate-comparison-v0",
+  "source": "fixtures/v5/blocks-calls1/readstream.jsonl",
+  "time_line_events": 0,
+  "time_block_events": 916,
+  "discount_events": 818,
+  "sub_return_totals": {
+    "main::BEGIN@1": {
+      "returns": 1,
+      "incl": 618,
+      "excl": 554
+    },
+    "main::BEGIN@2": {
+      "returns": 1,
+      "incl": 73303,
+      "excl": 72756
+    },
+    "main::CORE:print": {
+      "returns": 1,
+      "incl": 104,
+      "excl": 104
+    },
+    "main::leaf": {
+      "returns": 15,
+      "incl": 1588,
+      "excl": 1588
+    },
+    "main::mid": {
+      "returns": 3,
+      "incl": 2093,
+      "excl": 505
+    },
+    "strict::import": {
+      "returns": 1,
+      "incl": 64,
+      "excl": 64
+    },
+    "warnings::CORE:match": {
+      "returns": 2,
+      "incl": 118,
+      "excl": 118
+    },
+    "warnings::_bits": {
+      "returns": 1,
+      "incl": 185,
+      "excl": 140
+    },
+    "warnings::_expand_bits": {
+      "returns": 1,
+      "incl": 45,
+      "excl": 45
+    },
+    "warnings::import": {
+      "returns": 1,
+      "incl": 440,
+      "excl": 244
+    }
+  },
+  "line_totals": {
+    "1:1": {
+      "calls": 3,
+      "ticks": 902
+    },
+    "1:2": {
+      "calls": 5,
+      "ticks": 73379
+    },
+    "1:4": {
+      "calls": 15,
+      "ticks": 31
+    },
+    "1:5": {
+      "calls": 780,
+      "ticks": 1449
+    },
+    "1:6": {
+      "calls": 15,
+      "ticks": 304
+    },
+    "1:9": {
+      "calls": 3,
+      "ticks": 5
+    },
+    "1:10": {
+      "calls": 36,
+      "ticks": 185
+    },
+    "1:11": {
+      "calls": 3,
+      "ticks": 89
+    },
+    "1:13": {
+      "calls": 1,
+      "ticks": 7
+    },
+    "1:14": {
+      "calls": 8,
+      "ticks": 174
+    },
+    "1:15": {
+      "calls": 1,
+      "ticks": 206
+    },
+    "2:8": {
+      "calls": 1,
+      "ticks": 14
+    },
+    "2:14": {
+      "calls": 1,
+      "ticks": 221
+    },
+    "2:18": {
+      "calls": 1,
+      "ticks": 329
+    },
+    "2:136": {
+      "calls": 1,
+      "ticks": 439
+    },
+    "2:219": {
+      "calls": 1,
+      "ticks": 231
+    },
+    "2:302": {
+      "calls": 1,
+      "ticks": 37
+    },
+    "2:314": {
+      "calls": 1,
+      "ticks": 5
+    },
+    "2:315": {
+      "calls": 1,
+      "ticks": 3
+    },
+    "2:316": {
+      "calls": 1,
+      "ticks": 3
+    },
+    "2:317": {
+      "calls": 1,
+      "ticks": 3
+    },
+    "2:328": {
+      "calls": 1,
+      "ticks": 3
+    },
+    "2:329": {
+      "calls": 1,
+      "ticks": 12
+    },
+    "2:330": {
+      "calls": 1,
+      "ticks": 5
+    },
+    "2:331": {
+      "calls": 1,
+      "ticks": 5
+    },
+    "2:343": {
+      "calls": 1,
+      "ticks": 46
+    },
+    "2:347": {
+      "calls": 1,
+      "ticks": 4
+    },
+    "2:348": {
+      "calls": 1,
+      "ticks": 3
+    },
+    "2:349": {
+      "calls": 1,
+      "ticks": 3
+    },
+    "2:350": {
+      "calls": 1,
+      "ticks": 2
+    },
+    "2:352": {
+      "calls": 2,
+      "ticks": 19
+    },
+    "2:353": {
+      "calls": 2,
+      "ticks": 8
+    },
+    "2:354": {
+      "calls": 1,
+      "ticks": 8
+    },
+    "2:355": {
+      "calls": 3,
+      "ticks": 24
+    },
+    "2:364": {
+      "calls": 1,
+      "ticks": 15
+    },
+    "2:365": {
+      "calls": 1,
+      "ticks": 3
+    },
+    "2:366": {
+      "calls": 1,
+      "ticks": 2
+    },
+    "2:372": {
+      "calls": 1,
+      "ticks": 34
+    },
+    "2:384": {
+      "calls": 1,
+      "ticks": 10
+    },
+    "2:388": {
+      "calls": 1,
+      "ticks": 21
+    },
+    "2:391": {
+      "calls": 1,
+      "ticks": 6
+    },
+    "2:392": {
+      "calls": 2,
+      "ticks": 65
+    },
+    "2:393": {
+      "calls": 3,
+      "ticks": 100
+    },
+    "2:396": {
+      "calls": 1,
+      "ticks": 20
+    },
+    "2:397": {
+      "calls": 2,
+      "ticks": 44
+    },
+    "2:430": {
+      "calls": 2,
+      "ticks": 49
+    },
+    "2:614": {
+      "calls": 1,
+      "ticks": 84
+    },
+    "2:616": {
+      "calls": 1,
+      "ticks": 729
+    }
+  },
+  "block_line_totals": {
+    "1:1": {
+      "calls": 3,
+      "ticks": 902
+    },
+    "1:2": {
+      "calls": 5,
+      "ticks": 73379
+    },
+    "1:4": {
+      "calls": 810,
+      "ticks": 1784
+    },
+    "1:9": {
+      "calls": 42,
+      "ticks": 279
+    },
+    "1:13": {
+      "calls": 1,
+      "ticks": 7
+    },
+    "1:14": {
+      "calls": 8,
+      "ticks": 174
+    },
+    "1:15": {
+      "calls": 1,
+      "ticks": 206
+    },
+    "2:8": {
+      "calls": 1,
+      "ticks": 14
+    },
+    "2:14": {
+      "calls": 1,
+      "ticks": 221
+    },
+    "2:18": {
+      "calls": 1,
+      "ticks": 329
+    },
+    "2:136": {
+      "calls": 1,
+      "ticks": 439
+    },
+    "2:219": {
+      "calls": 1,
+      "ticks": 231
+    },
+    "2:302": {
+      "calls": 1,
+      "ticks": 37
+    },
+    "2:314": {
+      "calls": 1,
+      "ticks": 5
+    },
+    "2:315": {
+      "calls": 1,
+      "ticks": 3
+    },
+    "2:316": {
+      "calls": 1,
+      "ticks": 3
+    },
+    "2:317": {
+      "calls": 1,
+      "ticks": 3
+    },
+    "2:328": {
+      "calls": 5,
+      "ticks": 71
+    },
+    "2:347": {
+      "calls": 9,
+      "ticks": 73
+    },
+    "2:354": {
+      "calls": 4,
+      "ticks": 32
+    },
+    "2:355": {
+      "calls": 3,
+      "ticks": 20
+    },
+    "2:384": {
+      "calls": 5,
+      "ticks": 102
+    },
+    "2:393": {
+      "calls": 6,
+      "ticks": 164
+    },
+    "2:430": {
+      "calls": 2,
+      "ticks": 49
+    },
+    "2:614": {
+      "calls": 1,
+      "ticks": 84
+    },
+    "2:616": {
+      "calls": 1,
+      "ticks": 729
+    }
+  },
+  "workload_subs": [
+    "main::leaf",
+    "main::mid"
+  ],
+  "call_edges": {
+    " -> main::CORE:print": {
+      "count": 0,
+      "incl": 0,
+      "excl": 0,
+      "reci": 0,
+      "max_rec_depth": 0
+    },
+    " -> warnings::CORE:match": {
+      "count": 0,
+      "incl": 0,
+      "excl": 0,
+      "reci": 0,
+      "max_rec_depth": 0
+    },
+    "main::BEGIN@1 -> strict::import": {
+      "count": 1,
+      "incl": 6.4e-06,
+      "excl": 6.4e-06,
+      "reci": 0,
+      "max_rec_depth": 0
+    },
+    "main::BEGIN@2 -> warnings::CORE:match": {
+      "count": 1,
+      "incl": 1.07e-05,
+      "excl": 1.07e-05,
+      "reci": 0,
+      "max_rec_depth": 0
+    },
+    "main::BEGIN@2 -> warnings::import": {
+      "count": 1,
+      "incl": 4.4e-05,
+      "excl": 2.44e-05,
+      "reci": 0,
+      "max_rec_depth": 0
+    },
+    "main::NULL -> main::BEGIN@1": {
+      "count": 1,
+      "incl": 6.18e-05,
+      "excl": 5.54e-05,
+      "reci": 0,
+      "max_rec_depth": 0
+    },
+    "main::NULL -> main::BEGIN@2": {
+      "count": 1,
+      "incl": 0.0073303,
+      "excl": 0.0072756,
+      "reci": 0,
+      "max_rec_depth": 0
+    },
+    "main::RUNTIME -> main::CORE:print": {
+      "count": 1,
+      "incl": 1.04e-05,
+      "excl": 1.04e-05,
+      "reci": 0,
+      "max_rec_depth": 0
+    },
+    "main::RUNTIME -> main::mid": {
+      "count": 3,
+      "incl": 0.0002093,
+      "excl": 5.05e-05,
+      "reci": 0,
+      "max_rec_depth": 0
+    },
+    "main::mid -> main::leaf": {
+      "count": 15,
+      "incl": 0.0001588,
+      "excl": 0.0001588,
+      "reci": 0,
+      "max_rec_depth": 0
+    },
+    "warnings::_bits -> warnings::_expand_bits": {
+      "count": 1,
+      "incl": 4.5e-06,
+      "excl": 4.5e-06,
+      "reci": 0,
+      "max_rec_depth": 0
+    },
+    "warnings::import -> warnings::CORE:match": {
+      "count": 1,
+      "incl": 1.1e-06,
+      "excl": 1.1e-06,
+      "reci": 0,
+      "max_rec_depth": 0
+    },
+    "warnings::import -> warnings::_bits": {
+      "count": 1,
+      "incl": 1.85e-05,
+      "excl": 1.4e-05,
+      "reci": 0,
+      "max_rec_depth": 0
+    }
+  },
+  "source_line_count": 632,
+  "source_sample": {
+    "1:1": "use strict;",
+    "1:2": "use warnings;",
+    "1:3": "sub leaf {",
+    "1:4": "    my $x = 0;",
+    "1:5": "    $x++ for 1 .. 50;",
+    "1:6": "    return $x;",
+    "1:7": "}",
+    "1:8": "sub mid {",
+    "1:9": "    my $s = 0;",
+    "1:10": "    $s += leaf() for 1 .. 5;",
+    "1:11": "    return $s;",
+    "1:12": "}",
+    "1:13": "my $total = 0;",
+    "1:14": "$total += mid() for 1 .. 3;",
+    "1:15": "print \"total=$total\\n\";"
+  },
+  "sub_info_events": 31,
+  "sub_defs": {
+    "main::BEGIN@1": {
+      "fid": 1,
+      "first_line": 1,
+      "last_line": 1
+    },
+    "main::BEGIN@2": {
+      "fid": 1,
+      "first_line": 2,
+      "last_line": 2
+    },
+    "main::CORE:print": {
+      "fid": 1,
+      "first_line": 0,
+      "last_line": 0
+    },
+    "main::RUNTIME": {
+      "fid": 1,
+      "first_line": 1,
+      "last_line": 1
+    },
+    "main::leaf": {
+      "fid": 1,
+      "first_line": 3,
+      "last_line": 7
+    },
+    "main::mid": {
+      "fid": 1,
+      "first_line": 8,
+      "last_line": 12
+    },
+    "strict::BEGIN": {
+      "fid": 3,
+      "first_line": 7,
+      "last_line": 38
+    },
+    "strict::__ANON__[/usr/lib/x86_64-linux-gnu/perl-base/strict.pm:31]": {
+      "fid": 3,
+      "first_line": 31,
+      "last_line": 31
+    },
+    "strict::__ANON__[/usr/lib/x86_64-linux-gnu/perl-base/strict.pm:37]": {
+      "fid": 3,
+      "first_line": 37,
+      "last_line": 37
+    },
+    "strict::bits": {
+      "fid": 3,
+      "first_line": 40,
+      "last_line": 58
+    },
+    "strict::import": {
+      "fid": 3,
+      "first_line": 60,
+      "last_line": 63
+    },
+    "strict::unimport": {
+      "fid": 3,
+      "first_line": 65,
+      "last_line": 75
+    },
+    "warnings::CORE:match": {
+      "fid": 2,
+      "first_line": 0,
+      "last_line": 0
+    },
+    "warnings::Croaker": {
+      "fid": 2,
+      "first_line": 320,
+      "last_line": 325
+    },
+    "warnings::__chk": {
+      "fid": 2,
+      "first_line": 438,
+      "last_line": 539
+    },
+    "warnings::_bits": {
+      "fid": 2,
+      "first_line": 346,
+      "last_line": 373
+    },
+    "warnings::_error_loc": {
+      "fid": 2,
+      "first_line": 567,
+      "last_line": 570
+    },
+    "warnings::_expand_bits": {
+      "fid": 2,
+      "first_line": 327,
+      "last_line": 344
+    },
+    "warnings::_mkMask": {
+      "fid": 2,
+      "first_line": 542,
+      "last_line": 548
+    },
+    "warnings::bits": {
+      "fid": 2,
+      "first_line": 376,
+      "last_line": 380
+    },
+    "warnings::enabled": {
+      "fid": 2,
+      "first_line": 573,
+      "last_line": 575
+    },
+    "warnings::enabled_at_level": {
+      "fid": 2,
+      "first_line": 593,
+      "last_line": 595
+    },
+    "warnings::fatal_enabled": {
+      "fid": 2,
+      "first_line": 578,
+      "last_line": 580
+    },
+    "warnings::fatal_enabled_at_level": {
+      "fid": 2,
+      "first_line": 598,
+      "last_line": 600
+    },
+    "warnings::import": {
+      "fid": 2,
+      "first_line": 383,
+      "last_line": 402
+    },
+    "warnings::register_categories": {
+      "fid": 2,
+      "first_line": 551,
+      "last_line": 565
+    },
+    "warnings::unimport": {
+      "fid": 2,
+      "first_line": 405,
+      "last_line": 428
+    },
+    "warnings::warn": {
+      "fid": 2,
+      "first_line": 583,
+      "last_line": 585
+    },
+    "warnings::warn_at_level": {
+      "fid": 2,
+      "first_line": 603,
+      "last_line": 605
+    },
+    "warnings::warnif": {
+      "fid": 2,
+      "first_line": 588,
+      "last_line": 590
+    },
+    "warnings::warnif_at_level": {
+      "fid": 2,
+      "first_line": 608,
+      "last_line": 610
+    }
+  }
+}

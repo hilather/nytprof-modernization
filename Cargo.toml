@@ -1,0 +1,26 @@
+[workspace]
+resolver = "2"
+members = [
+    "crates/nytprof-types",
+    "crates/nytprof-format-v5",
+    "crates/nytprof-model",
+    "crates/nytprof-aggregate",
+    "crates/nytprof-report",
+    "crates/nytprof-cli",
+]
+
+[workspace.package]
+edition = "2021"
+license = "Artistic-1.0-Perl OR GPL-1.0-or-later"
+repository = "https://github.com/timbunce/devel-nytprof"
+
+[workspace.dependencies]
+nytprof-types = { path = "crates/nytprof-types" }
+nytprof-format-v5 = { path = "crates/nytprof-format-v5" }
+nytprof-model = { path = "crates/nytprof-model" }
+nytprof-aggregate = { path = "crates/nytprof-aggregate" }
+nytprof-report = { path = "crates/nytprof-report" }
+flate2 = "1"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+thiserror = "2"

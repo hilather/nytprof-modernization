@@ -250,8 +250,278 @@
       "ticks": 238
     }
   },
+  "block_line_totals": {},
   "workload_subs": [
     "main::leaf",
     "main::mid"
-  ]
+  ],
+  "call_edges": {
+    " -> main::CORE:print": {
+      "count": 0,
+      "incl": 0,
+      "excl": 0,
+      "reci": 0,
+      "max_rec_depth": 0
+    },
+    " -> warnings::CORE:match": {
+      "count": 0,
+      "incl": 0,
+      "excl": 0,
+      "reci": 0,
+      "max_rec_depth": 0
+    },
+    "main::BEGIN@1 -> strict::import": {
+      "count": 1,
+      "incl": 1.5e-06,
+      "excl": 1.5e-06,
+      "reci": 0,
+      "max_rec_depth": 0
+    },
+    "main::BEGIN@2 -> warnings::CORE:match": {
+      "count": 1,
+      "incl": 3.2e-06,
+      "excl": 3.2e-06,
+      "reci": 0,
+      "max_rec_depth": 0
+    },
+    "main::BEGIN@2 -> warnings::import": {
+      "count": 1,
+      "incl": 1.44e-05,
+      "excl": 7.4e-06,
+      "reci": 0,
+      "max_rec_depth": 0
+    },
+    "main::NULL -> main::BEGIN@1": {
+      "count": 1,
+      "incl": 1.64e-05,
+      "excl": 1.49e-05,
+      "reci": 0,
+      "max_rec_depth": 0
+    },
+    "main::NULL -> main::BEGIN@2": {
+      "count": 1,
+      "incl": 0.001776,
+      "excl": 0.0017584,
+      "reci": 0,
+      "max_rec_depth": 0
+    },
+    "main::RUNTIME -> main::CORE:print": {
+      "count": 1,
+      "incl": 2.6e-06,
+      "excl": 2.6e-06,
+      "reci": 0,
+      "max_rec_depth": 0
+    },
+    "main::RUNTIME -> main::mid": {
+      "count": 3,
+      "incl": 7.04e-05,
+      "excl": 1.53e-05,
+      "reci": 0,
+      "max_rec_depth": 0
+    },
+    "main::mid -> main::leaf": {
+      "count": 15,
+      "incl": 5.51e-05,
+      "excl": 5.51e-05,
+      "reci": 0,
+      "max_rec_depth": 0
+    },
+    "warnings::_bits -> warnings::_expand_bits": {
+      "count": 1,
+      "incl": 1.7e-06,
+      "excl": 1.7e-06,
+      "reci": 0,
+      "max_rec_depth": 0
+    },
+    "warnings::import -> warnings::CORE:match": {
+      "count": 1,
+      "incl": 3e-07,
+      "excl": 3e-07,
+      "reci": 0,
+      "max_rec_depth": 0
+    },
+    "warnings::import -> warnings::_bits": {
+      "count": 1,
+      "incl": 6.7e-06,
+      "excl": 5e-06,
+      "reci": 0,
+      "max_rec_depth": 0
+    }
+  },
+  "source_line_count": 632,
+  "source_sample": {
+    "1:1": "use strict;",
+    "1:2": "use warnings;",
+    "1:3": "sub leaf {",
+    "1:4": "    my $x = 0;",
+    "1:5": "    $x++ for 1 .. 50;",
+    "1:6": "    return $x;",
+    "1:7": "}",
+    "1:8": "sub mid {",
+    "1:9": "    my $s = 0;",
+    "1:10": "    $s += leaf() for 1 .. 5;",
+    "1:11": "    return $s;",
+    "1:12": "}",
+    "1:13": "my $total = 0;",
+    "1:14": "$total += mid() for 1 .. 3;",
+    "1:15": "print \"total=$total\\n\";"
+  },
+  "sub_info_events": 31,
+  "sub_defs": {
+    "main::BEGIN@1": {
+      "fid": 1,
+      "first_line": 1,
+      "last_line": 1
+    },
+    "main::BEGIN@2": {
+      "fid": 1,
+      "first_line": 2,
+      "last_line": 2
+    },
+    "main::CORE:print": {
+      "fid": 1,
+      "first_line": 0,
+      "last_line": 0
+    },
+    "main::RUNTIME": {
+      "fid": 1,
+      "first_line": 1,
+      "last_line": 1
+    },
+    "main::leaf": {
+      "fid": 1,
+      "first_line": 3,
+      "last_line": 7
+    },
+    "main::mid": {
+      "fid": 1,
+      "first_line": 8,
+      "last_line": 12
+    },
+    "strict::BEGIN": {
+      "fid": 3,
+      "first_line": 7,
+      "last_line": 38
+    },
+    "strict::__ANON__[/usr/lib/x86_64-linux-gnu/perl-base/strict.pm:31]": {
+      "fid": 3,
+      "first_line": 31,
+      "last_line": 31
+    },
+    "strict::__ANON__[/usr/lib/x86_64-linux-gnu/perl-base/strict.pm:37]": {
+      "fid": 3,
+      "first_line": 37,
+      "last_line": 37
+    },
+    "strict::bits": {
+      "fid": 3,
+      "first_line": 40,
+      "last_line": 58
+    },
+    "strict::import": {
+      "fid": 3,
+      "first_line": 60,
+      "last_line": 63
+    },
+    "strict::unimport": {
+      "fid": 3,
+      "first_line": 65,
+      "last_line": 75
+    },
+    "warnings::CORE:match": {
+      "fid": 2,
+      "first_line": 0,
+      "last_line": 0
+    },
+    "warnings::Croaker": {
+      "fid": 2,
+      "first_line": 320,
+      "last_line": 325
+    },
+    "warnings::__chk": {
+      "fid": 2,
+      "first_line": 438,
+      "last_line": 539
+    },
+    "warnings::_bits": {
+      "fid": 2,
+      "first_line": 346,
+      "last_line": 373
+    },
+    "warnings::_error_loc": {
+      "fid": 2,
+      "first_line": 567,
+      "last_line": 570
+    },
+    "warnings::_expand_bits": {
+      "fid": 2,
+      "first_line": 327,
+      "last_line": 344
+    },
+    "warnings::_mkMask": {
+      "fid": 2,
+      "first_line": 542,
+      "last_line": 548
+    },
+    "warnings::bits": {
+      "fid": 2,
+      "first_line": 376,
+      "last_line": 380
+    },
+    "warnings::enabled": {
+      "fid": 2,
+      "first_line": 573,
+      "last_line": 575
+    },
+    "warnings::enabled_at_level": {
+      "fid": 2,
+      "first_line": 593,
+      "last_line": 595
+    },
+    "warnings::fatal_enabled": {
+      "fid": 2,
+      "first_line": 578,
+      "last_line": 580
+    },
+    "warnings::fatal_enabled_at_level": {
+      "fid": 2,
+      "first_line": 598,
+      "last_line": 600
+    },
+    "warnings::import": {
+      "fid": 2,
+      "first_line": 383,
+      "last_line": 402
+    },
+    "warnings::register_categories": {
+      "fid": 2,
+      "first_line": 551,
+      "last_line": 565
+    },
+    "warnings::unimport": {
+      "fid": 2,
+      "first_line": 405,
+      "last_line": 428
+    },
+    "warnings::warn": {
+      "fid": 2,
+      "first_line": 583,
+      "last_line": 585
+    },
+    "warnings::warn_at_level": {
+      "fid": 2,
+      "first_line": 603,
+      "last_line": 605
+    },
+    "warnings::warnif": {
+      "fid": 2,
+      "first_line": 588,
+      "last_line": 590
+    },
+    "warnings::warnif_at_level": {
+      "fid": 2,
+      "first_line": 608,
+      "last_line": 610
+    }
+  }
 }

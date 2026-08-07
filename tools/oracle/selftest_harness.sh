@@ -6,10 +6,10 @@
 #
 # Cases:
 #   a) Identity after normalize → PASS
-#   b) Seeded TIME_LINE → TIME_BLOCK after normalize → FAIL compare
-#   c) Seeded TIME_LINE ticks mutation → FAIL compare
+#   b) Seeded timing-tag flip (TIME_LINE↔TIME_BLOCK) after normalize → FAIL compare
+#   c) Seeded timing ticks mutation (TIME_LINE or TIME_BLOCK) → FAIL compare
 #   d) Volatile fields differ pre-normalize; after normalize → PASS
-#   e) Same suite for default-calls2 when present
+#   e) Same suite for default-calls2 / blocks-calls1 when present
 #
 # Exit non-zero on any failure.
 set -euo pipefail
@@ -63,6 +63,8 @@ normalize_to() {
 }
 
 # --- mutations via inline python (deterministic, no extra deps) ---
+# Flip the primary statement-timing tag (TIME_LINE ↔ TIME_BLOCK).
+# blocks=1 fixtures only emit TIME_BLOCK; default fixtures only emit TIME_LINE.
 mutate_tag_timeline_to_block() {
   local src="$1" dest="$2"
   python3 - "$src" "$dest" <<'PY'
@@ -76,17 +78,19 @@ with open(src, encoding="utf-8") as f:
         if not line:
             continue
         o = json.loads(line)
-        if not changed and o.get("tag") == "TIME_LINE":
-            o["tag"] = "TIME_BLOCK"
-            # TIME_BLOCK needs 5 args; pad if needed so it's still valid-ish JSON
+        tag = o.get("tag")
+        if not changed and tag in ("TIME_LINE", "TIME_BLOCK"):
+            # Flip whichever timing tag is present so blocks=1 fixtures still mutate.
+            o["tag"] = "TIME_BLOCK" if tag == "TIME_LINE" else "TIME_LINE"
             args = list(o.get("args") or [])
+            # TIME_BLOCK is often 5 args; pad so the record stays list-shaped.
             while len(args) < 5:
                 args.append(0)
             o["args"] = args
             changed = True
         out.append(o)
 if not changed:
-    raise SystemExit("no TIME_LINE record to mutate")
+    raise SystemExit("no TIME_LINE/TIME_BLOCK record to mutate")
 with open(dest, "w", encoding="utf-8") as f:
     for o in out:
         f.write(json.dumps(o, separators=(",", ":"), ensure_ascii=False))
@@ -107,11 +111,12 @@ with open(src, encoding="utf-8") as f:
         if not line:
             continue
         o = json.loads(line)
-        if not changed and o.get("tag") == "TIME_LINE":
+        tag = o.get("tag")
+        if not changed and tag in ("TIME_LINE", "TIME_BLOCK"):
             args = list(o.get("args") or [])
             if not args:
-                raise SystemExit("TIME_LINE with empty args")
-            # bump ticks (first arg)
+                raise SystemExit(f"{tag} with empty args")
+            # bump ticks (first arg) on whichever timing tag is present
             t = args[0]
             if isinstance(t, (int, float)):
                 args[0] = int(t) + 1
@@ -121,7 +126,7 @@ with open(src, encoding="utf-8") as f:
             changed = True
         out.append(o)
 if not changed:
-    raise SystemExit("no TIME_LINE record to mutate")
+    raise SystemExit("no TIME_LINE/TIME_BLOCK record to mutate")
 with open(dest, "w", encoding="utf-8") as f:
     for o in out:
         f.write(json.dumps(o, separators=(",", ":"), ensure_ascii=False))
@@ -184,16 +189,16 @@ run_fixture_suite() {
   expect_match "$name identity (same file)" \
     "$base/a.norm.jsonl" "$base/a.norm.jsonl"
 
-  # (b) TIME_LINE -> TIME_BLOCK must FAIL after normalize
+  # (b) Timing tag flip (TIME_LINE↔TIME_BLOCK) must FAIL after normalize
   mutate_tag_timeline_to_block "$dump" "$base/mut_tag.jsonl"
   normalize_to "$base/mut_tag.jsonl" "$base/mut_tag.norm.jsonl"
-  expect_mismatch "$name seeded TIME_LINE->TIME_BLOCK" \
+  expect_mismatch "$name seeded timing tag flip (TIME_LINE↔TIME_BLOCK)" \
     "$base/a.norm.jsonl" "$base/mut_tag.norm.jsonl"
 
-  # (c) TIME_LINE ticks mutation must FAIL
+  # (c) Timing ticks mutation must FAIL (TIME_LINE or TIME_BLOCK)
   mutate_timeline_ticks "$dump" "$base/mut_ticks.jsonl"
   normalize_to "$base/mut_ticks.jsonl" "$base/mut_ticks.norm.jsonl"
-  expect_mismatch "$name seeded TIME_LINE ticks change" \
+  expect_mismatch "$name seeded timing ticks change" \
     "$base/a.norm.jsonl" "$base/mut_ticks.norm.jsonl"
 
   # (d) Volatile normalization: basetime, application, COMMENT (+ path on NEW_FID)
@@ -220,6 +225,30 @@ else
   log "=== skip default-calls2 (no readstream.jsonl) ==="
 fi
 
+if [[ -f "$ROOT/fixtures/v5/blocks-calls1/readstream.jsonl" ]]; then
+  run_fixture_suite blocks-calls1
+else
+  log "=== skip blocks-calls1 (no readstream.jsonl) ==="
+fi
+
+if [[ -f "$ROOT/fixtures/v5/calls2-default/readstream.jsonl" ]]; then
+  run_fixture_suite calls2-default
+else
+  log "=== skip calls2-default (no readstream.jsonl) ==="
+fi
+
+# COMPAT-002 / COMPAT-003 named normalize evidence (drives normalize_jsonl.py)
+if [[ -f "$DIR/selftest_normalize_compat.sh" ]]; then
+  log "=== COMPAT-002/003 normalize (selftest_normalize_compat.sh) ==="
+  if bash "$DIR/selftest_normalize_compat.sh"; then
+    ok "selftest_normalize_compat.sh"
+  else
+    bad "selftest_normalize_compat.sh"
+  fi
+else
+  log "=== skip COMPAT normalize (no selftest_normalize_compat.sh) ==="
+fi
+
 # Aggregate baselines (oracle JSONL → aggregates.oracle.json)
 if [[ -x "$DIR/selftest_aggregates.sh" || -f "$DIR/selftest_aggregates.sh" ]]; then
   log "=== aggregates (selftest_aggregates.sh) ==="
@@ -230,6 +259,87 @@ if [[ -x "$DIR/selftest_aggregates.sh" || -f "$DIR/selftest_aggregates.sh" ]]; t
   fi
 else
   log "=== skip aggregates (no selftest_aggregates.sh) ==="
+fi
+
+# Native dump structural parity vs golden readstream (requires cargo or prefix binary).
+# DUMP-PARITY-EXPAND: prefer all-fixture runner (default-calls1 + calls2-default +
+# blocks-calls1); fall back to single-fixture default-calls1 if only that script exists.
+if [[ -x "$DIR/selftest_native_dump_parity_all.sh" || -f "$DIR/selftest_native_dump_parity_all.sh" ]]; then
+  log "=== native dump parity (selftest_native_dump_parity_all.sh) ==="
+  if bash "$DIR/selftest_native_dump_parity_all.sh"; then
+    ok "selftest_native_dump_parity_all.sh"
+  else
+    bad "selftest_native_dump_parity_all.sh"
+  fi
+elif [[ -x "$DIR/selftest_native_dump_parity.sh" || -f "$DIR/selftest_native_dump_parity.sh" ]]; then
+  log "=== native dump parity (selftest_native_dump_parity.sh default-calls1) ==="
+  if bash "$DIR/selftest_native_dump_parity.sh"; then
+    ok "selftest_native_dump_parity.sh"
+  else
+    bad "selftest_native_dump_parity.sh"
+  fi
+else
+  log "=== skip native dump parity (no selftest_native_dump_parity*.sh) ==="
+fi
+
+# COMPAT-010-ERR fail-closed on corrupt inputs (verify/dump/report; needs cargo or binary)
+if [[ -x "$DIR/selftest_fail_closed.sh" || -f "$DIR/selftest_fail_closed.sh" ]]; then
+  log "=== fail-closed (selftest_fail_closed.sh) ==="
+  if bash "$DIR/selftest_fail_closed.sh"; then
+    ok "selftest_fail_closed.sh"
+  else
+    bad "selftest_fail_closed.sh"
+  fi
+else
+  log "=== skip fail-closed (no selftest_fail_closed.sh) ==="
+fi
+
+# INCOMPLETE-STREAM fail-closed on record-aligned short prefixes
+if [[ -x "$DIR/selftest_incomplete_stream.sh" || -f "$DIR/selftest_incomplete_stream.sh" ]]; then
+  log "=== incomplete-stream (selftest_incomplete_stream.sh) ==="
+  if bash "$DIR/selftest_incomplete_stream.sh"; then
+    ok "selftest_incomplete_stream.sh"
+  else
+    bad "selftest_incomplete_stream.sh"
+  fi
+else
+  log "=== skip incomplete-stream (no selftest_incomplete_stream.sh) ==="
+fi
+
+# DECODE-FUZZ-MVP: decode/verify never panic on truncate/mutate (cargo tests)
+if [[ -x "$DIR/selftest_decode_fuzz.sh" || -f "$DIR/selftest_decode_fuzz.sh" ]]; then
+  log "=== decode-fuzz (selftest_decode_fuzz.sh) ==="
+  if bash "$DIR/selftest_decode_fuzz.sh"; then
+    ok "selftest_decode_fuzz.sh"
+  else
+    bad "selftest_decode_fuzz.sh"
+  fi
+else
+  log "=== skip decode-fuzz (no selftest_decode_fuzz.sh) ==="
+fi
+
+# CSV-SEMANTIC-PARITY native csv leaf/mid/edge counts (needs cargo or binary)
+if [[ -x "$DIR/csv_semantic_parity.sh" || -f "$DIR/csv_semantic_parity.sh" ]]; then
+  log "=== csv semantic parity (csv_semantic_parity.sh) ==="
+  if bash "$DIR/csv_semantic_parity.sh"; then
+    ok "csv_semantic_parity.sh"
+  else
+    bad "csv_semantic_parity.sh"
+  fi
+else
+  log "=== skip csv semantic parity (no csv_semantic_parity.sh) ==="
+fi
+
+# EXPORT-SEMANTIC-PARITY native folded + callgrind leaf/mid/edge counts
+if [[ -x "$DIR/export_semantic_parity.sh" || -f "$DIR/export_semantic_parity.sh" ]]; then
+  log "=== export semantic parity (export_semantic_parity.sh) ==="
+  if bash "$DIR/export_semantic_parity.sh"; then
+    ok "export_semantic_parity.sh"
+  else
+    bad "export_semantic_parity.sh"
+  fi
+else
+  log "=== skip export semantic parity (no export_semantic_parity.sh) ==="
 fi
 
 log ""

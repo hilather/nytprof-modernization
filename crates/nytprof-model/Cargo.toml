@@ -1,0 +1,16 @@
+[package]
+name = "nytprof-model"
+version = "0.1.0"
+edition.workspace = true
+description = "Compact profile model and exact aggregation from logical events"
+license.workspace = true
+
+[dependencies]
+nytprof-types = { workspace = true }
+nytprof-format-v5 = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+
+[dev-dependencies]
+serde_json = { workspace = true }

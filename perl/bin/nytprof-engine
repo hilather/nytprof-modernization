@@ -1,0 +1,40 @@
+#!/usr/bin/env perl
+# Operator CLI: dispatch report/verify/html/csv/dump/folded/callgrind/query
+# to native (Rust), legacy (oracle), or pure-Perl JsonlData query over dump JSONL.
+#
+# Spec: docs/schemas/perl-engine-dispatch-mvp-v0.md
+#
+# Usage:
+#   perl -Iperl/lib perl/bin/nytprof-engine [--engine=native|legacy|auto] report <profile.out>
+#   perl -Iperl/lib perl/bin/nytprof-engine [--engine=...] verify <profile.out>
+#   perl -Iperl/lib perl/bin/nytprof-engine [--engine=native] csv <profile.out>
+#   perl -Iperl/lib perl/bin/nytprof-engine [--engine=native] html <profile.out>
+#   perl -Iperl/lib perl/bin/nytprof-engine [--engine=native] folded <profile.out>
+#   perl -Iperl/lib perl/bin/nytprof-engine [--engine=native] callgrind <profile.out>
+#   perl -Iperl/lib perl/bin/nytprof-engine [--engine=native] query <profile.out>
+#   perl -Iperl/lib perl/bin/nytprof-engine query --jsonl fixtures/v5/default-calls1/readstream.jsonl
+#   perl -Iperl/lib perl/bin/nytprof-engine query --json --jsonl fixtures/v5/default-calls1/readstream.jsonl
+# Env: NYTPROF_ENGINE (CLI flag overrides)
+
+use strict;
+use warnings;
+use FindBin;
+use File::Spec;
+use lib File::Spec->catdir( $FindBin::Bin, '..', 'lib' );
+
+use Devel::NYTProf::EngineDispatch qw(run_cli find_repo_root);
+
+my $repo = $ENV{NYTPROF_MOD_ROOT};
+if ( !$repo || !-d $repo ) {
+    # perl/bin -> repo root
+    $repo = File::Spec->catdir( $FindBin::Bin, '..', '..' );
+}
+eval {
+    $repo = find_repo_root($repo);
+    1;
+} or do {
+    require Cwd;
+    $repo = Cwd::abs_path($repo) // $repo;
+};
+
+exit run_cli( $repo, [@ARGV] );

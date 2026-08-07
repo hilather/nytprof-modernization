@@ -1,0 +1,12 @@
+[package]
+name = "nytprof-report"
+version = "0.1.0"
+edition.workspace = true
+description = "Native text/CSV/HTML/folded/callgrind reports and profile verify from the compact model"
+license.workspace = true
+
+[dependencies]
+nytprof-model = { workspace = true }
+
+[dev-dependencies]
+nytprof-model = { workspace = true }

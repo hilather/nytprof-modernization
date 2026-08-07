@@ -1,0 +1,275 @@
+# Perl engine-dispatch facade MVP (v0)
+
+**Status:** thin operator entry before full XS Data/ReadStream facade  
+**Complements:** `docs/schemas/engine-selection-mvp-v0.md` (same engine names)  
+**Board IDs:** `PERL-ENGINE-DISPATCH`, `PERL-ENGINE-QUERY`, `PERL-ENGINE-QUERY-EXPAND`, `PERL-QUERY-PID-META`, `QUERY-JSON-MVP`, `QUERY-JSON-EXPAND`, `PERL-ENGINE-EXPORT`
+
+## Entry points
+
+| Path | Role |
+|------|------|
+| `perl/bin/nytprof-engine` | Operator CLI (preferred) |
+| `perl/lib/Devel/NYTProf/EngineDispatch.pm` | Parse engine + dispatch actions (`resolve_engine`, `select_runtime_engine`, `run_native`, `run_legacy`, `run_query`, `dispatch`) |
+| `perl/lib/Devel/NYTProf/LegacyBridge.pm` | Isolated oracle report path (`run_legacy_report`) — install-only `PERL5LIB` |
+| `perl/lib/Devel/NYTProf/JsonlData.pm` | Pure-Perl sub/edge aggregates used by `query` |
+
+```text
+perl -Iperl/lib perl/bin/nytprof-engine [--engine=native|legacy|auto] report <profile.out>
+perl -Iperl/lib perl/bin/nytprof-engine [--engine=...] verify <profile.out>
+perl -Iperl/lib perl/bin/nytprof-engine [--engine=native] csv <profile.out>
+perl -Iperl/lib perl/bin/nytprof-engine [--engine=native] html <profile.out>
+perl -Iperl/lib perl/bin/nytprof-engine [--engine=native] folded <profile.out>
+perl -Iperl/lib perl/bin/nytprof-engine [--engine=native] callgrind <profile.out>
+perl -Iperl/lib perl/bin/nytprof-engine [--engine=native] query <profile.out>
+perl -Iperl/lib perl/bin/nytprof-engine query --jsonl fixtures/v5/default-calls1/readstream.jsonl
+perl -Iperl/lib perl/bin/nytprof-engine query --json --jsonl fixtures/v5/default-calls1/readstream.jsonl
+# Env: NYTPROF_ENGINE (CLI flag overrides)
+```
+
+## Engine semantics
+
+| Name | Behavior |
+|------|----------|
+| `native` | Subprocess to built `nytprof-cli` (or `cargo run -q -p nytprof-cli --` if binary missing and cargo available). Passes through `report` / `summary` / `verify` / `inspect` / `html` / `csv` / `dump` / `folded` / `callgrind` / `cg` to native CLI. Action `query` uses native dump → `JsonlData` (not full CLI report text). **Missing native CLI → fail** (clear error; no silent legacy). |
+| `auto` | **Prefer native, fall back to legacy** when native CLI is not discoverable (`select_runtime_engine`). CLI flag or `NYTPROF_ENGINE=auto`. On fallback: STDERR note `auto: native CLI not found; using legacy`, then oracle stream-dump path (same isolation as `legacy`). When native is present: real native report/query (default-calls1 leaf **15** / mid **3**). Smokes: `./scripts/packaging/engine_auto_smoke.sh` (native present) + `./scripts/packaging/engine_auto_fallback_smoke.sh` (present + forced missing). |
+| `legacy` | No Cargo. Delegates to `LegacyBridge::run_legacy_report`: oracle `PERL5LIB` from `baseline/6.15/oracle-perl5lib.txt` (install tree only), verify `Devel::NYTProf` under `baseline/6.15/install`, run `tools/oracle/dump_readstream.pl` (require exit 0 and line count > 0), optionally try `install/bin/nytprofcsv` (non-fatal if deps missing). `html` / `csv` / `dump` / `folded` / `callgrind` / `cg` map to the same stream-dump smoke (not full export). Must not put `crates/` or candidate `perl/` on oracle `PERL5LIB`. |
+| invalid | Fail closed, non-zero exit, list allowed names. |
+
+### Resolve vs runtime
+
+| API | Returns | Notes |
+|-----|---------|-------|
+| `resolve_engine($cli, $env)` | `native` \| `legacy` \| `auto` | Does **not** collapse `auto` → `native`. |
+| `select_runtime_engine($repo, $requested)` | `native` \| `legacy` | Used by `dispatch` / `run_cli` for the actual path. `auto` → eval `find_native_cli`; ok → native; else legacy + STDERR. |
+
+**Residual:** pure-Rust `nytprof-cli` still maps `auto` → `native` and has no in-process legacy oracle path. The Perl facade is the required auto-fallback surface for this wave.
+
+## Finding native binary
+
+Order (see also `docs/schemas/native-install-mvp-v0.md`):
+1. If `$ENV{NYTPROF_FORCE_NO_NATIVE}` is truthy (`1` / non-empty, not `0`/`false`/`no`/`off`) → fail immediately (**test hook only**; ENGINE-AUTO-FALLBACK smokes)
+2. `$ENV{NYTPROF_NATIVE_CLI}` if set and executable  
+3. `$REPO/prefix/bin/nytprof-cli` or `prefix/bin/nytprof-dump` (stable install via `scripts/packaging/install_native.sh`)  
+4. `$REPO/target/release/nytprof-dump` then `target/debug/nytprof-dump` (binary name from nytprof-cli package)  
+5. `cargo run -q -p nytprof-cli --` from repo root when cargo exists  
+
+## Legacy success contract
+
+Implemented by `Devel::NYTProf::LegacyBridge::run_legacy_report($repo, $profile)` (also via `EngineDispatch::run_legacy` / `nytprof-engine --engine=legacy report|verify`):
+
+1. Build child env from `baseline/6.15/oracle-perl5lib.txt` + check `oracle-module-path.txt` (all under `install/`).
+2. Verify `Devel/NYTProf.pm` resolves under `baseline/6.15/install` (path scan; does not start the collector).
+3. Run `tools/oracle/dump_readstream.pl`; require exit 0 and JSONL line count **> 0** (includes `_END`).
+4. If `install/bin/nytprofcsv` exists, try `-f <profile> -o <tempdir>`; on failure print `NOTE:` and still exit 0 when dump worked.
+
+Parent may load the facade with `-Iperl/lib`; oracle children never inherit candidate `perl/` or `crates/` on `PERL5LIB`.
+
+## Native success contract
+
+Stdout from native `report` must include `main::leaf` with `returns=15` and `main::mid` with `returns=3` for default-calls1.
+
+## Action `query` (PERL-ENGINE-QUERY / PERL-ENGINE-QUERY-EXPAND / PERL-QUERY-PID-META / QUERY-JSON-MVP / QUERY-JSON-EXPAND)
+
+Shipped Perl entry that answers **dump-derived queries** by consuming dump JSONL via `Devel::NYTProf::JsonlData` (no XS, no oracle `PERL5LIB`). Uses JsonlData APIs only (no reimplementation of aggregation).
+
+| Input | Path |
+|-------|------|
+| `query <profile.out>` | `find_native_cli` → `dump` subprocess → `JsonlData->from_cli` |
+| `query --jsonl PATH` | `JsonlData->from_jsonl` (golden / saved dump; no cargo) |
+| `data-query` | Alias for `query` |
+| `query --json` / `--format=json` | Same load path; **JSON object** on stdout (QUERY-JSON-MVP + QUERY-JSON-EXPAND). Distinct from `--jsonl` (input). |
+
+Implementation: `EngineDispatch::run_query` / `print_query_results` / `_parse_query_extra`.
+
+MVP default output is **always-full** and kept readable (no separate `--full` flag required). Human greppable lines remain the default when neither `--json` nor `--format=json` is given.
+
+### Output shape
+
+1. All subroutine return totals (sorted by name)
+2. All call edges (sorted)
+3. A9 `sub_def` ranges: prefer key names `main::leaf` / `main::mid` if present, then remaining names sorted
+4. A8 `source_line 1:5=…` when present (trailing newline chomped for one-line display)
+5. A4 `line_calls 1:5=N` when non-zero
+6. Up to a few A4b `block_line_calls fid:bl=N` samples when non-empty (prefer `1:4` first)
+7. PID lifecycle when starts/ends present: `pid_start_count=N`, `pid_end_count=N`, then each `pid_start pid=… [ppid=…] [start_time=…]` and `pid_end pid=… [end_time=…]` (only fields JsonlData returns; no invented values)
+8. ATTRIBUTE / OPTION: prefer key attributes (`ticks_per_sec`, `basetime`, `application`, `xs_version`) and key options (`calls`, `blocks`, `stmts`, `compress`); then remaining sorted when the map is short enough, else key ones + `attribute_count` / `option_count`
+
+```text
+main::leaf returns=15
+main::mid returns=3
+main::mid -> main::leaf count=15
+sub_def main::leaf fid=1 first=3 last=7
+sub_def main::mid fid=1 first=8 last=12
+source_line 1:5=    $x++ for 1 .. 50;
+pid_start_count=1
+pid_end_count=1
+pid_start pid=2975381 ppid=2975366 start_time=1786111723.96777
+pid_end pid=2975381 end_time=1786111723.97052
+attribute ticks_per_sec=10000000
+attribute basetime=1786111723
+attribute application=/tmp/tmp.WWUAKCFFFY/workload.pl
+attribute xs_version=6.15
+option calls=1
+option blocks=0
+option stmts=1
+option compress=6
+```
+
+On **blocks-calls1** (TIME_BLOCK path), also e.g.:
+
+```text
+line_calls 1:5=780
+block_line_calls 1:4=810
+```
+
+### JSON output (QUERY-JSON-MVP / QUERY-JSON-EXPAND)
+
+Flags (any one):
+
+| Flag | Notes |
+|------|-------|
+| `--json` | Structured JSON on stdout |
+| `--format=json` | Same (case-insensitive value) |
+| `--format json` | Two-arg form |
+
+Emits a **single JSON object** (core `JSON::PP`, canonical key order, trailing newline). All values come from existing **JsonlData APIs only** (no re-aggregation). Stable fields required for smoke / machine consumers:
+
+| Field | Type | Source API | Smoke contract (default-calls1) |
+|-------|------|------------|----------------------------------|
+| `ok` | boolean | — | `true` on successful query |
+| `subs` | object name→int | `sub_return_totals` | `subs["main::leaf"]` **15**, `subs["main::mid"]` **3** |
+| `edges` | object `"caller\\tcallee"`→int | `call_edge_totals` | `edges["main::mid\\tmain::leaf"]` **15** (TAB-joined keys) |
+| `leaf_returns` | int | convenience from `subs` | **15** (0 if missing) |
+| `mid_returns` | int | convenience from `subs` | **3** |
+| `mid_leaf_edge` | int | convenience from `edges` | **15** |
+| `discount_events` | int | `discount_events` | **818** (A3 DISCOUNT multiplicity only) |
+| `is_stream_complete` | boolean | `is_stream_complete` | **true** |
+| `incompleteness_reasons` | array of strings | `stream_incompleteness_reasons` | **[]** (empty when complete) |
+| `time_line_events` | int | `time_line_events` | **≥ 1** |
+| `pid_start_events` | int | `pid_start_events` | **≥ 1** |
+| `pid_end_events` | int | `pid_end_events` | **≥ 1** |
+
+Example (fields may appear in any order; encoder uses canonical sort):
+
+```json
+{
+  "discount_events": 818,
+  "edges": {"main::mid\tmain::leaf": 15},
+  "incompleteness_reasons": [],
+  "is_stream_complete": true,
+  "leaf_returns": 15,
+  "mid_leaf_edge": 15,
+  "mid_returns": 3,
+  "ok": true,
+  "pid_end_events": 1,
+  "pid_start_events": 1,
+  "subs": {"main::leaf": 15, "main::mid": 3},
+  "time_line_events": 916
+}
+```
+
+(`time_line_events` / `pid_*_events` values are dump-derived; smoke asserts only **≥ 1**. Default-calls1 golden observes **916** / **1** / **1**.)
+
+`subs` / `edges` include all dump-derived totals (not only leaf/mid). Convenience integers always present so greps like `"leaf_returns":15` work without walking maps. **Not** a full re-export of sub_def / source / attribute maps (those remain human-path only in this MVP).
+
+CLI:
+
+```sh
+perl -Iperl/lib perl/bin/nytprof-engine query --json --jsonl fixtures/v5/default-calls1/readstream.jsonl
+perl -Iperl/lib perl/bin/nytprof-engine query --format=json --jsonl fixtures/v5/default-calls1/readstream.jsonl
+./scripts/packaging/perl_query_json_smoke.sh
+```
+
+### Cross-check vs native `report --json` (NATIVE-QUERY-JSON-CROSS)
+
+Shared convenience integers (`leaf_returns` / `mid_returns` / `mid_leaf_edge` / `discount_events`) must match native aggregates JSON on default-calls1 (**15** / **3** / **15** / **818**). Smoke invokes real CLIs only (no re-aggregation):
+
+```sh
+# native
+nytprof-cli report --json fixtures/v5/default-calls1/nytprof.out
+# perl golden
+perl -Iperl/lib perl/bin/nytprof-engine query --json --jsonl fixtures/v5/default-calls1/readstream.jsonl
+# cross (pair ×2 + optional query --json <profile> dump path)
+./scripts/packaging/native_query_json_cross_smoke.sh
+```
+
+Native schema: [`native-aggregates-json-mvp-v0.md`](https://github.com/hilather/nytprof-modernization/blob/main/docs/schemas/native-aggregates-json-mvp-v0.md). Wired into `scripts/ci/offline_gate.sh` when native CLI available (pure-Perl query path alone remains step 6 `perl_query_json_smoke`).
+
+### Fixture contract (default-calls1)
+
+| Field | Value |
+|-------|-------|
+| Profile | `fixtures/v5/default-calls1/nytprof.out` |
+| Golden JSONL | `fixtures/v5/default-calls1/readstream.jsonl` |
+| `main::leaf` returns | **15** |
+| `main::mid` returns | **3** |
+| `main::mid` → `main::leaf` edge count | **15** |
+| `discount_events` (JSON) | **818** |
+| `is_stream_complete` (JSON) | **true** |
+| `sub_def main::leaf` | **fid=1 first=3 last=7** |
+| `sub_def main::mid` | **fid=1 first=8 last=12** |
+| `source_line 1:5` | **`    $x++ for 1 .. 50;`** (contains `$x++` and `1 .. 50`) |
+| `pid_start_count` / `pid_end_count` | **≥ 1** each (golden observes **1** / **1**) |
+| matching pid | golden dump-derived **2975381** on both `pid_start` and `pid_end` |
+| attribute | at least **`ticks_per_sec`** (golden **10000000**) |
+| option | at least **`calls`** (golden **1**) |
+
+### Fixture contract (blocks-calls1, expand)
+
+| Field | Value |
+|-------|-------|
+| Golden JSONL | `fixtures/v5/blocks-calls1/readstream.jsonl` |
+| `line_calls 1:5` | **780** |
+| `block_line_calls 1:4` | **810** |
+
+Related data module schema: [`perl-jsonl-data-mvp-v0.md`](https://github.com/hilather/nytprof-modernization/blob/main/docs/schemas/perl-jsonl-data-mvp-v0.md).
+
+## Actions `folded` / `callgrind` / `cg` (PERL-ENGINE-EXPORT)
+
+Shipped Perl entry that **dispatches** machine-oriented exports to the native CLI. Export formats are **not** reimplemented in Perl.
+
+| Action | Native subcommand | Notes |
+|--------|-------------------|-------|
+| `folded` | `nytprof-cli folded <profile>` | Folded-stack lines (flamegraph input) |
+| `callgrind` | `nytprof-cli callgrind <profile>` | Callgrind-style text |
+| `cg` | `nytprof-cli cg <profile>` | Alias for `callgrind` |
+
+Related export contract: [`export-formats-mvp-v0.md`](https://github.com/hilather/nytprof-modernization/blob/main/docs/schemas/export-formats-mvp-v0.md).
+
+### Fixture contract (default-calls1, native)
+
+| Field | Value |
+|-------|-------|
+| Profile | `fixtures/v5/default-calls1/nytprof.out` |
+| Folded mid→leaf | `main::mid;main::leaf 15` |
+| Folded RUNTIME→mid | `main::RUNTIME;main::mid 3` |
+| Callgrind | contains `fn=main::leaf` (or `cfn=`) and `calls` |
+
+Legacy path: honest stream-dump smoke with a `NOTE:` that real export requires `--engine=native` (same pattern as `html` / `csv` / `dump`).
+
+## Smoke
+
+```sh
+./scripts/packaging/perl_engine_dispatch_smoke.sh
+./scripts/packaging/perl_engine_query_smoke.sh
+./scripts/packaging/perl_engine_query_expand_smoke.sh
+./scripts/packaging/perl_engine_query_pid_meta_smoke.sh
+./scripts/packaging/perl_query_json_smoke.sh
+./scripts/packaging/perl_engine_export_smoke.sh
+./scripts/packaging/engine_auto_smoke.sh
+./scripts/packaging/engine_auto_fallback_smoke.sh
+prove -Iperl/lib perl/t/engine_dispatch.t
+prove -Iperl/lib perl/t/engine_query_default_calls1.t
+```
+
+`perl_engine_query_expand_smoke.sh` (PERL-ENGINE-QUERY-EXPAND): default-calls1 `--jsonl` asserts **15/3/15**, `sub_def` leaf/mid ranges, `source_line 1:5` hot-loop; blocks-calls1 `--jsonl` asserts `line_calls 1:5=780` and `block_line_calls 1:4=810`; optional native profile path + prove.
+
+`perl_engine_query_pid_meta_smoke.sh` (PERL-QUERY-PID-META): default-calls1 `--jsonl` asserts **15/3/15**, `pid_start_count`/`pid_end_count` ≥ 1, matching golden pid **2975381**, `attribute ticks_per_sec=…`, `option calls=…`; optional native profile path + prove.
+
+`perl_query_json_smoke.sh` (QUERY-JSON-MVP / QUERY-JSON-EXPAND): default-calls1 `query --json --jsonl` ×2 + parse; asserts `ok`, `leaf_returns=15`, `mid_returns=3`, `mid_leaf_edge=15`, `subs`/`edges` maps, `discount_events=818`, `is_stream_complete` true, `incompleteness_reasons` empty, `time_line_events` / `pid_start_events` / `pid_end_events` ≥ 1; consistent fingerprint across runs; `--format=json` / `--format json` aliases; human path still greppable when `--json` absent.
+
+`native_query_json_cross_smoke.sh` (NATIVE-QUERY-JSON-CROSS): default-calls1 native `report --json` vs Perl `query --json --jsonl` pair ×2; asserts equal shared fields **15/3/15** + `discount_events` **818**; optional `query --json <profile>` dump path; fails closed without native CLI.
+
+`engine_auto_smoke.sh` (ENGINE-AUTO-SMOKE): `--engine=auto` report ×2 + `NYTPROF_ENGINE=auto` report + `--engine=auto` query on `fixtures/v5/default-calls1/nytprof.out`; asserts `main::leaf returns=15` and `main::mid returns=3` when native is discoverable.
+
+`engine_auto_fallback_smoke.sh` (ENGINE-AUTO-FALLBACK): (1) native present → auto report ×2 leaf **15** / mid **3**; (2) `NYTPROF_FORCE_NO_NATIVE=1` → auto report/verify exit 0 via legacy stream-dump + STDERR fallback note, no `crates/` on PERL5LIB; (3) explicit `--engine=native` + force hook → fail closed. Unit: `resolve_engine('auto')` → `auto`; `select_runtime_engine` + force hook → `legacy` in `perl/t/engine_dispatch.t`.

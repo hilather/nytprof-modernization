@@ -1,0 +1,20 @@
+{
+  "name": "calls2-default",
+  "created_utc": "2026-08-07T18:12:22Z",
+  "nytprof_env": "trace=0:start=begin:calls=2:file=/home/mbrewer/projects/nytprof-modernization/fixtures/v5/calls2-default/nytprof.out",
+  "oracle_module": "/home/mbrewer/projects/nytprof-modernization/baseline/6.15/install/lib/perl5/x86_64-linux-gnu-thread-multi/Devel/NYTProf.pm",
+  "files": {
+    "nytprof.out": "260c86720554b700d35e041f599bea00b44728640297604cf48ada0dcd554257",
+    "readstream.jsonl": "1afa5ed5735a96af145fc5f961719f2a6708890a17c86339871d3e69964cd8a0",
+    "workload.pl": "15921cfacf6d8310da6a2ce6ec3bc5d5008a4f15caf38e5425bfb7b78f9aad06"
+  },
+  "event_count_approx": 2501,
+  "semantics": {
+    "options": "trace=0:start=begin:calls=2",
+    "workload": "mid\u00d73 \u2192 leaf\u00d75 (same as default-calls*)",
+    "main::leaf_returns": 15,
+    "main::mid_returns": 3,
+    "mid_to_leaf_edge_count": 15,
+    "notes": "calls=2 enables richer call-site detail; SUB_ENTRY present. Return counts match mid\u00d73\u2192leaf\u00d75 (leaf=15, mid=3) when oracle emits that pattern."
+  }
+}

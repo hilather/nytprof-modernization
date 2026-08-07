@@ -1,0 +1,13 @@
+{
+  "name": "default-calls2",
+  "created_utc": "2026-08-07T14:08:44Z",
+  "nytprof_env": "trace=0:start=begin:calls=2:file=/home/mbrewer/projects/nytprof-modernization/fixtures/v5/default-calls2/nytprof.out",
+  "oracle_module": "/home/mbrewer/projects/nytprof-modernization/baseline/6.15/install/lib/perl5/x86_64-linux-gnu-thread-multi/Devel/NYTProf.pm",
+  "files": {
+    "nytprof.out": "99948a54232253f5a5feaa67f6927ea2dbb5e2ff03e27b72aff792a737717507",
+    "readstream.jsonl": "2be70198d1bf177c9834278b300eaf9596af751a6d26b90ef1b2d8a8b7ae53a6",
+    "workload.pl": "15921cfacf6d8310da6a2ce6ec3bc5d5008a4f15caf38e5425bfb7b78f9aad06"
+  },
+  "event_count_approx": 2501,
+  "updated_utc": "2026-08-07T14:09:02Z"
+}

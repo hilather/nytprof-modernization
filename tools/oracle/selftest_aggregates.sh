@@ -105,12 +105,28 @@ if "main::leaf" not in sr or "main::mid" not in sr:
     print("workload_subs=", sorted(subs), file=sys.stderr)
     sys.exit(1)
 print("  sanity: main::leaf=", sr["main::leaf"], "main::mid=", sr["main::mid"])
+# A7: mid → leaf edge count 15 (3 mids × 5 leaves)
+edges = o.get("call_edges") or {}
+ek = "main::mid -> main::leaf"
+if ek not in edges:
+    print(f"missing call_edges[{ek!r}]", file=sys.stderr)
+    print("keys=", sorted(edges)[:12], file=sys.stderr)
+    sys.exit(1)
+if edges[ek].get("count") != 15:
+    print(f"edge {ek} count={edges[ek].get('count')!r} want 15", file=sys.stderr)
+    sys.exit(1)
+print("  sanity: call_edges", ek, "=", edges[ek])
+if "source_line_count" not in o:
+    print("missing source_line_count", file=sys.stderr)
+    sys.exit(1)
+print("  sanity: source_line_count=", o["source_line_count"])
 sys.exit(0)
 PY
   then
     ok "$name has main::leaf and main::mid"
+    ok "$name has A7 mid→leaf edge and A8 source_line_count"
   else
-    bad "$name missing workload leaf/mid"
+    bad "$name missing workload leaf/mid or A7/A8 fields"
   fi
 }
 
@@ -124,6 +140,18 @@ if [[ -f "$ROOT/fixtures/v5/default-calls2/readstream.jsonl" ]]; then
   check_fixture default-calls2
 else
   log "=== skip default-calls2 (no readstream.jsonl) ==="
+fi
+
+if [[ -f "$ROOT/fixtures/v5/blocks-calls1/readstream.jsonl" ]]; then
+  check_fixture blocks-calls1
+else
+  log "=== skip blocks-calls1 (no readstream.jsonl) ==="
+fi
+
+if [[ -f "$ROOT/fixtures/v5/calls2-default/readstream.jsonl" ]]; then
+  check_fixture calls2-default
+else
+  log "=== skip calls2-default (no readstream.jsonl) ==="
 fi
 
 log ""

@@ -1,0 +1,315 @@
+# 18 - Open Questions and ADR Queue
+
+## Purpose
+
+Record decisions that affect stable semantics, wire bytes, platform support, packaging, compatibility, security, or defaults. Agents must not settle these independently inside implementation patches.
+
+## ADR process
+
+1. Open a question with evidence and affected task IDs.
+2. Build the smallest experiment/fixture needed.
+3. Compare alternatives across correctness, compatibility, collector cost, storage, decode/report cost, security, portability, and operational complexity.
+4. Record decision, rejected alternatives, consequences, migration/versioning, and revisit trigger.
+5. Update normative specs and tests before implementation is treated as stable.
+
+## Decision status
+
+- `open` - evidence incomplete.
+- `proposed` - recommendation ready for review.
+- `accepted` - binding; linked ADR exists.
+- `superseded` - replaced by later ADR.
+- `deferred` - not required for current release level.
+
+## Blocking questions
+
+### ADR-Q001 - Exact canonical event taxonomy
+
+- **Status:** open
+- **Blocks:** COMPAT-001, ARCH-001, FMT-001, COL-001
+- **Question:** What is the complete semantic event set, including records exposed only as aggregate metadata or comments?
+- **Evidence required:** v6.15 writer/tag inventory, `ReadStream` callbacks, merge/calls consumers, option matrix, incomplete files.
+- **Recommended direction:** one canonical semantic event per observable v5 callback/record meaning; retain opaque optional extension events for round-trip where necessary.
+- **Decision must specify:** fields, order, byte/numeric domains, process association, required/optional status, unknown behavior.
+
+### ADR-Q002 - Tick signedness, width, and overflow policy
+
+- **Status:** open
+- **Blocks:** FMT-004, COL-011, COMPAT-003
+- **Question:** Use signed i64, unsigned u64, wider software integer, or another representation for durations/totals?
+- **Evidence required:** clock APIs, legacy arithmetic, long-run bounds, negative/anomaly behavior, platform support, v5 conversion.
+- **Recommended direction:** signed 64-bit event ticks with checked arithmetic and explicit clock metadata unless evidence requires wider representation; aggregate accumulators may use wider checked types internally.
+- **Decision must specify:** wire type, invalid/negative behavior, overflow failure, seconds conversion, merge domains.
+
+### ADR-Q003 - v6 prelude, magic, and version negotiation
+
+- **Status:** open
+- **Blocks:** FMT-002, RUST-011, COL-007, COL-008
+- **Question:** Exact magic bytes, major/minor/version layout, feature flags, and required/skippable extension rules?
+- **Evidence required:** robust detection, streaming, future extensions, old-tool failure behavior, corruption recognition.
+- **Recommended direction:** fixed endian-neutral magic/prelude, major/minor, header length, required/optional feature bitsets plus TLVs.
+- **Decision must specify:** compatibility rules and when a major versus minor bump is required.
+
+### ADR-Q004 - Canonical varint and signed-delta encoding
+
+- **Status:** open
+- **Blocks:** FMT-003, COL-012, RUST-011
+- **Question:** LEB128, existing v5-style varint, prefix varint, or another canonical encoding?
+- **Evidence required:** C/Rust speed, code size, canonical rejection of overlong forms, small-value distribution, fuzz/security complexity.
+- **Recommended direction:** standard unsigned LEB128 with ZigZag for signed deltas and mandatory shortest representation, unless benchmarks justify otherwise.
+- **Decision must specify:** maximum bytes, overlong handling, overflow, test vectors.
+
+### ADR-Q005 - Dictionary scope and reset policy
+
+- **Status:** open
+- **Blocks:** FMT-005, COL-010, RUST-011
+- **Question:** Stream-wide, process-generation, chunk-local, or hybrid dictionaries by string class?
+- **Evidence required:** hit rate, collector memory/CPU, chunk independence, recovery, fork/high-cardinality workloads.
+- **Recommended direction:** stream/process-scoped stable dictionaries for high-value identity strings plus chunk reset/snapshot rules that retain independent recovery; exact choice may differ by class.
+- **Decision must specify:** definition ordering, reset, maximum entries/bytes, OOM/fallback, fork behavior.
+
+### ADR-Q006 - Reversible run/pattern records
+
+- **Status:** open
+- **Blocks:** FMT-007, COL-012
+- **Question:** Which repeated event patterns justify specialized records without complicating exactness/recovery?
+- **Evidence required:** real event distributions, collector encode cost, worst-case expansion, decoder complexity, canonical equality.
+- **Recommended direction:** defer beyond first stable v6 unless a simple pattern has clear benefit after dictionaries/deltas/compression. Any accepted run record must preserve per-event timing/order exactly.
+- **Decision must specify:** expansion semantics, limits, chunk interaction.
+
+### ADR-Q007 - Source blob hashing and identity
+
+- **Status:** open
+- **Blocks:** FMT-008, COL-013
+- **Question:** Which content hash, collision strategy, blob scope, and metadata represent source while preserving logical file/eval identity?
+- **Evidence required:** source sizes, performance/security, fork/merge, identical content under distinct identities, binary bytes.
+- **Recommended direction:** logical source events reference content-addressed blobs; full byte comparison verifies hash collisions; path/eval identity remains separate and ordered.
+- **Decision must specify:** hash algorithm/version, collision handling, missing/external source, dedup scope.
+
+### ADR-Q008 - Chunk size and boundary policy
+
+- **Status:** open
+- **Blocks:** FMT-009, FMT-010, FMT-015, COL-005, COL-007, COL-008, BENCH-007
+- **Question:** Fixed uncompressed size, event-count threshold, time-based flush, lifecycle boundaries, or hybrid?
+- **Evidence required:** collector latency/CPU, compression ratio, recovery granularity, parallel decode, memory, fork/shutdown.
+- **Recommended direction:** bounded uncompressed byte target plus mandatory lifecycle/flush boundaries, with all state reset/snapshotted per spec.
+- **Decision must specify:** default/limits, deterministic fixture mode, partial-final-chunk behavior.
+
+### ADR-Q009 - v6 default codec and required codec set
+
+- **Status:** open
+- **Blocks:** FMT-009, FMT-015, COL-007, COL-008, BUILD-008
+- **Question:** Should first stable v6 require only none/zlib, add zstd, add LZ4, or choose another default?
+- **Evidence required:** NYTProf-specific collection CPU, size, decode speed, dependencies/licenses/platform availability/security.
+- **Recommended direction:** format remains codec-neutral; first implementation supports none and zlib universally, with zstd/LZ4 only if packaging and benchmark evidence is strong. Default chosen after BENCH-006.
+- **Decision must specify:** required decoder capabilities, producer default, fallback/error behavior.
+
+### ADR-Q010 - Chunk checksum algorithm and coverage
+
+- **Status:** open
+- **Blocks:** FMT-010, SEC-003
+- **Question:** CRC32C, XXH-style noncryptographic hash, cryptographic hash, or layered checks?
+- **Evidence required:** corruption detection, speed/platform acceleration, dependency/security, source blob needs.
+- **Recommended direction:** fast standardized per-chunk checksum over header-relevant fields plus uncompressed or compressed payload as explicitly specified; cryptographic source identity can be separate.
+- **Decision must specify:** algorithm ID/version, covered bytes, footer/index protection, collision expectations.
+
+### ADR-Q011 - Optional exact summary/index schemas and trust
+
+- **Status:** open
+- **Blocks:** FMT-011, RUST-014, TOOL-008
+- **Question:** Which derived data is worth storing, and when may readers trust it?
+- **Evidence required:** report startup gains, size, verification cost, incomplete files, stale/corrupt behavior.
+- **Recommended direction:** optional footer index first; derived aggregate cache deferred or verified against raw event hash/sequence before use. Raw ordered events remain authoritative.
+- **Decision must specify:** schema/version, coverage hash, validation, rebuild, skip rules.
+
+### ADR-Q012 - Stable v6 byte determinism
+
+- **Status:** open
+- **Blocks:** FMT-012, RUST-011, COL-007, COL-008
+- **Question:** Must production files be byte-deterministic for the same canonical stream, or only logical-deterministic?
+- **Evidence required:** dictionary/chunk/compressor behavior, reproducible fixtures, merge/repack, performance cost.
+- **Recommended direction:** deterministic uncompressed logical encoding and fixture mode are mandatory; production compressed bytes should be deterministic when codec/library permits but semantic hashes remain the compatibility contract.
+- **Decision must specify:** required stable layers and allowed metadata differences.
+
+### ADR-Q013 - Exotic v5 `NV` decoding strategy
+
+- **Status:** open
+- **Blocks:** RUST-005, TEST-017
+- **Question:** Implement all declared `NV` representations in Rust, use a C compatibility shim, or fall back to legacy reader on rare tiers?
+- **Evidence required:** actual supported distributions, fixture availability, format metadata sufficiency, safety/maintenance.
+- **Recommended direction:** native Rust for common IEEE representations; isolated C shim or explicit legacy fallback for rare formats rather than unsafe guessing.
+- **Decision must specify:** tier support and diagnostics.
+
+### ADR-Q014 - v6-to-v5 representability rules
+
+- **Status:** open
+- **Blocks:** FMT-013, TOOL-005, COMPAT-003
+- **Question:** Exact preconditions for lossless v5 output on a selected target Perl representation?
+- **Evidence required:** every event/field, integer/NV/string limits, unknown extensions, clock conversion, incomplete semantics.
+- **Recommended direction:** target-specific preflight; fail before output if any event cannot be represented exactly under the defined v5 semantic comparison.
+- **Decision must specify:** target selection, exactness test, error context, provenance.
+
+### ADR-Q015 - Collector sink dispatch mechanism
+
+- **Status:** open
+- **Blocks:** ARCH-001, COL-001, COL-004
+- **Question:** Specialized direct functions, function-pointer vtable, tagged-union emit, compile-time writer specialization, or hybrid?
+- **Evidence required:** assembly and event-heavy benchmarks, dual/test sink needs, maintainability.
+- **Recommended direction:** semantic specialized functions with statically selected sink where possible; dual/test paths may use dispatch outside production default.
+- **Decision must specify:** ABI/internal status and performance budget.
+
+### ADR-Q016 - Native engine distribution model
+
+- **Status:** open
+- **Blocks:** BUILD-001, BUILD-003, BUILD-004, BUILD-012, COMPAT-011
+- **Question:** Build Rust from source in CPAN distribution, ship optional companion, provide prebuilt artifacts, or a hybrid?
+- **Evidence required:** platform/toolchain tiers, CPAN policies, offline installation, artifact provenance, maintenance cost.
+- **Recommended direction:** hybrid with legacy-only fallback; exact mechanism chosen by platform evidence and release policy.
+- **Decision must specify:** native availability guarantees and failure behavior.
+
+### ADR-Q017 - Minimum supported Rust version and dependency policy
+
+- **Status:** open
+- **Blocks:** RUST-001, BUILD-001, BUILD-011
+- **Question:** Which MSRV and vendoring/pinning/update policy balance portability/security?
+- **Evidence required:** supported OS/toolchains, dependency MSRVs, source distribution constraints.
+- **Recommended direction:** conservative explicitly tested MSRV with pinned lockfile and audited small dependency set.
+- **Decision must specify:** update cadence and tier exceptions.
+
+### ADR-Q018 - Native FFI versus subprocess for report operations
+
+- **Status:** open
+- **Blocks:** PERL-005, RUST-010, TOOL-010
+- **Question:** Which operations run in-process through XS/FFI versus invoke a native CLI subprocess?
+- **Evidence required:** API compatibility, startup overhead, failure isolation, packaging, old Perl, callback needs.
+- **Recommended direction:** in-process coarse FFI for public Perl Data/ReadStream compatibility; CLI/subprocess acceptable for standalone report commands where it improves isolation and preserves behavior.
+- **Decision must specify:** operation map and error/stream handling.
+
+### ADR-Q019 - Lazy Perl object materialization
+
+- **Status:** open
+- **Blocks:** PERL-005, PERL-006, TEST-010
+- **Question:** Can legacy Data object graphs be lazily materialized without observable identity/mutation/error differences?
+- **Evidence required:** object-shape/mutation/downstream tests and memory/time gains.
+- **Recommended direction:** eager compatibility materialization first; introduce lazy behavior only after it is proven observationally equivalent or exposed as a new API.
+- **Decision must specify:** fields/objects, cache/lifetime, mutation policy.
+
+### ADR-Q020 - Report compatibility threshold
+
+- **Status:** open
+- **Blocks:** REPORT-001, REPORT-002, REPORT-009, TEST-009
+- **Question:** Which HTML details require byte identity, normalized DOM identity, semantic identity, or may intentionally change?
+- **Evidence required:** existing tests/downstream consumers, links/bookmarks/styles, user expectations.
+- **Recommended direction:** exact data/filenames/anchors/links/source/order and normalized DOM semantics; byte identity only for machine formats or known consumers. Visual redesign is out of scope for default compatibility mode.
+- **Decision must specify:** per-artifact comparison class.
+
+### ADR-Q021 - Default report worker count and memory budgeting
+
+- **Status:** open
+- **Blocks:** REPORT-010, RUST-017, BENCH-010
+- **Question:** CPU-count based, memory-aware, fixed conservative, or user-only parallelism?
+- **Evidence required:** report scaling/RSS/filesystem across tiny/large workloads/platforms.
+- **Recommended direction:** bounded memory-aware default with single-thread fallback and explicit override, selected after BENCH-005.
+- **Decision must specify:** cap algorithm and diagnostics.
+
+### ADR-Q022 - Report output deduplication compatibility mode
+
+- **Status:** open
+- **Blocks:** REPORT-015, REPORT-016, BENCH-009
+- **Question:** Which shared assets/data can change default tree layout without breaking file://, copying, archives, or downstream tools?
+- **Evidence required:** artifact inventory, browser/tool tests, size savings.
+- **Recommended direction:** shared static assets where existing paths can be preserved; more aggressive compact bundle remains opt-in initially.
+- **Decision must specify:** default versus compact mode and portability behavior.
+
+### ADR-Q023 - Mixed-profile clock-domain merge
+
+- **Status:** open
+- **Blocks:** RUST-013, TOOL-009
+- **Question:** How to merge exact ticks from different clock frequencies/identities without order-dependent rounding?
+- **Evidence required:** legacy behavior, report needs, rational arithmetic cost, v5/v6 combinations.
+- **Recommended direction:** retain per-stream exact clock domains and use exact rational normalization at aggregate/presentation boundaries; refuse combinations whose semantics cannot be defined.
+- **Decision must specify:** event-stream ordering and output clock metadata.
+
+### ADR-Q024 - Native report default promotion criteria/field window
+
+- **Status:** deferred until opt-in release
+- **Blocks:** BUILD-014, BUILD-015, BENCH-013, TEST-020
+- **Question:** What release duration/usage/issue/performance evidence is sufficient for `auto` to prefer native reports?
+- **Evidence required:** R1 field data, platform success, fallback frequency, downstream reports, certifications.
+- **Recommended direction:** at least one stable opt-in cycle plus full required gates and rollback mechanism.
+- **Decision must specify:** eligible tiers and fallback policy.
+
+### ADR-Q025 - v6 output default promotion criteria/field window
+
+- **Status:** deferred until opt-in release
+- **Blocks:** BUILD-014, BUILD-015, BENCH-013, TEST-020
+- **Question:** What evidence is sufficient to change default profile format from v5 to v6?
+- **Evidence required:** R2 field data, old-tool conversion usage, corruption/fork/long-run results, format stability, P1/P2.
+- **Recommended direction:** multiple opt-in releases/stability window and separate tier policy; retain `format=v5`.
+- **Decision must specify:** eligible tiers, compatibility window, rollback.
+
+### ADR-Q026 - Legacy code retirement policy
+
+- **Status:** deferred
+- **Blocks:** none for modernization
+- **Question:** Whether/when to retire legacy reader/report/writer or raise minimum Perl versions?
+- **Evidence required:** long-term native field use, platform/ecosystem usage, maintenance/security cost, migration coverage.
+- **Recommended direction:** no automatic retirement; separate decisions per component after deprecation.
+- **Decision must specify:** warning period, alternatives, support end, file-format longevity.
+
+## ADR document template
+
+```markdown
+# ADR-NNN - Title
+
+- Status:
+- Date:
+- Owners/reviewers:
+- Related question/tasks/risks:
+
+## Context and evidence
+
+## Decision drivers
+
+- correctness/precision
+- backward compatibility
+- collector performance
+- storage
+- decode/report performance
+- security/recovery
+- portability/packaging
+- implementation/maintenance complexity
+
+## Options considered
+
+### Option A
+
+Benefits, costs, measurements, risks.
+
+### Option B
+
+Benefits, costs, measurements, risks.
+
+## Decision
+
+Normative language and selected parameters.
+
+## Consequences
+
+Positive, negative, operational, migration, testing.
+
+## Compatibility/versioning
+
+## Required spec/test/code updates
+
+## Revisit triggers
+```
+
+## ADR completion rule
+
+An `accepted` ADR is complete only when:
+
+- normative prose and machine-readable schema are updated;
+- immutable vectors/fixtures are added where applicable;
+- affected task acceptance criteria reference the decision;
+- risks and migration/versioning consequences are recorded;
+- no contradictory open question remains.

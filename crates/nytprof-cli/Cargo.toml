@@ -1,0 +1,20 @@
+[package]
+name = "nytprof-cli"
+version = "0.1.0"
+edition.workspace = true
+description = "CLI tools for NYTProf modernisation (dump, report, aggregates JSON, csv, html, folded, callgrind, verify, capability)"
+license.workspace = true
+
+[[bin]]
+name = "nytprof-dump"
+path = "src/main.rs"
+
+[dependencies]
+nytprof-types = { workspace = true }
+nytprof-format-v5 = { workspace = true }
+nytprof-model = { workspace = true }
+nytprof-report = { workspace = true }
+serde_json = { workspace = true }
+
+[dev-dependencies]
+serde_json = { workspace = true }

@@ -21,7 +21,22 @@ Requires oracle isolation (`tools/oracle/env.sh` via capture script):
 
 ```sh
 ./tools/oracle/capture_fixture.sh default-calls1 "trace=0:start=begin:calls=1"
+./tools/oracle/capture_fixture.sh blocks-calls1 "trace=0:start=begin:calls=1:blocks=1"
+./tools/oracle/capture_fixture.sh calls2-default "trace=0:start=begin:calls=2"
+# or one-shot FIXTURE-EXPAND-2 (capture + aggregates + test wire):
+# ./tools/oracle/fixture_expand_2.sh
 ```
+
+## Current fixtures
+
+| Name | NYTPROF options (sans `file=`) | What differs |
+|------|--------------------------------|--------------|
+| `default-calls1` | `trace=0:start=begin:calls=1` | Statement timing as `TIME_LINE`; no `TIME_BLOCK` |
+| `default-calls2` | `trace=0:start=begin:calls=2` | Same as calls1 plus richer call-site detail (`SUB_ENTRY` still present) |
+| `blocks-calls1` | `trace=0:start=begin:calls=1:blocks=1` | Statement timing as **`TIME_BLOCK`** (A2 > 0, A1 = 0); same mid/leaf workload (returns 15 / 3) |
+| `calls2-default` | `trace=0:start=begin:calls=2` | Independent `calls=2` capture (FIXTURE-EXPAND-2); SUB_ENTRY present; mid×3→leaf×5 returns **15** / **3** (when present) |
+
+All listed fixtures share the same `workload.pl` (3×`mid` × 5×`leaf`).
 
 ## Normalize + compare (structural golden path)
 
@@ -54,9 +69,18 @@ perl tools/oracle/compare_jsonl.pl /tmp/a.norm.jsonl /tmp/b.norm.jsonl
 
 ## Aggregate baselines (model / report MVP)
 
-Contract: [`docs/schemas/aggregate-comparison-v0.md`](../docs/schemas/aggregate-comparison-v0.md).
+Contract: [`docs/schemas/aggregate-comparison-v0.md`](https://github.com/hilather/nytprof-modernization/blob/main/docs/schemas/aggregate-comparison-v0.md).
 
-`aggregates.oracle.json` is **generated** from the committed `readstream.jsonl` (not hand-typed). Totals include `time_line_events`, `time_block_events`, `discount_events`, `line_totals` (`"fid:line"` → calls/ticks from `TIME_LINE` only), `sub_return_totals` (from `SUB_RETURN`), and `workload_subs` (`main::leaf` / `main::mid`).
+`aggregates.oracle.json` is **generated** from the committed `readstream.jsonl` (not hand-typed). Totals follow that schema (A1–A8):
+
+| Field | Source |
+|-------|--------|
+| `time_line_events` / `time_block_events` / `discount_events` | A1–A3 event counts |
+| `line_totals` | A4 `"fid:line"` → calls/ticks (`TIME_LINE` **and** `TIME_BLOCK` statement line) |
+| `block_line_totals` | A4b `"fid:block_line"` → calls/ticks (`TIME_BLOCK` only; empty when no blocks) |
+| `sub_return_totals` / `workload_subs` | A5–A6 from `SUB_RETURN` |
+| `call_edges` | A7 `"caller -> called"` → `{count,incl,excl,reci,max_rec_depth}` from `SUB_CALLERS` (sites merged) |
+| `source_line_count` / `source_sample` | A8 count of `SRC_LINE` + fid=1 text prefixes |
 
 ```sh
 # Regenerate a baseline after recapturing a fixture
@@ -67,7 +91,11 @@ python3 tools/oracle/aggregate_from_jsonl.py fixtures/v5/default-calls1/readstre
 ./tools/oracle/selftest_aggregates.sh
 ```
 
-Rust model tests should decode `nytprof.out`, apply the same aggregate definitions, and compare to these files (or re-run the Python aggregator on a dump).
+Rust model tests decode `nytprof.out`, apply the same definitions, and compare to these files (`default_calls*_native_matches_aggregates_oracle_json` in `nytprof-model`). That gate fails if native `main::mid -> main::leaf` edge count ≠ oracle JSON.
+
+### Optional: legacy `nytprofcsv`
+
+When `baseline/6.15/install/bin/nytprofcsv` is present, it can be used for a **non-fatal** spot-check of contracted fields (e.g. leaf/mid returns). Byte-identical CSV layout is **not** required (see aggregate-comparison-v0 CSV section).
 
 ## Self-test harness
 
@@ -79,18 +107,29 @@ One command from the repo root (no Rust; no oracle env for the pure path):
 ./tools/oracle/selftest_compare.sh
 ```
 
-The harness checks, for `default-calls1` and `default-calls2` when present:
+The harness checks, for `default-calls1`, `default-calls2`, `blocks-calls1`, and `calls2-default` when present:
 
 1. **Identity** — normalize fixture twice → compare PASS  
-2. **Tag mutation** — `TIME_LINE` → `TIME_BLOCK` → compare FAIL  
-3. **Ticks mutation** — change a `TIME_LINE` tick → compare FAIL  
+2. **Tag mutation** — flip primary timing tag (`TIME_LINE` ↔ `TIME_BLOCK`) → compare FAIL  
+3. **Ticks mutation** — change a timing-event tick (`TIME_LINE` or `TIME_BLOCK`) → compare FAIL  
 4. **Volatiles** — change basetime / application path / COMMENT (and NEW_FID paths) → raw compare FAIL; after normalize → PASS  
 5. **Aggregates** — runs `selftest_aggregates.sh` when that script is present  
+6. **Native dump parity** — runs `selftest_native_dump_parity_all.sh` when present (shipped CLI dump vs golden `readstream.jsonl` after normalize for default-calls1 + calls2-default + blocks-calls1; requires cargo or prefix binary)
 
 Standalone aggregates only:
 
 ```sh
 ./tools/oracle/selftest_aggregates.sh
+```
+
+Native dump structural parity (full match after normalize):
+
+```sh
+./tools/oracle/selftest_native_dump_parity.sh              # default-calls1 (compat)
+./tools/oracle/selftest_native_dump_parity.sh calls2-default
+./tools/oracle/selftest_native_dump_parity.sh blocks-calls1
+./tools/oracle/selftest_native_dump_parity_all.sh          # all three
+# schema: docs/schemas/native-dump-parity-mvp-v0.md
 ```
 
 ## Note on absolute paths and timestamps

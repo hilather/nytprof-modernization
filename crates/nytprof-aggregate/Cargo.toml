@@ -1,0 +1,13 @@
+[package]
+name = "nytprof-aggregate"
+version = "0.1.0"
+edition.workspace = true
+description = "Stream-oriented aggregation into nytprof-model ProfileModel"
+license.workspace = true
+
+[dependencies]
+nytprof-model = { workspace = true }
+nytprof-types = { workspace = true }
+
+[dev-dependencies]
+serde_json = { workspace = true }

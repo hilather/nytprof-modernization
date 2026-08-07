@@ -1,0 +1,284 @@
+{
+  "schema_version": 1,
+  "task": "COMPAT-001",
+  "status": "provisional",
+  "dump_schema_version": "v0",
+  "description": "Provisional machine-readable mapping from v5 tags to canonical logical events. NOT a v6 wire freeze.",
+  "oracle_version": "6.15",
+  "references": {
+    "contract": "docs/contracts/COMPAT-001_LOGICAL_EVENT_CONTRACT.md",
+    "dump_schema": "docs/schemas/canonical-event-dump-v0.md",
+    "inventory": "baseline/inventories/v5-record-inventory.md",
+    "timing": "baseline/inventories/timing-lifecycle-notes.md"
+  },
+  "type_domains": {
+    "u": "non-negative integer",
+    "i": "signed integer ticks (composition open OI-003-01 / OI-002-05)",
+    "n": "native NV image (JSON number; units open where noted)",
+    "s": "string / byte payload as oracle emits",
+    "empty": "no payload fields"
+  },
+  "events": [
+    {
+      "id": "attribute",
+      "tag": "ATTRIBUTE",
+      "nytprof_tag": "NYTP_TAG_ATTRIBUTE",
+      "byte": 58,
+      "disposition": "mapped",
+      "fields": [
+        { "name": "key", "type": "s" },
+        { "name": "value", "type": "s" }
+      ],
+      "open_items": ["OI-002-03"]
+    },
+    {
+      "id": "option",
+      "tag": "OPTION",
+      "nytprof_tag": "NYTP_TAG_OPTION",
+      "byte": 33,
+      "disposition": "mapped",
+      "fields": [
+        { "name": "key", "type": "s" },
+        { "name": "value", "type": "s" }
+      ],
+      "open_items": ["OI-002-04"]
+    },
+    {
+      "id": "comment",
+      "tag": "COMMENT",
+      "nytprof_tag": "NYTP_TAG_COMMENT",
+      "byte": 35,
+      "disposition": "mapped",
+      "fields": [
+        { "name": "text", "type": "s" }
+      ],
+      "open_items": []
+    },
+    {
+      "id": "time_line",
+      "tag": "TIME_LINE",
+      "nytprof_tag": "NYTP_TAG_TIME_LINE",
+      "byte": 43,
+      "disposition": "mapped",
+      "fields": [
+        { "name": "ticks", "type": "i", "open": "OI-003-01" },
+        { "name": "fid", "type": "u" },
+        { "name": "line", "type": "u" }
+      ],
+      "open_items": ["OI-002-05", "OI-003-01"]
+    },
+    {
+      "id": "time_block",
+      "tag": "TIME_BLOCK",
+      "nytprof_tag": "NYTP_TAG_TIME_BLOCK",
+      "byte": 42,
+      "disposition": "mapped",
+      "fields": [
+        { "name": "ticks", "type": "i", "open": "OI-003-01" },
+        { "name": "fid", "type": "u" },
+        { "name": "line", "type": "u" },
+        { "name": "block_line", "type": "u" },
+        { "name": "sub_line", "type": "u" }
+      ],
+      "open_items": ["OI-002-05", "OI-003-01"]
+    },
+    {
+      "id": "discount",
+      "tag": "DISCOUNT",
+      "nytprof_tag": "NYTP_TAG_DISCOUNT",
+      "byte": 45,
+      "disposition": "mapped",
+      "fields": [],
+      "open_items": []
+    },
+    {
+      "id": "new_fid",
+      "tag": "NEW_FID",
+      "nytprof_tag": "NYTP_TAG_NEW_FID",
+      "byte": 64,
+      "disposition": "mapped",
+      "fields": [
+        { "name": "fid", "type": "u" },
+        { "name": "eval_fid", "type": "u" },
+        { "name": "eval_line", "type": "u" },
+        { "name": "flags", "type": "u", "open": "OI-001-04" },
+        { "name": "size", "type": "u" },
+        { "name": "mtime", "type": "u" },
+        { "name": "name", "type": "s" }
+      ],
+      "open_items": ["OI-001-04"]
+    },
+    {
+      "id": "src_line",
+      "tag": "SRC_LINE",
+      "nytprof_tag": "NYTP_TAG_SRC_LINE",
+      "byte": 83,
+      "disposition": "mapped",
+      "fields": [
+        { "name": "fid", "type": "u" },
+        { "name": "line", "type": "u" },
+        { "name": "text", "type": "s" }
+      ],
+      "open_items": ["OI-003-04"]
+    },
+    {
+      "id": "sub_info",
+      "tag": "SUB_INFO",
+      "nytprof_tag": "NYTP_TAG_SUB_INFO",
+      "byte": 115,
+      "disposition": "mapped",
+      "fields": [
+        { "name": "fid", "type": "u" },
+        { "name": "first_line", "type": "u" },
+        { "name": "last_line", "type": "u" },
+        { "name": "name", "type": "s" }
+      ],
+      "open_items": ["OI-003-04"]
+    },
+    {
+      "id": "sub_callers",
+      "tag": "SUB_CALLERS",
+      "nytprof_tag": "NYTP_TAG_SUB_CALLERS",
+      "byte": 99,
+      "disposition": "mapped",
+      "fields": [
+        { "name": "fid", "type": "u" },
+        { "name": "line", "type": "u" },
+        { "name": "count", "type": "u" },
+        { "name": "incl", "type": "n" },
+        { "name": "excl", "type": "n" },
+        { "name": "reci", "type": "n" },
+        { "name": "rec_depth", "type": "u" },
+        { "name": "called", "type": "s" },
+        { "name": "caller", "type": "s" }
+      ],
+      "open_items": ["OI-003-04"]
+    },
+    {
+      "id": "pid_start",
+      "tag": "PID_START",
+      "nytprof_tag": "NYTP_TAG_PID_START",
+      "byte": 80,
+      "disposition": "mapped",
+      "fields": [
+        { "name": "pid", "type": "u" },
+        { "name": "ppid", "type": "u" },
+        { "name": "start_time", "type": "n" }
+      ],
+      "open_items": ["OI-003-04"]
+    },
+    {
+      "id": "pid_end",
+      "tag": "PID_END",
+      "nytprof_tag": "NYTP_TAG_PID_END",
+      "byte": 112,
+      "disposition": "mapped",
+      "fields": [
+        { "name": "pid", "type": "u" },
+        { "name": "end_time", "type": "n" }
+      ],
+      "open_items": ["OI-002-06", "OI-003-04"]
+    },
+    {
+      "id": "sub_entry",
+      "tag": "SUB_ENTRY",
+      "nytprof_tag": "NYTP_TAG_SUB_ENTRY",
+      "byte": 62,
+      "disposition": "mapped",
+      "fields": [
+        { "name": "caller_fid", "type": "u" },
+        { "name": "caller_line", "type": "u" }
+      ],
+      "open_items": ["OI-002-01", "OI-003-03"],
+      "notes": "Present when calls=2; fixtures confirm dump args"
+    },
+    {
+      "id": "sub_return",
+      "tag": "SUB_RETURN",
+      "nytprof_tag": "NYTP_TAG_SUB_RETURN",
+      "byte": 60,
+      "disposition": "mapped",
+      "fields": [
+        { "name": "depth", "type": "u" },
+        { "name": "incl_time", "type": "n", "open": "OI-003-02" },
+        { "name": "excl_time", "type": "n", "open": "OI-003-02" },
+        { "name": "subname", "type": "s" }
+      ],
+      "open_items": ["OI-002-01", "OI-003-02", "OI-003-03"],
+      "notes": "Present when calls=1 or calls=2"
+    }
+  ],
+  "control": [
+    {
+      "id": "no_tag",
+      "nytprof_tag": "NYTP_TAG_NO_TAG",
+      "byte": 0,
+      "disposition": "control",
+      "fields": [],
+      "notes": "Not a stream record"
+    },
+    {
+      "id": "string",
+      "nytprof_tag": "NYTP_TAG_STRING",
+      "byte": 39,
+      "disposition": "control",
+      "fields": [],
+      "notes": "Embedded string helper; not a logical event"
+    },
+    {
+      "id": "string_utf8",
+      "nytprof_tag": "NYTP_TAG_STRING_UTF8",
+      "byte": 34,
+      "disposition": "control",
+      "fields": [],
+      "notes": "UTF-8 flagged string helper; OI-001-02"
+    },
+    {
+      "id": "start_deflate",
+      "tag": "START_DEFLATE",
+      "nytprof_tag": "NYTP_TAG_START_DEFLATE",
+      "byte": 122,
+      "disposition": "control",
+      "fields": [],
+      "notes": "Compression switch; dump-visible for ReadStream fidelity; OI-001-03"
+    }
+  ],
+  "dump_prelude": [
+    {
+      "id": "version",
+      "tag": "VERSION",
+      "disposition": "dump-prelude",
+      "fields": [
+        { "name": "major", "type": "u" },
+        { "name": "minor", "type": "u" }
+      ],
+      "notes": "From file header, not NYTP_TAG_*; OI-001-03"
+    },
+    {
+      "id": "end",
+      "tag": "_END",
+      "disposition": "dump-synthetic",
+      "fields": [],
+      "notes": "Optional dump trailer only"
+    }
+  ],
+  "open_items": [
+    "OI-002-01",
+    "OI-002-02",
+    "OI-002-03",
+    "OI-002-04",
+    "OI-002-05",
+    "OI-002-06",
+    "OI-003-01",
+    "OI-003-02",
+    "OI-003-03",
+    "OI-003-04",
+    "OI-003-05",
+    "OI-003-06",
+    "OI-001-01",
+    "OI-001-02",
+    "OI-001-03",
+    "OI-001-04",
+    "OI-001-05"
+  ]
+}

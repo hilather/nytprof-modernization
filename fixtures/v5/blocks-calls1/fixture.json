@@ -1,0 +1,12 @@
+{
+  "name": "blocks-calls1",
+  "created_utc": "2026-08-07T15:46:52Z",
+  "nytprof_env": "trace=0:start=begin:calls=1:blocks=1:file=/home/mbrewer/projects/nytprof-modernization/fixtures/v5/blocks-calls1/nytprof.out",
+  "oracle_module": "/home/mbrewer/projects/nytprof-modernization/baseline/6.15/install/lib/perl5/x86_64-linux-gnu-thread-multi/Devel/NYTProf.pm",
+  "files": {
+    "nytprof.out": "2a3b339f8893efbbb0a9f7f77aaf438a856c109fbdfaea3732c27aa8bda2e495",
+    "readstream.jsonl": "86f387e86e575d9a870d60e29a3638ce5224b8abf82a251781db060a09776ae9",
+    "workload.pl": "15921cfacf6d8310da6a2ce6ec3bc5d5008a4f15caf38e5425bfb7b78f9aad06"
+  },
+  "event_count_approx": 2474
+}

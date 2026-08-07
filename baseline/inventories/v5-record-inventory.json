@@ -1,0 +1,28 @@
+{
+  "schema_version": 1,
+  "task": "BASE-002",
+  "status": "provisional_freeze",
+  "oracle_version": "6.15",
+  "format": { "major": 5, "minor": 0 },
+  "tags": [
+    {"id": "NYTP_TAG_NO_TAG", "byte": 0, "char": "\\0", "disposition": "control"},
+    {"id": "NYTP_TAG_ATTRIBUTE", "byte": 58, "char": ":", "disposition": "mapped", "readstream": "ATTRIBUTE"},
+    {"id": "NYTP_TAG_OPTION", "byte": 33, "char": "!", "disposition": "mapped", "readstream": "OPTION"},
+    {"id": "NYTP_TAG_COMMENT", "byte": 35, "char": "#", "disposition": "mapped", "readstream": "COMMENT"},
+    {"id": "NYTP_TAG_TIME_BLOCK", "byte": 42, "char": "*", "disposition": "mapped", "readstream": "TIME_BLOCK"},
+    {"id": "NYTP_TAG_TIME_LINE", "byte": 43, "char": "+", "disposition": "mapped", "readstream": "TIME_LINE"},
+    {"id": "NYTP_TAG_DISCOUNT", "byte": 45, "char": "-", "disposition": "mapped", "readstream": "DISCOUNT"},
+    {"id": "NYTP_TAG_NEW_FID", "byte": 64, "char": "@", "disposition": "mapped", "readstream": "NEW_FID"},
+    {"id": "NYTP_TAG_SRC_LINE", "byte": 83, "char": "S", "disposition": "mapped", "readstream": "SRC_LINE"},
+    {"id": "NYTP_TAG_SUB_INFO", "byte": 115, "char": "s", "disposition": "mapped", "readstream": "SUB_INFO"},
+    {"id": "NYTP_TAG_SUB_CALLERS", "byte": 99, "char": "c", "disposition": "mapped", "readstream": "SUB_CALLERS"},
+    {"id": "NYTP_TAG_PID_START", "byte": 80, "char": "P", "disposition": "mapped", "readstream": "PID_START"},
+    {"id": "NYTP_TAG_PID_END", "byte": 112, "char": "p", "disposition": "mapped", "readstream": "PID_END"},
+    {"id": "NYTP_TAG_STRING", "byte": 39, "char": "'", "disposition": "control"},
+    {"id": "NYTP_TAG_STRING_UTF8", "byte": 34, "char": "\"", "disposition": "control"},
+    {"id": "NYTP_TAG_START_DEFLATE", "byte": 122, "char": "z", "disposition": "control", "readstream": "START_DEFLATE"},
+    {"id": "NYTP_TAG_SUB_ENTRY", "byte": 62, "char": ">", "disposition": "mapped", "readstream": "OPEN-OI-002-01"},
+    {"id": "NYTP_TAG_SUB_RETURN", "byte": 60, "char": "<", "disposition": "mapped", "readstream": "OPEN-OI-002-01"}
+  ],
+  "open_items": ["OI-002-01", "OI-002-02", "OI-002-03", "OI-002-04", "OI-002-05", "OI-002-06"]
+}

@@ -1,0 +1,10 @@
+[package]
+name = "nytprof-types"
+version = "0.1.0"
+edition.workspace = true
+description = "Shared types for Devel::NYTProf profile events (canonical dump schema)"
+license.workspace = true
+
+[dependencies]
+serde = { workspace = true }
+serde_json = { workspace = true }
