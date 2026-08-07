@@ -1,0 +1,257 @@
+{
+  "schema": "aggregate-comparison-v0",
+  "source": "fixtures/v5/default-calls1/readstream.jsonl",
+  "time_line_events": 916,
+  "time_block_events": 0,
+  "discount_events": 818,
+  "sub_return_totals": {
+    "main::BEGIN@1": {
+      "returns": 1,
+      "incl": 184,
+      "excl": 166
+    },
+    "main::BEGIN@2": {
+      "returns": 1,
+      "incl": 18427,
+      "excl": 17742
+    },
+    "main::CORE:print": {
+      "returns": 1,
+      "incl": 24,
+      "excl": 24
+    },
+    "main::leaf": {
+      "returns": 15,
+      "incl": 524,
+      "excl": 524
+    },
+    "main::mid": {
+      "returns": 3,
+      "incl": 677,
+      "excl": 153
+    },
+    "strict::import": {
+      "returns": 1,
+      "incl": 18,
+      "excl": 18
+    },
+    "warnings::CORE:match": {
+      "returns": 2,
+      "incl": 34,
+      "excl": 34
+    },
+    "warnings::_bits": {
+      "returns": 1,
+      "incl": 244,
+      "excl": 229
+    },
+    "warnings::_expand_bits": {
+      "returns": 1,
+      "incl": 15,
+      "excl": 15
+    },
+    "warnings::import": {
+      "returns": 1,
+      "incl": 654,
+      "excl": 407
+    }
+  },
+  "line_totals": {
+    "1:1": {
+      "calls": 3,
+      "ticks": 214
+    },
+    "1:2": {
+      "calls": 5,
+      "ticks": 17759
+    },
+    "1:4": {
+      "calls": 15,
+      "ticks": 8
+    },
+    "1:5": {
+      "calls": 780,
+      "ticks": 487
+    },
+    "1:6": {
+      "calls": 15,
+      "ticks": 89
+    },
+    "1:9": {
+      "calls": 3,
+      "ticks": 1
+    },
+    "1:10": {
+      "calls": 36,
+      "ticks": 60
+    },
+    "1:11": {
+      "calls": 3,
+      "ticks": 18
+    },
+    "1:13": {
+      "calls": 1,
+      "ticks": 1
+    },
+    "1:14": {
+      "calls": 8,
+      "ticks": 45
+    },
+    "1:15": {
+      "calls": 1,
+      "ticks": 46
+    },
+    "2:8": {
+      "calls": 1,
+      "ticks": 5
+    },
+    "2:14": {
+      "calls": 1,
+      "ticks": 64
+    },
+    "2:18": {
+      "calls": 1,
+      "ticks": 112
+    },
+    "2:136": {
+      "calls": 1,
+      "ticks": 139
+    },
+    "2:219": {
+      "calls": 1,
+      "ticks": 94
+    },
+    "2:302": {
+      "calls": 1,
+      "ticks": 13
+    },
+    "2:314": {
+      "calls": 1,
+      "ticks": 1
+    },
+    "2:315": {
+      "calls": 1,
+      "ticks": 0
+    },
+    "2:316": {
+      "calls": 1,
+      "ticks": 1
+    },
+    "2:317": {
+      "calls": 1,
+      "ticks": 1
+    },
+    "2:328": {
+      "calls": 1,
+      "ticks": 1
+    },
+    "2:329": {
+      "calls": 1,
+      "ticks": 4
+    },
+    "2:330": {
+      "calls": 1,
+      "ticks": 2
+    },
+    "2:331": {
+      "calls": 1,
+      "ticks": 2
+    },
+    "2:343": {
+      "calls": 1,
+      "ticks": 19
+    },
+    "2:347": {
+      "calls": 1,
+      "ticks": 1
+    },
+    "2:348": {
+      "calls": 1,
+      "ticks": 1
+    },
+    "2:349": {
+      "calls": 1,
+      "ticks": 1
+    },
+    "2:350": {
+      "calls": 1,
+      "ticks": 0
+    },
+    "2:352": {
+      "calls": 2,
+      "ticks": 7
+    },
+    "2:353": {
+      "calls": 2,
+      "ticks": 2
+    },
+    "2:354": {
+      "calls": 1,
+      "ticks": 3
+    },
+    "2:355": {
+      "calls": 3,
+      "ticks": 7
+    },
+    "2:364": {
+      "calls": 1,
+      "ticks": 5
+    },
+    "2:365": {
+      "calls": 1,
+      "ticks": 1
+    },
+    "2:366": {
+      "calls": 1,
+      "ticks": 1
+    },
+    "2:372": {
+      "calls": 1,
+      "ticks": 193
+    },
+    "2:384": {
+      "calls": 1,
+      "ticks": 3
+    },
+    "2:388": {
+      "calls": 1,
+      "ticks": 332
+    },
+    "2:391": {
+      "calls": 1,
+      "ticks": 2
+    },
+    "2:392": {
+      "calls": 2,
+      "ticks": 14
+    },
+    "2:393": {
+      "calls": 3,
+      "ticks": 33
+    },
+    "2:396": {
+      "calls": 1,
+      "ticks": 7
+    },
+    "2:397": {
+      "calls": 2,
+      "ticks": 14
+    },
+    "2:430": {
+      "calls": 2,
+      "ticks": 16
+    },
+    "2:614": {
+      "calls": 1,
+      "ticks": 26
+    },
+    "2:616": {
+      "calls": 1,
+      "ticks": 351
+    }
+  },
+  "workload_subs": [
+    "main::leaf",
+    "main::mid"
+  ]
+}
