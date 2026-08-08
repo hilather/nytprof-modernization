@@ -1,0 +1,9 @@
+[package]
+name = "nytprof-format-v6"
+version = "0.1.0"
+edition.workspace = true
+description = "Provisional format v6 fixed-header parse (COL-007 runway; not a wire freeze)"
+license.workspace = true
+
+[dependencies]
+thiserror = { workspace = true }

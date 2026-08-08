@@ -29,12 +29,13 @@ The plan assumes a hybrid implementation:
 
 Agents should begin with these files:
 
-1. `01_NON_NEGOTIABLES_AND_COMPATIBILITY_CONTRACT.md`
-2. `03_TARGET_ARCHITECTURE_AND_COMPONENT_BOUNDARIES.md`
-3. `agent-work-packages/README.md` and the assigned `WP-*.md` brief.
-4. `TASK_INDEX.md`, then every source workstream file containing assigned task IDs.
-5. `10_REGRESSION_DIFFERENTIAL_AND_FIXTURE_TASKS.md`
-6. `16_ACCEPTANCE_CRITERIA_AND_DEFINITION_OF_DONE.md`
+1. [`AGENTS.md`](https://github.com/hilather/nytprof-modernization/blob/main/AGENTS.md) (repo root) — mandatory quality bars: regression tests for every fix, optimal performance/output size, current docs, complete release notes, benchmarks vs oracle and prior versions.
+2. `01_NON_NEGOTIABLES_AND_COMPATIBILITY_CONTRACT.md`
+3. `03_TARGET_ARCHITECTURE_AND_COMPONENT_BOUNDARIES.md`
+4. `agent-work-packages/README.md` and the assigned `WP-*.md` brief.
+5. `TASK_INDEX.md`, then every source workstream file containing assigned task IDs.
+6. `10_REGRESSION_DIFFERENTIAL_AND_FIXTURE_TASKS.md`
+7. `16_ACCEPTANCE_CRITERIA_AND_DEFINITION_OF_DONE.md`
 
 Every executable task has an explicit status, size, dependency set, owner profile, work definition, deliverables, and acceptance criteria. Compatibility-sensitive implementation tasks also carry local regression gates; all tasks inherit the global differential and release gates. The task template provides optional rationale, rollback, and risk fields:
 

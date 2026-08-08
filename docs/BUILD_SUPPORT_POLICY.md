@@ -132,7 +132,7 @@ make offline-gate
 
 | Step | What | Cargo |
 |------|------|-------|
-| 1 | `cargo test -p nytprof-format-v5 -p nytprof-model -p nytprof-report -p nytprof-cli` | **Honest skip** if `cargo` / `crates/` absent |
+| 1 | `cargo test -p nytprof-format-v5 -p nytprof-format-v6 -p nytprof-model -p nytprof-report -p nytprof-cli` | **Honest skip** if `cargo` / `crates/` absent |
 | 2 | `./tools/oracle/selftest_harness.sh` | **Required** (oracle normalize/compare + nested selftests) |
 | 3 | `./scripts/packaging/dual_path_smoke.sh` | **Primary packaging path** (legacy always; native if cargo present — installs `prefix/bin` when cargo present) |
 | 4 | `./scripts/packaging/engine_auto_fallback_smoke.sh` | **Required** (ENGINE-AUTO-FALLBACK; needs native discoverable or cargo to build) |

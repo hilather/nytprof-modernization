@@ -1,8 +1,9 @@
 # Benchmark notes (noise study — not certification)
 
 **Status:** light first-slice notes + runnable local harness  
-**Related board rows:** `BENCH-001`, `LIGHT-BENCH` on [`docs/FIRST_SLICE_BOARD.md`](FIRST_SLICE_BOARD.md)  
-**Full plan task:** [`docs/plan/11_BENCHMARKING_AND_PERFORMANCE_GATES.md`](plan/11_BENCHMARKING_AND_PERFORMANCE_GATES.md) (`BENCH-001` harness + gate ratification)
+**Related board rows:** `BENCH-001`, `LIGHT-BENCH` on [`docs/FIRST_SLICE_BOARD.md`](https://github.com/hilather/nytprof-modernization/blob/main/docs/FIRST_SLICE_BOARD.md)  
+**Full plan task:** [`docs/plan/11_BENCHMARKING_AND_PERFORMANCE_GATES.md`](https://github.com/hilather/nytprof-modernization/blob/main/docs/plan/11_BENCHMARKING_AND_PERFORMANCE_GATES.md) (`BENCH-001` harness + gate ratification)  
+**Agent duty:** keep engineering baselines **current vs 6.15 oracle and vs prior native versions** when decode/report/export paths change — see [`AGENTS.md`](https://github.com/hilather/nytprof-modernization/blob/main/AGENTS.md) (benchmarks section). No public perf claims until certified.
 
 ## Explicit non-claims
 

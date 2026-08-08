@@ -3,7 +3,7 @@
 **Status:** provisional readiness snapshot for **offline R0 / R1-preview** vs residual work for **full R1**  
 **Board ID:** `R1-RESIDUAL-MATRIX` (honesty sync: `R1-HONESTY-SYNC`)  
 **Date:** 2026-08-07  
-**Depends on:** REPORT-CONTRACT-FREEZE, CI-OFFLINE-GATE, CAPABILITY-SELFTEST, ENGINE-AUTO-SMOKE, PERL-* JSONL / engine rows (incl. SUB_ENTRY multiplicity), NATIVE-AGG-JSON, **JSON-NATIVE-STREAM-MVP**, **JSON-TIME-BLOCK-MVP**, **JSON-REPORT-INCOMPLETE-FAILCLOSED**, **JSON-SUBDEF-SOURCE-MVP**, **JSON-META-FILES-MVP**, **JSON-EVENT-COUNTS-MVP**, **JSON-FILE-BASENAME-MVP**, **JSON-TOTAL-EVENTS-MVP**, **JSON-ATTR-BASETIME-MVP**, NATIVE-QUERY-JSON-CROSS / **NATIVE-QUERY-JSON-CROSS-EXPAND** / **NATIVE-QUERY-JSON-CROSS-BLOCKS** / **NATIVE-QUERY-JSON-CROSS-META** / **NATIVE-QUERY-JSON-CROSS-TIMEBLOCK** / **NATIVE-QUERY-JSON-CROSS-COUNTS** / **NATIVE-QUERY-JSON-CROSS-TOTAL**, JSON-SUB-ENTRY-MVP, JSON-BLOCKS-MVP, QUERY-JSON-*, BUILD-DUAL-PATH / BUILD-MAKEMAKER-OPT, DUMP-PARITY-EXPAND, DECODE-FUZZ-MVP, INCOMPLETE-STREAM, and related parity gates below  
+**Depends on:** REPORT-CONTRACT-FREEZE, CI-OFFLINE-GATE, CAPABILITY-SELFTEST, ENGINE-AUTO-SMOKE, PERL-* JSONL / engine rows (incl. SUB_ENTRY multiplicity), NATIVE-AGG-JSON, **JSON-NATIVE-STREAM-MVP**, **JSON-TIME-BLOCK-MVP**, **JSON-REPORT-INCOMPLETE-FAILCLOSED**, **JSON-SUBDEF-SOURCE-MVP**, **JSON-META-FILES-MVP**, **JSON-EVENT-COUNTS-MVP**, **JSON-FILE-BASENAME-MVP**, **JSON-TOTAL-EVENTS-MVP**, **JSON-ATTR-BASETIME-MVP**, NATIVE-QUERY-JSON-CROSS / **NATIVE-QUERY-JSON-CROSS-EXPAND** / **NATIVE-QUERY-JSON-CROSS-BLOCKS** / **NATIVE-QUERY-JSON-CROSS-META** / **NATIVE-QUERY-JSON-CROSS-TIMEBLOCK** / **NATIVE-QUERY-JSON-CROSS-COUNTS** / **NATIVE-QUERY-JSON-CROSS-TOTAL**, JSON-SUB-ENTRY-MVP, JSON-BLOCKS-MVP, QUERY-JSON-*, BUILD-DUAL-PATH / BUILD-MAKEMAKER-OPT, DUMP-PARITY-EXPAND, DECODE-FUZZ-MVP, INCOMPLETE-STREAM, **FMT-V6-HEADER-PROVISIONAL** / **FMT-V6-HEADER-PARSE-MVP** / **FMT-V6-CHUNK-PROVISIONAL** / **FMT-V6-CHUNK-PARSE-MVP** / **FMT-V6-VARINT-PROVISIONAL** / **FMT-V6-VARINT-MVP** / **FMT-V6-SVARINT-PROVISIONAL** / **FMT-V6-SVARINT-MVP** / **FMT-V6-STRING-PROVISIONAL** / **FMT-V6-STRING-MVP** / **FMT-V6-TLV-PROVISIONAL** / **FMT-V6-TLV-MVP** (COL-007 runway preflight only), and related parity gates below  
 **Gate:** done **before COL-007** (C v6 writer)
 
 ---
@@ -161,7 +161,7 @@ These items are **not** advertised as ready under offline R0 / R1-preview. Do no
 | No XS / bless-array Data materializer | **PERL-005** (+ COMPAT-007 shapes) | Preview is pure-Perl `JsonlData` query subset from dump JSONL | Not full `Devel::NYTProf::Data` fidelity |
 | No full nytprofhtml DOM / REPORT-001..020 | **REPORT-001..020**, BASE-005, **REPORT-HTML-RESIDUAL-INV** | Native HTML is MVP summary + multi-file site; not oracle DOM/CSS/tablesorter/flame/Graphviz | REPORT_SURFACE_CONTRACT **not advertised** list; **artifact residual matrix:** [`docs/contracts/REPORT_HTML_RESIDUAL_INVENTORY_v0.md`](https://github.com/hilather/nytprof-modernization/blob/main/docs/contracts/REPORT_HTML_RESIDUAL_INVENTORY_v0.md) (oracle vs native classes on default-calls1) |
 | No v6 wire freeze | format plan / charter Phase-0 | Event contract provisional; no stable v6 numeric/wire IDs | v5 read/report path only |
-| COL-007 / COL-008 deferred | **COL-007** board deferred; **COL-008** non-baseline | C v6 writer after report-side evidence; batched Rust writer deferred until dual-equality + ADR | Collector remains 6.15 oracle / v5 |
+| COL-007 / COL-008 deferred | **COL-007** board deferred; **COL-008** non-baseline | C v6 writer after report-side evidence; batched Rust writer deferred until dual-equality + ADR. **Preflight only:** provisional fixed-header + chunk-frame + ULEB128 + ZigZag signed + length-prefixed string + header TLV (`FMT-V6-HEADER-*` / `FMT-V6-CHUNK-*` / `FMT-V6-VARINT-*` / `FMT-V6-SVARINT-*` / `FMT-V6-STRING-*` / `FMT-V6-TLV-*`; schemas under `docs/schemas/v6-*-provisional-v0.md`; crate `nytprof-format-v6`) — **not** full COL-007 encoder / dictionaries / payload codecs | Collector remains 6.15 oracle / v5; no default v6 CLI report |
 | No full MakeMaker XS dual-build CPAN | **BUILD-003** (full) | Candidate `Makefile.PL` facade only (**BUILD-MAKEMAKER-OPT** done) | Not a complete XS CPAN tarball dual-build |
 | No multi-OS CI matrix | **BUILD-006** | Single-host offline gate only | `offline_gate.sh` is not multi-OS CI |
 | No performance certification claims | WP-13 / BENCH-001 | Light wall-time notes only | `docs/BENCH_NOTES.md`, `tools/bench/light_bench.sh` — **no public perf claims** |
@@ -241,6 +241,18 @@ bash tools/oracle/report_semantic_parity.sh
 | `CI-OFFLINE-GATE-EXPAND` | done | offline_gate steps 4–5: `engine_auto_fallback_smoke` + `perl_jsonl_data_all_smoke` (incl. SUB_ENTRY) |
 | `CI-QUERY-JSON-GATE` | done | offline_gate step 6: required `perl_query_json_smoke` (QUERY-JSON-MVP / QUERY-JSON-EXPAND golden `--jsonl`; no cargo) |
 | `CI-CAPABILITY-GATE` | done | offline_gate step 9: `capability_selftest_smoke` when cargo/prefix/target present |
+| `FMT-V6-HEADER-PROVISIONAL` | **done** | provisional v6 fixed-header contract (not wire freeze); `docs/schemas/v6-fixed-header-provisional-v0.md`. **Before full COL-007.** |
+| `FMT-V6-HEADER-PARSE-MVP` | **done** | `cargo test -p nytprof-format-v6` drives `parse_fixed_header` (valid/bad magic/truncated/unsupported major). **Before full COL-007.** |
+| `FMT-V6-CHUNK-PROVISIONAL` | **done** | provisional v6 chunk-frame contract (not wire freeze); `docs/schemas/v6-chunk-frame-provisional-v0.md`. **Before full COL-007.** |
+| `FMT-V6-CHUNK-PARSE-MVP` | **done** | `parse_chunk_frame` fail-closed tests (bad sync/truncated/oversize/unknown required kind). **Before full COL-007.** |
+| `FMT-V6-VARINT-PROVISIONAL` | **done** | provisional ULEB128 contract (not freeze); `docs/schemas/v6-varint-uleb128-provisional-v0.md`. **Before full COL-007.** |
+| `FMT-V6-VARINT-MVP` | **done** | `encode_u64`/`decode_u64` strict; round-trip + truncated + overlong tests. **Before full COL-007.** |
+| `FMT-V6-SVARINT-PROVISIONAL` | **done** | provisional ZigZag+ULEB128 signed contract (SLEB residual); `docs/schemas/v6-svarint-zigzag-provisional-v0.md`. **Before full COL-007.** |
+| `FMT-V6-SVARINT-MVP` | **done** | `encode_i64`/`decode_i64` + tests (negatives/truncated/overlong). **Before full COL-007.** |
+| `FMT-V6-STRING-PROVISIONAL` | **done** | provisional length-prefixed string/blob contract; `docs/schemas/v6-string-blob-provisional-v0.md`. **Before full COL-007.** |
+| `FMT-V6-STRING-MVP` | **done** | `encode_string_blob`/`decode_string_blob` + tests. **Before full COL-007.** |
+| `FMT-V6-TLV-PROVISIONAL` | **done** | provisional header TLV contract; `docs/schemas/v6-header-tlv-provisional-v0.md`. **Before full COL-007.** |
+| `FMT-V6-TLV-MVP` | **done** | `encode_tlv`/`decode_tlv` + tests. **Before full COL-007.** |
 | `COL-007` | deferred | C v6 writer — unblocked for *start* after report-side evidence; not implemented here |
 | `COL-008` | deferred | Batched Rust writer — non-baseline |
 

@@ -329,7 +329,7 @@ Do **not** claim these under offline R0 / R1-preview (full-R1 residuals; `R1-HON
 |----------|--------|
 | **No production FFI / XS Data** | No RUST-010 cdylib ABI; no PERL-004 XS ReadStream over binary profiles; no PERL-005 bless-array Data materializer. Preview = CLI subprocess + pure-Perl JsonlData from dump JSONL (incl. SUB_ENTRY multiplicity only). |
 | **No full nytprofhtml DOM** | Native HTML is MVP summary / multi-file site only — not oracle DOM, CSS/JS, tablesorter, flame SVG, Graphviz. See HTML residual inventory. |
-| **No v6 / COL-007** | No v6 wire freeze; C v6 writer (**COL-007**) deferred; COL-008 batched Rust writer non-baseline. Collector remains 6.15 oracle / v5. |
+| **No v6 / COL-007** | No v6 wire freeze; C v6 writer (**COL-007**) deferred; COL-008 batched Rust writer non-baseline. Collector remains 6.15 oracle / v5. **Preflight only (not full COL-007):** provisional fixed-header + chunk-frame + ULEB128 + ZigZag signed + length-prefixed string + header TLV (`FMT-V6-HEADER-*` / `FMT-V6-CHUNK-*` / `FMT-V6-VARINT-*` / `FMT-V6-SVARINT-*` / `FMT-V6-STRING-*` / `FMT-V6-TLV-*`; crate `nytprof-format-v6`). |
 | **No performance claims** | Light wall-time notes only (`docs/BENCH_NOTES.md`, `tools/bench/light_bench.sh`). No public SLOs or certification. |
 | **No full MakeMaker XS CPAN dual-build** | Candidate `Makefile.PL` facade only (**BUILD-MAKEMAKER-OPT**), not BUILD-003 full. |
 | **No multi-OS CI matrix** | Single-host `offline_gate.sh` only (**BUILD-006** open). |
@@ -470,6 +470,18 @@ Also on blocks-calls1 when asserted: leaf returns **15**, mid returns **3** (sam
 | `JSON-SUB-ENTRY-MVP` | done | `sub_entry_events` on native `report --json` + Perl `query --json` (default **0** / calls2 **27**) |
 | `JSON-BLOCKS-MVP` | done | greppable `line_calls_1_5` / `block_line_calls_1_4` on native + Perl JSON (blocks-calls1 **780** / **810**) |
 | `PERL-SUB-ENTRY-JSONL` | done | `JsonlData` `sub_entry_*`; smoke + test above; roll-up in `perl_jsonl_data_all_smoke.sh` |
+| `FMT-V6-HEADER-PROVISIONAL` | **done** | provisional v6 header contract (not freeze). **Before full COL-007.** |
+| `FMT-V6-HEADER-PARSE-MVP` | **done** | shipped parse + tests `nytprof-format-v6`. **Before full COL-007.** |
+| `FMT-V6-CHUNK-PROVISIONAL` | **done** | provisional chunk-frame contract. **Before full COL-007.** |
+| `FMT-V6-CHUNK-PARSE-MVP` | **done** | `parse_chunk_frame` + tests. **Before full COL-007.** |
+| `FMT-V6-VARINT-PROVISIONAL` | **done** | provisional ULEB128 contract. **Before full COL-007.** |
+| `FMT-V6-VARINT-MVP` | **done** | `encode_u64`/`decode_u64` + tests. **Before full COL-007.** |
+| `FMT-V6-SVARINT-PROVISIONAL` | **done** | provisional ZigZag+ULEB128 contract. **Before full COL-007.** |
+| `FMT-V6-SVARINT-MVP` | **done** | `encode_i64`/`decode_i64` + tests. **Before full COL-007.** |
+| `FMT-V6-STRING-PROVISIONAL` | **done** | provisional string/blob contract. **Before full COL-007.** |
+| `FMT-V6-STRING-MVP` | **done** | `encode_string_blob`/`decode_string_blob` + tests. **Before full COL-007.** |
+| `FMT-V6-TLV-PROVISIONAL` | **done** | provisional header TLV contract. **Before full COL-007.** |
+| `FMT-V6-TLV-MVP` | **done** | `encode_tlv`/`decode_tlv` + tests. **Before full COL-007.** |
 | `COL-007` | deferred | C v6 writer — unblocked for *start* after report-side evidence; not implemented by this runbook |
 
 ## Revision rule

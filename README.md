@@ -6,13 +6,14 @@ Hybrid modernization of [Devel::NYTProf](https://metacpan.org/dist/Devel-NYTProf
 
 | Doc | Purpose |
 |-----|---------|
-| [`docs/PROGRAM_CHARTER.md`](docs/PROGRAM_CHARTER.md) | Mission, release levels, non-goals |
-| [`docs/FIRST_SLICE_BOARD.md`](docs/FIRST_SLICE_BOARD.md) | Ordered first-slice work board |
-| [`docs/PHASE0_EXIT_CRITERIA.md`](docs/PHASE0_EXIT_CRITERIA.md) | Phase-0 “good enough” gates |
-| [`docs/plan/README.md`](docs/plan/README.md) | Full architecture + 206-task plan package |
-| [`docs/governance/COMPAT-000_RATIFICATION.md`](docs/governance/COMPAT-000_RATIFICATION.md) | Binding compatibility contract sign-off |
-| [`docs/governance/ARCH-008_ADR_PROCESS.md`](docs/governance/ARCH-008_ADR_PROCESS.md) | ADR process |
-| [`baseline/6.15/`](baseline/6.15/) | Pinned v6.15 oracle |
+| [`AGENTS.md`](https://github.com/hilather/nytprof-modernization/blob/main/AGENTS.md) | **Agent hints** — regression tests, docs, release notes, perf/size, benchmarks vs Perl & prior versions |
+| [`docs/PROGRAM_CHARTER.md`](https://github.com/hilather/nytprof-modernization/blob/main/docs/PROGRAM_CHARTER.md) | Mission, release levels, non-goals |
+| [`docs/FIRST_SLICE_BOARD.md`](https://github.com/hilather/nytprof-modernization/blob/main/docs/FIRST_SLICE_BOARD.md) | Ordered first-slice work board |
+| [`docs/PHASE0_EXIT_CRITERIA.md`](https://github.com/hilather/nytprof-modernization/blob/main/docs/PHASE0_EXIT_CRITERIA.md) | Phase-0 “good enough” gates |
+| [`docs/plan/README.md`](https://github.com/hilather/nytprof-modernization/blob/main/docs/plan/README.md) | Full architecture + 206-task plan package |
+| [`docs/governance/COMPAT-000_RATIFICATION.md`](https://github.com/hilather/nytprof-modernization/blob/main/docs/governance/COMPAT-000_RATIFICATION.md) | Binding compatibility contract sign-off |
+| [`docs/governance/ARCH-008_ADR_PROCESS.md`](https://github.com/hilather/nytprof-modernization/blob/main/docs/governance/ARCH-008_ADR_PROCESS.md) | ADR process |
+| [`baseline/6.15/`](https://github.com/hilather/nytprof-modernization/blob/main/baseline/6.15/) | Pinned v6.15 oracle |
 
 ## Layout
 
@@ -24,8 +25,9 @@ tools/oracle/   scripts to build oracle, dump fixtures, compare
 tools/bench/    light offline timing harness (not certification)
 scripts/        baseline build/test helpers + packaging smokes + `ci/offline_gate.sh`
 Makefile.PL     candidate dual-path packaging entry (not full XS CPAN)
-crates/         Rust workspace (v5 reader, compact model, report MVP) — not required for oracle
+crates/         Rust workspace (v5 reader, provisional v6 preflight crate, compact model, report MVP) — not required for oracle
 perl/           candidate Perl engine-dispatch facade (nytprof-engine) — not used by oracle builds
+AGENTS.md       binding agent quality bars (tests, docs, release notes, perf/size, benchmarks)
 ```
 
 ## Rust workspace (optional)
@@ -109,7 +111,7 @@ make offline-gate
 
 | Step | Action | If cargo missing |
 |------|--------|------------------|
-| 1 | `cargo test -p nytprof-format-v5 -p nytprof-model -p nytprof-report -p nytprof-cli` | Honest skip |
+| 1 | `cargo test -p nytprof-format-v5 -p nytprof-format-v6 -p nytprof-model -p nytprof-report -p nytprof-cli` | Honest skip |
 | 2 | `./tools/oracle/selftest_harness.sh` | Still required |
 | 3 | `./scripts/packaging/dual_path_smoke.sh` (primary packaging) | Still required (native half skips inside dual-path) |
 | 4 | `./scripts/packaging/engine_auto_fallback_smoke.sh` (ENGINE-AUTO-FALLBACK) | Still required (needs native discoverable or cargo to build) |

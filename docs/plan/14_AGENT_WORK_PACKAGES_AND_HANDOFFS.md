@@ -8,16 +8,22 @@ Agents own tasks, not architectural truth. The compatibility contract, normative
 
 ## Global rules for every agent
 
+**Repo agent hints (mandatory quality bars):** [`AGENTS.md`](https://github.com/hilather/nytprof-modernization/blob/main/AGENTS.md) — regression tests for every fix; optimal performance and output size; docs kept current; complete release notes between releases; benchmarks kept current vs Perl oracle and vs previous versions.
+
 1. Read `01_NON_NEGOTIABLES_AND_COMPATIBILITY_CONTRACT.md` first.
 2. Read the dependency task outputs and current ADRs before implementation.
 3. Do not change a stable event/wire/API ID without a format/API ADR and migration plan.
 4. Do not update golden fixtures to make a failing implementation pass without an approved semantic diff.
-5. Every optimization includes correctness hashes and before/after measurements.
+5. Every optimization includes correctness hashes and before/after measurements; keep output size and runtime optimal when correctness is equal.
 6. Every new parser/writer feature includes positive, boundary, malformed, truncation, and resource-limit tests.
-7. Keep legacy and native paths independently selectable until the rollout plan retires one.
-8. Handoffs must include exact commits, commands, artifacts, open questions, and known limitations.
-9. Prefer small mergeable slices that retain a green oracle path.
-10. Stop and escalate when observed v6.15 behavior contradicts the frozen specification; do not guess.
+7. **Every fix** lands with a **regression test** that drives the shipped entry point (no test theater).
+8. Keep documentation, residual honesty, and board evidence **in the same change** as behavior.
+9. Release notes for every cut list **all relevant** changes since the previous release.
+10. Keep benchmarks current vs **6.15 oracle** and vs **prior native versions**; never put `crates/` on oracle `PERL5LIB`.
+11. Keep legacy and native paths independently selectable until the rollout plan retires one.
+12. Handoffs must include exact commits, commands, artifacts, open questions, and known limitations.
+13. Prefer small mergeable slices that retain a green oracle path and offline gate.
+14. Stop and escalate when observed v6.15 behavior contradicts the frozen specification; do not guess.
 
 ## Work package template
 

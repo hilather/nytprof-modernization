@@ -72,6 +72,8 @@ Ship **R1-oriented foundations** before freezing v6 wire IDs:
 
 Agents and humans own **tasks**, not architectural truth. Specs, ADRs, and immutable fixtures override local implementation preferences.
 
+**Agent quality bars (tests, docs, release notes, performance/size, benchmarks):** [`AGENTS.md`](https://github.com/hilather/nytprof-modernization/blob/main/AGENTS.md).
+
 ## Explicit non-goals (this charter window)
 
 - Statistical sampling modes as product defaults.

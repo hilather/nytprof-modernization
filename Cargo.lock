@@ -86,6 +86,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "nytprof-format-v6"
+version = "0.1.0"
+dependencies = [
+ "thiserror",
+]
+
+[[package]]
 name = "nytprof-model"
 version = "0.1.0"
 dependencies = [

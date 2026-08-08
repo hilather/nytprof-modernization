@@ -135,10 +135,11 @@ else
   # Focused packages used by offline native tools; does not touch oracle PERL5LIB.
   cargo test \
     -p nytprof-format-v5 \
+    -p nytprof-format-v6 \
     -p nytprof-model \
     -p nytprof-report \
     -p nytprof-cli
-  ok "step: cargo test (nytprof-format-v5 model report cli)"
+  ok "step: cargo test (nytprof-format-v5 format-v6 model report cli)"
 fi
 
 # ---------------------------------------------------------------------------
