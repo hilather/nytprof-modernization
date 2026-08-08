@@ -1,5 +1,5 @@
 //! Provisional **format v6** fixed-header + chunk-frame + ULEB128 + ZigZag signed
-//! + length-prefixed string/blob + header TLV (COL-007 runway).
+//! + length-prefixed string/blob + header TLV + file-prefix composition (COL-007 runway).
 //!
 //! Schemas:
 //! - `docs/schemas/v6-fixed-header-provisional-v0.md`
@@ -8,11 +8,14 @@
 //! - `docs/schemas/v6-svarint-zigzag-provisional-v0.md`
 //! - `docs/schemas/v6-string-blob-provisional-v0.md`
 //! - `docs/schemas/v6-header-tlv-provisional-v0.md`
+//! - `docs/schemas/v6-tlv-region-provisional-v0.md`
+//! - `docs/schemas/v6-file-prefix-provisional-v0.md`
 //!
 //! This is **not** a wire freeze and does **not** implement the C v6 writer
 //! (COL-007), payload codecs, event streams, or dictionaries. Layout may change under ADR.
 
 pub mod chunk;
+pub mod file_prefix;
 pub mod string;
 pub mod tlv;
 pub mod varint;
@@ -21,13 +24,16 @@ pub use chunk::{
     parse_chunk_frame, ChunkError, ChunkFrame, ChunkResult, CHUNK_HEADER_LEN, CHUNK_SYNC,
     FLAG_KIND_REQUIRED, MAX_CHUNK_PAYLOAD,
 };
+pub use file_prefix::{
+    decode_file_prefix, encode_file_prefix, FilePrefix, FilePrefixError, FilePrefixResult,
+};
 pub use string::{
     decode_string_blob, encode_string_blob, StringBlob, StringError, StringResult, FLAG_UTF8,
     MAX_STRING_BYTES,
 };
 pub use tlv::{
-    decode_tlv, encode_tlv, is_known_type, Tlv, TlvError, TlvResult, FLAG_TYPE_REQUIRED,
-    MAX_TLV_VALUE_BYTES,
+    decode_tlv, decode_tlv_region, encode_tlv, encode_tlv_region, is_known_type, Tlv, TlvError,
+    TlvResult, FLAG_TYPE_REQUIRED, MAX_TLV_REGION_BYTES, MAX_TLV_VALUE_BYTES,
 };
 pub use varint::{
     decode_i64, decode_u64, decode_u64_permissive, encode_i64, encode_i64_into, encode_u64,

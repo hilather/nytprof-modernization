@@ -113,4 +113,4 @@ Evidence: `cargo test -p nytprof-format-v6`.
 1. ADR freeze of type id space and flag bits.
 2. Typed value payloads (e.g. string blob inside PRODUCER, integer for ticks).
 3. Exhaustive §3.2 TLV list + golden vectors.
-4. Header region terminator / end-of-TLVs marker (not required for single-TLV MVP).
+4. Multi-TLV header region + END terminator: **done** separately (`FMT-V6-TLV-REGION-*` / `v6-tlv-region-provisional-v0.md`).
