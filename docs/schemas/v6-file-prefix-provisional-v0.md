@@ -3,7 +3,7 @@
 **Status:** provisional — **not** a v6 wire freeze (not FMT-002..010 ratification; not COL-007 C writer)  
 **Board IDs:** `FMT-V6-FILE-PREFIX-PROVISIONAL` (contract), `FMT-V6-FILE-PREFIX-MVP` (shipped compose encode/decode + tests)  
 **Depends on:** fixed header [`v6-fixed-header-provisional-v0.md`](https://github.com/hilather/nytprof-modernization/blob/main/docs/schemas/v6-fixed-header-provisional-v0.md); multi-TLV region [`v6-tlv-region-provisional-v0.md`](https://github.com/hilather/nytprof-modernization/blob/main/docs/schemas/v6-tlv-region-provisional-v0.md)  
-**Gate:** COL-007 runway preflight only — **before** chunk stream / event codecs / C v6 writer
+**Gate:** COL-007 runway preflight only — **before** event codecs / C v6 writer (prefix+chunk stream: `FMT-V6-PREFIX-CHUNK-STREAM-*`)
 
 ---
 
@@ -15,7 +15,7 @@ This document freezes a **provisional** rule for the **start of a v6 profile fil
 [ fixed header ][ multi-TLV header region … END ][ … later: chunks … ]
 ```
 
-It is **not** a wire freeze, full COL-007 encoder, header CRC verification, or chunk stream.
+It is **not** a wire freeze, full COL-007 encoder, or header CRC verification. Chunk stream after prefix is composed separately (`FMT-V6-PREFIX-CHUNK-STREAM-*` / `v6-prefix-chunk-stream-provisional-v0.md`).
 
 ---
 
@@ -76,7 +76,7 @@ Evidence: `cargo test -p nytprof-format-v6`.
 |------|--------|
 | Fixed header + multi-TLV region APIs | done |
 | File-prefix composition | **done** (`FMT-V6-FILE-PREFIX-*`) |
-| Chunk stream after prefix | residual |
+| Chunk stream after prefix | **done** separately (`FMT-V6-PREFIX-CHUNK-STREAM-*`) |
 | C v6 writer (COL-007) | **still deferred** |
 | Full freeze / CRC verify / catalogs | residual |
 
@@ -86,5 +86,5 @@ Evidence: `cargo test -p nytprof-format-v6`.
 
 1. ADR freeze of `header_len` vs padding vs TLV start.
 2. Header CRC verification.
-3. Chunk stream after prefix.
+3. Chunk stream after prefix: **done** as preflight (`FMT-V6-PREFIX-CHUNK-STREAM-*` / `v6-prefix-chunk-stream-provisional-v0.md`) — still no payload codecs / COL-007.
 4. Golden full-file corpus (FMT-012).

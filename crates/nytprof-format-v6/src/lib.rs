@@ -1,5 +1,7 @@
 //! Provisional **format v6** fixed-header + chunk-frame + ULEB128 + ZigZag signed
-//! + length-prefixed string/blob + header TLV + file-prefix composition (COL-007 runway).
+//! + length-prefixed string/blob + header TLV + file-prefix + prefix+chunk stream
+//! + event-body + mini-profile + multi-chunk EVENT + SOURCE/INDEX/SUMMARY/FOOTER bodies
+//! + CRC32 header/payload verify + ZLIB payload codec (COL-007 runway).
 //!
 //! Schemas:
 //! - `docs/schemas/v6-fixed-header-provisional-v0.md`
@@ -10,22 +12,85 @@
 //! - `docs/schemas/v6-header-tlv-provisional-v0.md`
 //! - `docs/schemas/v6-tlv-region-provisional-v0.md`
 //! - `docs/schemas/v6-file-prefix-provisional-v0.md`
+//! - `docs/schemas/v6-prefix-chunk-stream-provisional-v0.md`
+//! - `docs/schemas/v6-event-body-provisional-v0.md`
+//! - `docs/schemas/v6-mini-profile-provisional-v0.md`
+//! - `docs/schemas/v6-multi-chunk-event-provisional-v0.md`
+//! - `docs/schemas/v6-source-body-provisional-v0.md`
+//! - `docs/schemas/v6-index-body-provisional-v0.md`
+//! - `docs/schemas/v6-summary-body-provisional-v0.md`
+//! - `docs/schemas/v6-footer-body-provisional-v0.md`
+//! - `docs/schemas/v6-crc-provisional-v0.md`
+//! - `docs/schemas/v6-payload-zlib-provisional-v0.md`
 //!
 //! This is **not** a wire freeze and does **not** implement the C v6 writer
-//! (COL-007), payload codecs, event streams, or dictionaries. Layout may change under ADR.
+//! (COL-007), full event catalogs, or dictionaries. Default chunk parse does not
+//! inflate; use `payload_codec` helpers explicitly. Layout may change under ADR.
 
 pub mod chunk;
+pub mod crc;
+pub mod event_body;
 pub mod file_prefix;
+pub mod footer_body;
+pub mod index_body;
+pub mod mini_profile;
+pub mod multi_chunk_event;
+pub mod payload_codec;
+pub mod source_body;
+pub mod stream;
 pub mod string;
+pub mod summary_body;
 pub mod tlv;
 pub mod varint;
 
 pub use chunk::{
-    parse_chunk_frame, ChunkError, ChunkFrame, ChunkResult, CHUNK_HEADER_LEN, CHUNK_SYNC,
-    FLAG_KIND_REQUIRED, MAX_CHUNK_PAYLOAD,
+    encode_chunk_frame, parse_chunk_frame, ChunkError, ChunkFrame, ChunkResult, CHUNK_HEADER_LEN,
+    CHUNK_SYNC, FLAG_KIND_REQUIRED, MAX_CHUNK_PAYLOAD,
+};
+pub use crc::{
+    compute_header_crc, compute_payload_crc, crc32_ieee, encode_chunk_frame_sealed,
+    encode_fixed_header_full_sealed, fill_header_crc, verify_chunk_payload_crc, verify_header_crc,
+    verify_payload_crc, CrcError, CrcResult, CRC32_IEEE_POLY, HEADER_CRC_COVERED_LEN,
+};
+pub use event_body::{
+    decode_event_body, encode_event_body, is_known_opcode, EventBodyError, EventBodyResult,
+    EventRecord, EventRecordSpec, FLAG_OPCODE_REQUIRED, MAX_EVENT_BODY_BYTES,
 };
 pub use file_prefix::{
     decode_file_prefix, encode_file_prefix, FilePrefix, FilePrefixError, FilePrefixResult,
+};
+pub use footer_body::{
+    decode_footer_body, encode_footer_body, FooterBodyError, FooterBodyResult, FooterRecord,
+    FooterRecordSpec, MAX_FOOTER_BODY_BYTES,
+};
+pub use index_body::{
+    decode_index_body, decode_mixed_kind_profile, encode_index_body, encode_mixed_kind_profile,
+    IndexBodyError, IndexBodyResult, IndexRecord, IndexRecordSpec, MixedKindProfile,
+    MixedProfileError, MixedProfileResult, MAX_INDEX_BODY_BYTES,
+};
+pub use mini_profile::{
+    decode_mini_profile, encode_mini_profile, MiniProfile, MiniProfileError, MiniProfileResult,
+};
+pub use multi_chunk_event::{
+    decode_multi_chunk_event_profile, encode_multi_chunk_event_profile, partition_event_records,
+    MultiChunkEventError, MultiChunkEventProfile, MultiChunkEventResult,
+};
+pub use payload_codec::{
+    decode_chunk_payload, deflate_zlib, encode_chunk_frame_zlib, inflate_zlib, PayloadCodecError,
+    PayloadCodecResult, MAX_INFLATE_BYTES,
+};
+pub use source_body::{
+    decode_event_source_profile, decode_source_body, encode_event_source_profile,
+    encode_source_body, EventSourceProfile, EventSourceProfileError, EventSourceProfileResult,
+    SourceBodyError, SourceBodyResult, SourceRecord, SourceRecordSpec, MAX_SOURCE_BODY_BYTES,
+};
+pub use stream::{
+    decode_prefix_chunk_stream, encode_prefix_chunk_stream, ChunkSpec, PrefixChunkStream,
+    StreamError, StreamResult,
+};
+pub use summary_body::{
+    decode_summary_body, encode_summary_body, SummaryBodyError, SummaryBodyResult, SummaryRecord,
+    SummaryRecordSpec, MAX_SUMMARY_BODY_BYTES,
 };
 pub use string::{
     decode_string_blob, encode_string_blob, StringBlob, StringError, StringResult, FLAG_UTF8,
@@ -79,7 +144,8 @@ pub struct FixedHeader {
     /// Present when `header_len` covers the provisional full layout (≥ 36).
     pub required_features: Option<u64>,
     pub optional_features: Option<u64>,
-    /// CRC placeholder — **not** validated by this MVP.
+    /// Header CRC field (CRC32 over covered prefix when sealed via `crc` module).
+    /// Default `parse_fixed_header` does **not** verify; use `verify_header_crc`.
     pub header_crc: Option<u32>,
 }
 
@@ -104,7 +170,7 @@ pub type Result<T> = std::result::Result<T, Error>;
 /// Parse a provisional v6 fixed header from `buf`.
 ///
 /// Fail-closed on truncated input, bad magic, unsupported major, or invalid
-/// `header_len`. Does **not** validate the header CRC placeholder.
+/// `header_len`. Does **not** validate the header CRC (see `crc::verify_header_crc`).
 ///
 /// Pure byte-slice API — no I/O.
 pub fn parse_fixed_header(buf: &[u8]) -> Result<FixedHeader> {

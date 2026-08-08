@@ -28,7 +28,10 @@ pub mod kind {
     pub const FOOTER: u8 = 5;
 }
 
-/// Provisional codec ids (body inflate residual).
+/// Provisional codec ids.
+///
+/// ZLIB inflate/deflate helpers: `crate::payload_codec` (default parse stays non-inflating).
+/// zstd/LZ4 remain residual.
 pub mod codec {
     pub const NONE: u8 = 0;
     pub const ZLIB: u8 = 1;
