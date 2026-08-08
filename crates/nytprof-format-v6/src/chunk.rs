@@ -30,8 +30,8 @@ pub mod kind {
 
 /// Provisional codec ids.
 ///
-/// ZLIB inflate/deflate helpers: `crate::payload_codec` (default parse stays non-inflating).
-/// zstd/LZ4 remain residual.
+/// Payload inflate/deflate helpers: `crate::payload_codec` (ZLIB/ZSTD/LZ4;
+/// default parse stays non-inflating).
 pub mod codec {
     pub const NONE: u8 = 0;
     pub const ZLIB: u8 = 1;

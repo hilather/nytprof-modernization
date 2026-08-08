@@ -3,7 +3,7 @@
 **Status:** provisional — **not** a v6 wire freeze (not FMT-002..010 ratification; not COL-007 C writer)  
 **Board IDs:** `FMT-V6-PAYLOAD-ZLIB-PROVISIONAL` (contract), `FMT-V6-PAYLOAD-ZLIB-MVP` (shipped deflate/inflate + tests)  
 **Depends on:** chunk frame [`v6-chunk-frame-provisional-v0.md`](https://github.com/hilather/nytprof-modernization/blob/main/docs/schemas/v6-chunk-frame-provisional-v0.md); optional CRC [`v6-crc-provisional-v0.md`](https://github.com/hilather/nytprof-modernization/blob/main/docs/schemas/v6-crc-provisional-v0.md)  
-**Gate:** COL-007 runway preflight only — **before** zstd/LZ4 / C v6 writer
+**Gate:** COL-007 runway preflight only — **before** C v6 writer (zstd/LZ4: sibling preflights)
 
 ---
 
@@ -20,9 +20,10 @@ It is **not**:
 
 - a permanent wire freeze or product default CLI v6 path;
 - permission to mark **COL-007** / **COL-008** done;
-- payload codecs **zstd** / **LZ4**;
 - streaming inflate across chunks or dictionary compression;
 - multi-OS CI or public performance claims.
+
+Sibling preflights (same crate): [`v6-payload-zstd-provisional-v0.md`](https://github.com/hilather/nytprof-modernization/blob/main/docs/schemas/v6-payload-zstd-provisional-v0.md), [`v6-payload-lz4-provisional-v0.md`](https://github.com/hilather/nytprof-modernization/blob/main/docs/schemas/v6-payload-lz4-provisional-v0.md).
 
 ---
 
@@ -32,7 +33,9 @@ It is **not**:
 |------:|--------------|---------------|
 | `NONE` (0) | Raw / already uncompressed | Identity; require `uncompressed_len == payload.len()` |
 | `ZLIB` (1) | zlib stream | Inflate; require inflated len == `uncompressed_len` |
-| `ZSTD` / `LZ4` / other | residual | **Err** `UnsupportedCodec` on this MVP path |
+| `ZSTD` (2) | zstd frame | Sibling `FMT-V6-PAYLOAD-ZSTD-*` |
+| `LZ4` (3) | LZ4 raw block | Sibling `FMT-V6-PAYLOAD-LZ4-*` |
+| other | residual | **Err** `UnsupportedCodec` |
 
 ### Fail-closed inflate
 
@@ -80,7 +83,7 @@ Evidence: `cargo test -p nytprof-format-v6`.
 |------|--------|
 | Chunk codec id space (NONE/ZLIB/…) | prior frame preflight |
 | ZLIB deflate/inflate + chunk composition | **done** (`FMT-V6-PAYLOAD-ZLIB-*`) |
-| zstd / LZ4 | residual |
+| zstd / LZ4 | **done** as sibling preflights (`FMT-V6-PAYLOAD-ZSTD-*` / `FMT-V6-PAYLOAD-LZ4-*`) |
 | Always-on inflate in default parse | residual (compat: explicit only) |
 | C v6 writer (**COL-007**) | **still deferred** |
 
@@ -89,6 +92,5 @@ Evidence: `cargo test -p nytprof-format-v6`.
 ## Open items (honest residual)
 
 1. ADR freeze of compression levels and checksum scope for compressed payloads.
-2. zstd / LZ4 codecs.
-3. Streaming multi-chunk inflate and dictionary modes.
-4. Dual-equality vs C + FMT-012 golden corpus + default CLI v6.
+2. Streaming multi-chunk inflate and dictionary modes.
+3. Dual-equality vs C + FMT-012 golden corpus + default CLI v6.

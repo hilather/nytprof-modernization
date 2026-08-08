@@ -329,7 +329,7 @@ Do **not** claim these under offline R0 / R1-preview (full-R1 residuals; `R1-HON
 |----------|--------|
 | **No production FFI / XS Data** | No RUST-010 cdylib ABI; no PERL-004 XS ReadStream over binary profiles; no PERL-005 bless-array Data materializer. Preview = CLI subprocess + pure-Perl JsonlData from dump JSONL (incl. SUB_ENTRY multiplicity only). |
 | **No full nytprofhtml DOM** | Native HTML is MVP summary / multi-file site only — not oracle DOM, CSS/JS, tablesorter, flame SVG, Graphviz. See HTML residual inventory. |
-| **No v6 / COL-007** | No v6 wire freeze; C v6 writer (**COL-007**) deferred; COL-008 batched Rust writer non-baseline. Collector remains 6.15 oracle / v5. **Preflight only (not full COL-007):** provisional fixed-header + chunk-frame + ULEB128 + ZigZag signed + length-prefixed string + header TLV + multi-TLV region + file-prefix + prefix+chunk stream + event-body + mini-profile + multi-chunk EVENT + SOURCE/INDEX/SUMMARY/FOOTER bodies + CRC32 optional verify + ZLIB payload codec (`FMT-V6-HEADER-*` / `FMT-V6-CHUNK-*` / `FMT-V6-VARINT-*` / `FMT-V6-SVARINT-*` / `FMT-V6-STRING-*` / `FMT-V6-TLV-*` / `FMT-V6-TLV-REGION-*` / `FMT-V6-FILE-PREFIX-*` / `FMT-V6-PREFIX-CHUNK-STREAM-*` / `FMT-V6-EVENT-BODY-*` / `FMT-V6-MINI-PROFILE-*` / `FMT-V6-MULTI-CHUNK-EVENT-*` / `FMT-V6-SOURCE-BODY-*` / `FMT-V6-INDEX-BODY-*` / `FMT-V6-SUMMARY-BODY-*` / `FMT-V6-FOOTER-BODY-*` / `FMT-V6-CRC-*` / `FMT-V6-PAYLOAD-ZLIB-*`; crate `nytprof-format-v6`). |
+| **No v6 / COL-007** | No v6 wire freeze; C v6 writer (**COL-007**) deferred; COL-008 batched Rust writer non-baseline. Collector remains 6.15 oracle / v5. **Preflight only (not full COL-007):** provisional fixed-header + chunk-frame + ULEB128 + ZigZag signed + length-prefixed string + header TLV + multi-TLV region + file-prefix + prefix+chunk stream + event-body (incl. TIME_BLOCK/SUB_ENTRY/SUB_RETURN/SUB_INFO/SRC_LINE/NEW_FID/PID_START/PID_END/SUB_CALLERS/DISCOUNT/ATTRIBUTE/OPTION/COMMENT/START_DEFLATE/VERSION/dual-output-sequence/mid-stream-codec-switch/auto-emit-VERSION/known-key-attr-option/unknown-optional-skip) + mini-profile + multi-chunk EVENT + SOURCE/INDEX/SUMMARY/FOOTER bodies + CRC32 optional verify + ZLIB/ZSTD/LZ4 payload codecs + compressed multi-codec mini-profile + multi-chunk compressed EVENT + compressed multi-kind mixed + per-kind codecs + multi-chunk EVENT under mixed + multi-chunk SOURCE + multi-chunk INDEX + multi-chunk SUMMARY + mid-record EVENT/SOURCE/INDEX/SUMMARY span + decoded-chunk + decoded-stream + decoded-EVENT/SOURCE/INDEX/SUMMARY + decoded-mixed + multi-chunk decoded-mixed + mid-record decoded-mixed (EVENT+SOURCE+INDEX+SUMMARY + concurrent multi-kind) always-inflate (`FMT-V6-HEADER-*` / `FMT-V6-CHUNK-*` / `FMT-V6-VARINT-*` / `FMT-V6-SVARINT-*` / `FMT-V6-STRING-*` / `FMT-V6-TLV-*` / `FMT-V6-TLV-REGION-*` / `FMT-V6-FILE-PREFIX-*` / `FMT-V6-PREFIX-CHUNK-STREAM-*` / `FMT-V6-EVENT-BODY-*` / `FMT-V6-MINI-PROFILE-*` / `FMT-V6-MULTI-CHUNK-EVENT-*` / `FMT-V6-SOURCE-BODY-*` / `FMT-V6-INDEX-BODY-*` / `FMT-V6-SUMMARY-BODY-*` / `FMT-V6-FOOTER-BODY-*` / `FMT-V6-CRC-*` / `FMT-V6-PAYLOAD-ZLIB-*` / `FMT-V6-PAYLOAD-ZSTD-*` / `FMT-V6-PAYLOAD-LZ4-*` / `FMT-V6-COMPRESSED-PROFILE-*` / `FMT-V6-MULTI-CHUNK-COMPRESSED-*` / `FMT-V6-COMPRESSED-MIXED-*` / `FMT-V6-PER-KIND-CODEC-*` / `FMT-V6-MULTI-CHUNK-KIND-*` / `FMT-V6-MULTI-CHUNK-SOURCE-*` / `FMT-V6-MULTI-CHUNK-INDEX-*` / `FMT-V6-MULTI-CHUNK-SUMMARY-*` / `FMT-V6-MID-RECORD-SPAN-*` / `FMT-V6-MID-RECORD-SOURCE-*` / `FMT-V6-MID-RECORD-INDEX-*` / `FMT-V6-MID-RECORD-SUMMARY-*` / `FMT-V6-DECODED-CHUNK-*` / `FMT-V6-DECODED-STREAM-*` / `FMT-V6-DECODED-EVENT-*` / `FMT-V6-DECODED-SOURCE-*` / `FMT-V6-DECODED-INDEX-*` / `FMT-V6-DECODED-SUMMARY-*` / `FMT-V6-DECODED-MIXED-*` / `FMT-V6-DECODED-MIXED-MULTI-CHUNK-*` / `FMT-V6-DECODED-MIXED-MID-RECORD-*` / `FMT-V6-DECODED-MIXED-MID-RECORD-SOURCE-*` / `FMT-V6-DECODED-MIXED-MID-RECORD-INDEX-*` / `FMT-V6-DECODED-MIXED-MID-RECORD-SUMMARY-*` / `FMT-V6-DECODED-MIXED-MID-RECORD-CONCURRENT-*` / `FMT-V6-EVENT-BODY-TIME-BLOCK-SUB-ENTRY-*` / `FMT-V6-EVENT-BODY-SUB-RETURN-SUB-INFO-*` / `FMT-V6-EVENT-BODY-SRC-LINE-NEW-FID-*` / `FMT-V6-EVENT-BODY-PID-START-END-*` / `FMT-V6-EVENT-BODY-SUB-CALLERS-DISCOUNT-*` / `FMT-V6-EVENT-BODY-ATTRIBUTE-OPTION-*` / `FMT-V6-EVENT-BODY-COMMENT-*` / `FMT-V6-EVENT-BODY-START-DEFLATE-*` / `FMT-V6-EVENT-BODY-VERSION-*`; crate `nytprof-format-v6`). Default `parse_chunk_frame` stays **non-inflating**. |
 | **No performance claims** | Light wall-time notes only (`docs/BENCH_NOTES.md`, `tools/bench/light_bench.sh`). No public SLOs or certification. |
 | **No full MakeMaker XS CPAN dual-build** | Candidate `Makefile.PL` facade only (**BUILD-MAKEMAKER-OPT**), not BUILD-003 full. |
 | **No multi-OS CI matrix** | Single-host `offline_gate.sh` only (**BUILD-006** open). |
@@ -506,6 +506,88 @@ Also on blocks-calls1 when asserted: leaf returns **15**, mid returns **3** (sam
 | `FMT-V6-CRC-MVP` | **done** | `crc32_ieee` + sealed encode + optional verify + tests. **Before full COL-007.** |
 | `FMT-V6-PAYLOAD-ZLIB-PROVISIONAL` | **done** | ZLIB payload codec contract. **Before full COL-007.** |
 | `FMT-V6-PAYLOAD-ZLIB-MVP` | **done** | `deflate_zlib`/`inflate_zlib`/`decode_chunk_payload` + tests. **Before full COL-007.** |
+| `FMT-V6-PAYLOAD-ZSTD-PROVISIONAL` | **done** | ZSTD payload codec contract (`codec=2`). **Before full COL-007.** |
+| `FMT-V6-PAYLOAD-ZSTD-MVP` | **done** | `compress_zstd`/`decompress_zstd`/`encode_chunk_frame_zstd` + tests. **Before full COL-007.** |
+| `FMT-V6-PAYLOAD-LZ4-PROVISIONAL` | **done** | LZ4 payload codec contract (`codec=3`, raw block). **Before full COL-007.** |
+| `FMT-V6-PAYLOAD-LZ4-MVP` | **done** | `compress_lz4`/`decompress_lz4`/`encode_chunk_frame_lz4` + tests. **Before full COL-007.** |
+| `FMT-V6-COMPRESSED-PROFILE-PROVISIONAL` | **done** | Compressed multi-codec mini-profile contract. **Before full COL-007.** |
+| `FMT-V6-COMPRESSED-PROFILE-MVP` | **done** | `encode_compressed_mini_profile`/`decode_compressed_mini_profile` + per-codec tests. **Before full COL-007.** |
+| `FMT-V6-MULTI-CHUNK-COMPRESSED-PROVISIONAL` | **done** | Multi-chunk EVENT + compressed payloads contract. **Before full COL-007.** |
+| `FMT-V6-MULTI-CHUNK-COMPRESSED-MVP` | **done** | `encode_multi_chunk_compressed_profile`/`decode_multi_chunk_compressed_profile` + tests. **Before full COL-007.** |
+| `FMT-V6-COMPRESSED-MIXED-PROVISIONAL` | **done** | Compressed multi-kind mixed (EVENT/SOURCE/INDEX/SUMMARY) contract. **Before full COL-007.** |
+| `FMT-V6-COMPRESSED-MIXED-MVP` | **done** | `encode_compressed_mixed_profile`/`decode_compressed_mixed_profile` + tests. **Before full COL-007.** |
+| `FMT-V6-PER-KIND-CODEC-PROVISIONAL` | **done** | Per-kind payload codecs on mixed profiles contract. **Before full COL-007.** |
+| `FMT-V6-PER-KIND-CODEC-MVP` | **done** | `KindCodecs` + `encode_compressed_mixed_profile_per_kind` + tests. **Before full COL-007.** |
+| `FMT-V6-MULTI-CHUNK-KIND-PROVISIONAL` | **done** | Multi-chunk EVENT under compressed mixed contract. **Before full COL-007.** |
+| `FMT-V6-MULTI-CHUNK-KIND-MVP` | **done** | `encode_multi_chunk_kind_mixed_profile` + multi-EVENT + SOURCE tests. **Before full COL-007.** |
+| `FMT-V6-MULTI-CHUNK-SOURCE-PROVISIONAL` | **done** | Multi-chunk SOURCE under compressed mixed contract. **Before full COL-007.** |
+| `FMT-V6-MULTI-CHUNK-SOURCE-MVP` | **done** | `partition_source_records` + `encode_multi_chunk_source_mixed_profile` + tests. **Before full COL-007.** |
+| `FMT-V6-MULTI-CHUNK-INDEX-PROVISIONAL` | **done** | Multi-chunk INDEX under compressed mixed contract. **Before full COL-007.** |
+| `FMT-V6-MULTI-CHUNK-INDEX-MVP` | **done** | `partition_index_records` + `encode_multi_chunk_index_mixed_profile` + tests. **Before full COL-007.** |
+| `FMT-V6-MULTI-CHUNK-SUMMARY-PROVISIONAL` | **done** | Multi-chunk SUMMARY under compressed mixed contract. **Before full COL-007.** |
+| `FMT-V6-MULTI-CHUNK-SUMMARY-MVP` | **done** | `partition_summary_records` + `encode_multi_chunk_summary_mixed_profile` + tests. **Before full COL-007.** |
+| `FMT-V6-MID-RECORD-SPAN-PROVISIONAL` | **done** | Mid-record span across EVENT chunks contract. **Before full COL-007.** |
+| `FMT-V6-MID-RECORD-SPAN-MVP` | **done** | `encode_mid_record_span_event_profile`/`decode_mid_record_span_event_profile` + tests. **Before full COL-007.** |
+| `FMT-V6-MID-RECORD-SOURCE-PROVISIONAL` | **done** | Mid-record span across SOURCE chunks contract. **Before full COL-007.** |
+| `FMT-V6-MID-RECORD-SOURCE-MVP` | **done** | `encode_mid_record_span_source_profile`/`decode_mid_record_span_source_profile` + tests. **Before full COL-007.** |
+| `FMT-V6-MID-RECORD-INDEX-PROVISIONAL` | **done** | Mid-record span across INDEX chunks contract. **Before full COL-007.** |
+| `FMT-V6-MID-RECORD-INDEX-MVP` | **done** | `encode_mid_record_span_index_profile`/`decode_mid_record_span_index_profile` + tests. **Before full COL-007.** |
+| `FMT-V6-MID-RECORD-SUMMARY-PROVISIONAL` | **done** | Mid-record span across SUMMARY chunks contract. **Before full COL-007.** |
+| `FMT-V6-MID-RECORD-SUMMARY-MVP` | **done** | `encode_mid_record_span_summary_profile`/`decode_mid_record_span_summary_profile` + tests. **Before full COL-007.** |
+| `FMT-V6-DECODED-CHUNK-PROVISIONAL` | **done** | Always-inflate consumer path + optional CRC contract. Default `parse_chunk_frame` stays non-inflating. **Before full COL-007.** |
+| `FMT-V6-DECODED-CHUNK-MVP` | **done** | `decode_chunk`/`decode_chunk_frame_plain` + tests. **Before full COL-007.** |
+| `FMT-V6-DECODED-STREAM-PROVISIONAL` | **done** | Always-inflate multi-chunk stream contract. Default `parse_chunk_frame` stays non-inflating. **Before full COL-007.** |
+| `FMT-V6-DECODED-STREAM-MVP` | **done** | `decode_prefix_chunk_stream_plain`/`encode_prefix_sealed_chunks` + tests. **Before full COL-007.** |
+| `FMT-V6-DECODED-EVENT-PROVISIONAL` | **done** | Stream→inflate→event-body contract. Default `parse_chunk_frame` stays non-inflating. **Before full COL-007.** |
+| `FMT-V6-DECODED-EVENT-MVP` | **done** | `encode_decoded_event_profile`/`decode_decoded_event_profile` + tests. **Before full COL-007.** |
+| `FMT-V6-DECODED-SOURCE-PROVISIONAL` | **done** | Stream→inflate→source-body contract. Default `parse_chunk_frame` stays non-inflating. **Before full COL-007.** |
+| `FMT-V6-DECODED-SOURCE-MVP` | **done** | `encode_decoded_source_profile`/`decode_decoded_source_profile` + tests. **Before full COL-007.** |
+| `FMT-V6-DECODED-INDEX-PROVISIONAL` | **done** | Stream→inflate→index-body contract. Default `parse_chunk_frame` stays non-inflating. **Before full COL-007.** |
+| `FMT-V6-DECODED-INDEX-MVP` | **done** | `encode_decoded_index_profile`/`decode_decoded_index_profile` + tests. **Before full COL-007.** |
+| `FMT-V6-DECODED-SUMMARY-PROVISIONAL` | **done** | Stream→inflate→summary-body contract. Default `parse_chunk_frame` stays non-inflating. **Before full COL-007.** |
+| `FMT-V6-DECODED-SUMMARY-MVP` | **done** | `encode_decoded_summary_profile`/`decode_decoded_summary_profile` + tests. **Before full COL-007.** |
+| `FMT-V6-DECODED-MIXED-PROVISIONAL` | **done** | Multi-kind always-inflate + optional CRC contract. Default `parse_chunk_frame` stays non-inflating. **Before full COL-007.** |
+| `FMT-V6-DECODED-MIXED-MVP` | **done** | `encode_decoded_mixed_profile`/`decode_decoded_mixed_profile` + tests. **Before full COL-007.** |
+| `FMT-V6-DECODED-MIXED-MULTI-CHUNK-PROVISIONAL` | **done** | Multi-chunk record-aligned always-inflate mixed contract. Default `parse_chunk_frame` stays non-inflating. **Before full COL-007.** |
+| `FMT-V6-DECODED-MIXED-MULTI-CHUNK-MVP` | **done** | `encode_decoded_mixed_multi_chunk_profile` + multi-chunk decode tests. **Before full COL-007.** |
+| `FMT-V6-DECODED-MIXED-MID-RECORD-PROVISIONAL` | **done** | Mid-record span on always-inflate multi-kind mixed contract. Default `parse_chunk_frame` stays non-inflating. **Before full COL-007.** |
+| `FMT-V6-DECODED-MIXED-MID-RECORD-MVP` | **done** | `encode_decoded_mixed_mid_record_event_profile` + mid-record mixed tests. **Before full COL-007.** |
+| `FMT-V6-DECODED-MIXED-MID-RECORD-SOURCE-PROVISIONAL` | **done** | SOURCE mid-record on always-inflate multi-kind mixed contract. Default `parse_chunk_frame` stays non-inflating. **Before full COL-007.** |
+| `FMT-V6-DECODED-MIXED-MID-RECORD-SOURCE-MVP` | **done** | `encode_decoded_mixed_mid_record_source_profile` + SOURCE mid-on-mixed tests. **Before full COL-007.** |
+| `FMT-V6-DECODED-MIXED-MID-RECORD-INDEX-PROVISIONAL` | **done** | INDEX mid-record on always-inflate multi-kind mixed contract. Default `parse_chunk_frame` stays non-inflating. **Before full COL-007.** |
+| `FMT-V6-DECODED-MIXED-MID-RECORD-INDEX-MVP` | **done** | `encode_decoded_mixed_mid_record_index_profile` + INDEX mid-on-mixed tests. **Before full COL-007.** |
+| `FMT-V6-DECODED-MIXED-MID-RECORD-SUMMARY-PROVISIONAL` | **done** | SUMMARY mid-record on always-inflate multi-kind mixed contract. Default `parse_chunk_frame` stays non-inflating. **Before full COL-007.** |
+| `FMT-V6-DECODED-MIXED-MID-RECORD-SUMMARY-MVP` | **done** | `encode_decoded_mixed_mid_record_summary_profile` + SUMMARY mid-on-mixed tests. **Before full COL-007.** |
+| `FMT-V6-DECODED-MIXED-MID-RECORD-CONCURRENT-PROVISIONAL` | **done** | Concurrent multi-kind mid-record on always-inflate mixed contract. Default `parse_chunk_frame` stays non-inflating. **Before full COL-007.** |
+| `FMT-V6-DECODED-MIXED-MID-RECORD-CONCURRENT-MVP` | **done** | `encode_decoded_mixed_mid_record_concurrent_profile` + concurrent mid-on-mixed tests. **Before full COL-007.** |
+| `FMT-V6-EVENT-BODY-TIME-BLOCK-SUB-ENTRY-PROVISIONAL` | **done** | TIME_BLOCK + SUB_ENTRY provisional event-body opcodes. Not full catalog freeze. Default `parse_chunk_frame` stays non-inflating. **Before full COL-007.** |
+| `FMT-V6-EVENT-BODY-TIME-BLOCK-SUB-ENTRY-MVP` | **done** | Event-body TIME_BLOCK/SUB_ENTRY + always-inflate EVENT/mixed tests. **Before full COL-007.** |
+| `FMT-V6-EVENT-BODY-SUB-RETURN-SUB-INFO-PROVISIONAL` | **done** | SUB_RETURN + SUB_INFO provisional event-body opcodes. Not full catalog freeze. Default `parse_chunk_frame` stays non-inflating. **Before full COL-007.** |
+| `FMT-V6-EVENT-BODY-SUB-RETURN-SUB-INFO-MVP` | **done** | Event-body SUB_RETURN/SUB_INFO + always-inflate EVENT/mixed tests. **Before full COL-007.** |
+| `FMT-V6-EVENT-BODY-SRC-LINE-NEW-FID-PROVISIONAL` | **done** | SRC_LINE + NEW_FID provisional event-body opcodes. Not full catalog freeze. Default `parse_chunk_frame` stays non-inflating. **Before full COL-007.** |
+| `FMT-V6-EVENT-BODY-SRC-LINE-NEW-FID-MVP` | **done** | Event-body SRC_LINE/NEW_FID + always-inflate EVENT/mixed tests. **Before full COL-007.** |
+| `FMT-V6-EVENT-BODY-PID-START-END-PROVISIONAL` | **done** | PID_START + PID_END provisional event-body opcodes. Not full catalog freeze / COL-015. Default `parse_chunk_frame` stays non-inflating. **Before full COL-007.** |
+| `FMT-V6-EVENT-BODY-PID-START-END-MVP` | **done** | Event-body PID_START/PID_END + always-inflate EVENT/mixed tests. **Before full COL-007.** |
+| `FMT-V6-EVENT-BODY-SUB-CALLERS-DISCOUNT-PROVISIONAL` | **done** | SUB_CALLERS + DISCOUNT provisional event-body opcodes. Not full catalog freeze / DISCOUNT accounting freeze. Default `parse_chunk_frame` stays non-inflating. **Before full COL-007.** |
+| `FMT-V6-EVENT-BODY-SUB-CALLERS-DISCOUNT-MVP` | **done** | Event-body SUB_CALLERS/DISCOUNT + always-inflate EVENT/mixed tests. **Before full COL-007.** |
+| `FMT-V6-EVENT-BODY-ATTRIBUTE-OPTION-PROVISIONAL` | **done** | ATTRIBUTE + OPTION provisional event-body opcodes. Not full catalog freeze / key vocabulary freeze. Default `parse_chunk_frame` stays non-inflating. **Before full COL-007.** |
+| `FMT-V6-EVENT-BODY-ATTRIBUTE-OPTION-MVP` | **done** | Event-body ATTRIBUTE/OPTION + always-inflate EVENT/mixed tests. **Before full COL-007.** |
+| `FMT-V6-EVENT-BODY-COMMENT-PROVISIONAL` | **done** | COMMENT provisional event-body opcode. Not START_DEFLATE-as-event freeze. Default `parse_chunk_frame` stays non-inflating. **Before full COL-007.** |
+| `FMT-V6-EVENT-BODY-COMMENT-MVP` | **done** | Event-body COMMENT + always-inflate EVENT/mixed tests. **Before full COL-007.** |
+| `FMT-V6-EVENT-BODY-START-DEFLATE-PROVISIONAL` | **done** | START_DEFLATE provisional event-body opcode (marker only). Not VERSION prelude freeze. Default `parse_chunk_frame` stays non-inflating. **Before full COL-007.** |
+| `FMT-V6-EVENT-BODY-START-DEFLATE-MVP` | **done** | Event-body START_DEFLATE + always-inflate EVENT/mixed tests. **Before full COL-007.** |
+| `FMT-V6-EVENT-BODY-VERSION-PROVISIONAL` | **done** | VERSION provisional event-body opcode (major/minor). Not OI-001-03 sequence-number freeze. Default `parse_chunk_frame` stays non-inflating. **Before full COL-007.** |
+| `FMT-V6-EVENT-BODY-VERSION-MVP` | **done** | Event-body VERSION + always-inflate EVENT/mixed tests. **Before full COL-007.** |
+| `FMT-V6-EVENT-BODY-DUAL-OUTPUT-SEQUENCE-PROVISIONAL` | **done** | Dual-output multi-record EVENT order preflight (VERSION→meta→START_DEFLATE?→PID_START…PID_END). Not OI-001-03 sequence-number freeze. Default `parse_chunk_frame` stays non-inflating. **Before full COL-007.** |
+| `FMT-V6-EVENT-BODY-DUAL-OUTPUT-SEQUENCE-MVP` | **done** | Dual-output sequence body + always-inflate EVENT/mixed tests (order+fields; NONE/ZLIB/ZSTD/LZ4; SOURCE co-kind). **Before full COL-007.** |
+| `FMT-V6-START-DEFLATE-MID-STREAM-CODEC-SWITCH-PROVISIONAL` | **done** | START_DEFLATE mid-stream chunk-codec switch preflight (pre NONE + post ZLIB/ZSTD/LZ4). Not v5 mid-payload stream deflate freeze / OI-001-03. Default `parse_chunk_frame` stays non-inflating. **Before full COL-007.** |
+| `FMT-V6-START-DEFLATE-MID-STREAM-CODEC-SWITCH-MVP` | **done** | Mid-stream codec-switch encode/decode + always-inflate EVENT/mixed tests (order+fields; SOURCE co-kind). **Before full COL-007.** |
+| `FMT-V6-AUTO-EMIT-VERSION-PROVISIONAL` | **done** | Auto-emit VERSION from fixed-header major/minor preflight. Not OI-001-03 / full key-vocab freeze. Default `parse_chunk_frame` stays non-inflating. **Before full COL-007.** |
+| `FMT-V6-AUTO-EMIT-VERSION-MVP` | **done** | Auto-emit VERSION helpers + always-inflate EVENT/mixed tests (header-tied major/minor; NONE/ZLIB/ZSTD/LZ4; mismatch fail-closed). **Before full COL-007.** |
+| `FMT-V6-ATTR-OPTION-KNOWN-KEY-PROVISIONAL` | **done** | ATTRIBUTE/OPTION known-key vocabulary preflight (basetime, ticks_per_sec, application, calls, …). Not complete OI-002-03/04 freeze. Default `parse_chunk_frame` stays non-inflating. **Before full COL-007.** |
+| `FMT-V6-ATTR-OPTION-KNOWN-KEY-MVP` | **done** | Known-key table + always-inflate EVENT/mixed tests (key+value asserts; NONE/ZLIB/ZSTD/LZ4; SOURCE co-kind). **Before full COL-007.** |
+| `FMT-V6-EVENT-BODY-UNKNOWN-OPTIONAL-SKIP-PROVISIONAL` | **done** | Unknown optional length-framed skip preflight (`FLAG_BODY_LENGTH`). Not permanent flag freeze. Default `parse_chunk_frame` stays non-inflating. **Before full COL-007.** |
+| `FMT-V6-EVENT-BODY-UNKNOWN-OPTIONAL-SKIP-MVP` | **done** | Length-framed unknown-optional skip + always-inflate EVENT/mixed tests (order+fields; SOURCE co-kind). **Before full COL-007.** |
 | `COL-007` | deferred | C v6 writer — unblocked for *start* after report-side evidence; not implemented by this runbook |
 
 ## Revision rule

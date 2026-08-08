@@ -83,7 +83,7 @@ Evidence: `cargo test -p nytprof-format-v6`.
 | Prefix + chunk stream + event-body preflight | done |
 | Mini-profile composition | **done** (`FMT-V6-MINI-PROFILE-*`) |
 | Multi-chunk EVENT split/reassemble | **done** separately (`FMT-V6-MULTI-CHUNK-EVENT-*`) |
-| Payload inflate / full catalog / dictionaries | residual |
+| Payload inflate / full catalog / dictionaries | compressed mini-profile preflight **done** separately (`FMT-V6-COMPRESSED-PROFILE-*`); full catalog / dictionaries residual |
 | C v6 writer (**COL-007**) | **still deferred** |
 | Golden full-file corpus freeze (FMT-012) | residual (this is preflight only) |
 
@@ -93,5 +93,5 @@ Evidence: `cargo test -p nytprof-format-v6`.
 
 1. ADR freeze of full-file layout (required FOOTER, multi-EVENT splitting policy, padding).
 2. Multi-chunk EVENT splitting: **done** as preflight (`FMT-V6-MULTI-CHUNK-EVENT-*`); SOURCE/INDEX/SUMMARY kinds residual.
-3. Payload inflate + dual-equality vs C encoder.
+3. Compressed multi-codec mini-profile: **done** as preflight (`FMT-V6-COMPRESSED-PROFILE-*`); always-on default inflate + dual-equality vs C residual.
 4. Golden full-file corpus (FMT-012) and default CLI v6 read path.

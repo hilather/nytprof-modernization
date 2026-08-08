@@ -1,7 +1,8 @@
 //! Provisional **format v6** fixed-header + chunk-frame + ULEB128 + ZigZag signed
 //! + length-prefixed string/blob + header TLV + file-prefix + prefix+chunk stream
 //! + event-body + mini-profile + multi-chunk EVENT + SOURCE/INDEX/SUMMARY/FOOTER bodies
-//! + CRC32 header/payload verify + ZLIB payload codec (COL-007 runway).
+//! + CRC32 header/payload verify + ZLIB/ZSTD/LZ4 payload codecs + compressed
+//! multi-codec mini-profile composition (COL-007 runway).
 //!
 //! Schemas:
 //! - `docs/schemas/v6-fixed-header-provisional-v0.md`
@@ -22,18 +23,49 @@
 //! - `docs/schemas/v6-footer-body-provisional-v0.md`
 //! - `docs/schemas/v6-crc-provisional-v0.md`
 //! - `docs/schemas/v6-payload-zlib-provisional-v0.md`
+//! - `docs/schemas/v6-payload-zstd-provisional-v0.md`
+//! - `docs/schemas/v6-payload-lz4-provisional-v0.md`
+//! - `docs/schemas/v6-compressed-profile-provisional-v0.md`
+//! - `docs/schemas/v6-multi-chunk-compressed-provisional-v0.md`
+//! - `docs/schemas/v6-compressed-mixed-provisional-v0.md`
+//! - `docs/schemas/v6-per-kind-codec-provisional-v0.md`
+//! - `docs/schemas/v6-multi-chunk-kind-mixed-provisional-v0.md`
+//! - `docs/schemas/v6-multi-chunk-source-provisional-v0.md`
+//! - `docs/schemas/v6-multi-chunk-index-provisional-v0.md`
+//! - `docs/schemas/v6-multi-chunk-summary-provisional-v0.md`
+//! - `docs/schemas/v6-mid-record-span-provisional-v0.md`
+//! - `docs/schemas/v6-decoded-chunk-provisional-v0.md`
+//! - `docs/schemas/v6-decoded-stream-provisional-v0.md`
+//! - `docs/schemas/v6-decoded-event-provisional-v0.md`
+//! - `docs/schemas/v6-decoded-source-provisional-v0.md`
+//! - `docs/schemas/v6-decoded-index-provisional-v0.md`
+//! - `docs/schemas/v6-decoded-summary-provisional-v0.md`
+//! - `docs/schemas/v6-decoded-mixed-provisional-v0.md`
 //!
 //! This is **not** a wire freeze and does **not** implement the C v6 writer
 //! (COL-007), full event catalogs, or dictionaries. Default chunk parse does not
-//! inflate; use `payload_codec` helpers explicitly. Layout may change under ADR.
+//! inflate; use `payload_codec` / `decoded_chunk` / `decoded_stream` /
+//! `decoded_event` / `decoded_source` / `decoded_index` / `decoded_summary` /
+//! `decoded_mixed` helpers explicitly. Layout may change under ADR.
 
 pub mod chunk;
+pub mod compressed_mixed;
+pub mod compressed_profile;
 pub mod crc;
+pub mod decoded_chunk;
+pub mod decoded_event;
+pub mod decoded_index;
+pub mod decoded_mixed;
+pub mod decoded_source;
+pub mod decoded_stream;
+pub mod decoded_summary;
 pub mod event_body;
 pub mod file_prefix;
 pub mod footer_body;
 pub mod index_body;
+pub mod mid_record_span;
 pub mod mini_profile;
+pub mod multi_chunk_compressed;
 pub mod multi_chunk_event;
 pub mod payload_codec;
 pub mod source_body;
@@ -47,15 +79,65 @@ pub use chunk::{
     encode_chunk_frame, parse_chunk_frame, ChunkError, ChunkFrame, ChunkResult, CHUNK_HEADER_LEN,
     CHUNK_SYNC, FLAG_KIND_REQUIRED, MAX_CHUNK_PAYLOAD,
 };
+pub use compressed_mixed::{
+    decode_compressed_mixed_profile, encode_compressed_mixed_profile,
+    encode_compressed_mixed_profile_per_kind, encode_multi_chunk_index_mixed_profile,
+    encode_multi_chunk_kind_mixed_profile, encode_multi_chunk_source_mixed_profile,
+    encode_multi_chunk_summary_mixed_profile, partition_index_records, partition_source_records,
+    partition_summary_records, CompressedMixedError, CompressedMixedProfile,
+    CompressedMixedResult, KindCodecs, OwnedFooterRecord, OwnedIndexRecord, OwnedSourceRecord,
+    OwnedSummaryRecord,
+};
+pub use compressed_profile::{
+    decode_compressed_mini_profile, encode_compressed_mini_profile, CompressedMiniProfile,
+    CompressedProfileError, CompressedProfileResult, OwnedEventRecord,
+};
 pub use crc::{
     compute_header_crc, compute_payload_crc, crc32_ieee, encode_chunk_frame_sealed,
     encode_fixed_header_full_sealed, fill_header_crc, verify_chunk_payload_crc, verify_header_crc,
     verify_payload_crc, CrcError, CrcResult, CRC32_IEEE_POLY, HEADER_CRC_COVERED_LEN,
 };
-pub use event_body::{
-    decode_event_body, encode_event_body, is_known_opcode, EventBodyError, EventBodyResult,
-    EventRecord, EventRecordSpec, FLAG_OPCODE_REQUIRED, MAX_EVENT_BODY_BYTES,
+pub use decoded_chunk::{
+    decode_chunk, decode_chunk_frame_plain, DecodedChunk, DecodedChunkError, DecodedChunkResult,
 };
+pub use decoded_event::{
+    align_event_records_version_with_header, decode_decoded_event_profile,
+    decode_decoded_event_profile_auto_version, encode_decoded_event_mid_stream_codec_switch_profile,
+    encode_decoded_event_profile, encode_decoded_event_profile_auto_version,
+    version_record_from_header, DecodedEventError, DecodedEventProfile, DecodedEventResult,
+};
+pub use decoded_index::{
+    decode_decoded_index_profile, encode_decoded_index_profile, DecodedIndexError,
+    DecodedIndexProfile, DecodedIndexResult,
+};
+pub use decoded_mixed::{
+    decode_decoded_mixed_profile, decode_decoded_mixed_profile_auto_version,
+    encode_decoded_mixed_mid_record_concurrent_profile, encode_decoded_mixed_mid_record_event_profile,
+    encode_decoded_mixed_mid_record_index_profile, encode_decoded_mixed_mid_record_source_profile,
+    encode_decoded_mixed_mid_record_summary_profile,
+    encode_decoded_mixed_mid_stream_codec_switch_profile, encode_decoded_mixed_multi_chunk_profile,
+    encode_decoded_mixed_profile, encode_decoded_mixed_profile_auto_version, DecodedMixedError,
+    DecodedMixedProfile, DecodedMixedResult, MidRecordKindSplits,
+};
+pub use decoded_source::{
+    decode_decoded_source_profile, encode_decoded_source_profile, DecodedSourceError,
+    DecodedSourceProfile, DecodedSourceResult,
+};
+pub use decoded_stream::{
+    decode_prefix_chunk_stream_plain, encode_prefix_sealed_chunks, DecodedStream,
+    DecodedStreamError, DecodedStreamResult,
+};
+pub use decoded_summary::{
+    decode_decoded_summary_profile, encode_decoded_summary_profile, DecodedSummaryError,
+    DecodedSummaryProfile, DecodedSummaryResult,
+};
+pub use event_body::{
+    attribute_kv, decode_event_body, encode_event_body, encode_unknown_optional_skip_record,
+    is_known_opcode, known_key_attr_option_sample_specs, option_kv, EventBodyError,
+    EventBodyResult, EventRecord, EventRecordSpec, FLAG_BODY_LENGTH, FLAG_OPCODE_REQUIRED,
+    MAX_EVENT_BODY_BYTES, MAX_SKIP_BODY_BYTES,
+};
+pub use event_body::known_key;
 pub use file_prefix::{
     decode_file_prefix, encode_file_prefix, FilePrefix, FilePrefixError, FilePrefixResult,
 };
@@ -68,16 +150,31 @@ pub use index_body::{
     IndexBodyError, IndexBodyResult, IndexRecord, IndexRecordSpec, MixedKindProfile,
     MixedProfileError, MixedProfileResult, MAX_INDEX_BODY_BYTES,
 };
+pub use mid_record_span::{
+    decode_mid_record_span_event_profile, decode_mid_record_span_index_profile,
+    decode_mid_record_span_source_profile, decode_mid_record_span_summary_profile,
+    default_mid_body_split, encode_mid_record_span_event_profile,
+    encode_mid_record_span_index_profile, encode_mid_record_span_source_profile,
+    encode_mid_record_span_summary_profile, split_event_body_bytes, split_index_body_bytes,
+    split_source_body_bytes, split_summary_body_bytes, MidRecordIndexProfile,
+    MidRecordSourceProfile, MidRecordSpanError, MidRecordSpanProfile, MidRecordSpanResult,
+    MidRecordSummaryProfile,
+};
 pub use mini_profile::{
     decode_mini_profile, encode_mini_profile, MiniProfile, MiniProfileError, MiniProfileResult,
+};
+pub use multi_chunk_compressed::{
+    decode_multi_chunk_compressed_profile, encode_multi_chunk_compressed_profile,
+    MultiChunkCompressedError, MultiChunkCompressedProfile, MultiChunkCompressedResult,
 };
 pub use multi_chunk_event::{
     decode_multi_chunk_event_profile, encode_multi_chunk_event_profile, partition_event_records,
     MultiChunkEventError, MultiChunkEventProfile, MultiChunkEventResult,
 };
 pub use payload_codec::{
-    decode_chunk_payload, deflate_zlib, encode_chunk_frame_zlib, inflate_zlib, PayloadCodecError,
-    PayloadCodecResult, MAX_INFLATE_BYTES,
+    compress_lz4, compress_zstd, decode_chunk_payload, deflate_zlib, decompress_lz4,
+    decompress_zstd, encode_chunk_frame_lz4, encode_chunk_frame_zlib, encode_chunk_frame_zstd,
+    inflate_zlib, PayloadCodecError, PayloadCodecResult, MAX_INFLATE_BYTES,
 };
 pub use source_body::{
     decode_event_source_profile, decode_source_body, encode_event_source_profile,

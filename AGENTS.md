@@ -59,6 +59,31 @@ Project global rule also applies: structured code review after non-trivial chang
 | **Record results** | Update `docs/BENCH_NOTES.md` (or the certified bench package when present) with command, host notes, and direction of change — without inventing certification claims. |
 | **Harness** | Local light harness: `./tools/bench/light_bench.sh`. Full certification remains plan WP-13 / `docs/plan/11_BENCHMARKING_AND_PERFORMANCE_GATES.md`. |
 
+### 6. Failed attempts and language semantics (save automatically)
+
+Negative knowledge is part of the repo. Agents **must** automatically record failed implementation attempts and corrected language misunderstandings so later sessions do not re-pay the same cost.
+
+**Shape:** keep the **default notes light** (one short table row — cheap to load into context). **Drill down** into `docs/agent-notes/details/<slug>.md` only when a later agent would need more than one line (benches, stack traces, multi-step postmortems).
+
+| Rule | Detail |
+|------|--------|
+| **When to write (automatic)** | Do **not** wait for a dedicated “write notes” task. Append a light row as soon as you **abandon** an approach, **fail a gate** after real effort, or **correct** a Perl/Rust misunderstanding — ideally in the **same change set**, otherwise immediately after aborting. |
+| **Failed attempts** | Abandoned or gate-failed approaches — especially **perf** optimizations that regressed or did not win, but also format/API experiments that broke parity, packaging/CI dead-ends, rewrites that lost simplicity without benefit. **Append one short row** to [`docs/agent-notes/failed-attempts.md`](https://github.com/hilather/nytprof-modernization/blob/main/docs/agent-notes/failed-attempts.md). |
+| **Language semantics (Perl & Rust)** | When **Perl** or **Rust** (or oracle / XS / dual-engine) behavior was **misunderstood** and then corrected — or remains open — append a short row to [`docs/agent-notes/language-semantics.md`](https://github.com/hilather/nytprof-modernization/blob/main/docs/agent-notes/language-semantics.md). Prefer pointers to fixtures/contracts over restating whole manuals. |
+| **Light by default** | One table row only: date, slug/topic, what was tried or wrong assumption, why it failed / correct rule, optional detail link. **No** session transcripts, full logs, or essay postmortems in the light ledgers. |
+| **Drill-down when needed** | If the light row is insufficient, add `docs/agent-notes/details/<slug>.md` and link it from the row. Index + templates: [`docs/agent-notes/README.md`](https://github.com/hilather/nytprof-modernization/blob/main/docs/agent-notes/README.md). |
+| **Same honesty bar** | Notes record *what failed or was wrong* — they do **not** override ADRs, fixtures, residual matrix, or the charter. Failed perf rows are **not** certification claims. |
+| **Before proposing big rewrites** | Skim the two light ledgers (and any linked details) so you do not re-propose a known-failed approach without new evidence. |
+
+**Examples that always get a light row**
+
+| Situation | Ledger |
+|-----------|--------|
+| Perf tweak tried; wall time / peak RSS / size worse or no win | `failed-attempts.md` |
+| Alternate codec / API / packaging path abandoned after red gate or wrong parity | `failed-attempts.md` |
+| Misread Perl oracle option, call multiplicity, or `PERL5LIB` isolation | `language-semantics.md` (`perl`) |
+| Misread Rust ownership, fail-closed parse, or crate API contract | `language-semantics.md` (`rust`) |
+
 ---
 
 ## Working rules (agents)
@@ -68,7 +93,8 @@ Project global rule also applies: structured code review after non-trivial chang
 3. Derive counts and aggregates from dump/model/JsonlData — do not invent fixture constants detached from real loads.  
 4. Provisional v6 preflight (`nytprof-format-v6`, `docs/schemas/v6-*-provisional-v0.md`) is **not** a wire freeze and does **not** complete COL-007 (C v6 writer).  
 5. Stop and escalate when observed 6.15 behavior contradicts frozen specs; do not guess wire or timing semantics.  
-6. Handoffs include commits, commands, artifacts, open questions, and known limitations.
+6. Handoffs include commits, commands, artifacts, open questions, and known limitations.  
+7. **Automatically** append light rows under `docs/agent-notes/` for abandoned attempts (incl. failed perf) and corrected Perl/Rust misunderstandings; open a `details/<slug>.md` only when the light row is not enough.
 
 ## Primary gates and docs
 
@@ -80,3 +106,4 @@ Project global rule also applies: structured code review after non-trivial chang
 | Residual matrix | [`docs/contracts/R1_RESIDUAL_READINESS_MATRIX_v0.md`](https://github.com/hilather/nytprof-modernization/blob/main/docs/contracts/R1_RESIDUAL_READINESS_MATRIX_v0.md) |
 | Agent work packages | [`docs/plan/14_AGENT_WORK_PACKAGES_AND_HANDOFFS.md`](https://github.com/hilather/nytprof-modernization/blob/main/docs/plan/14_AGENT_WORK_PACKAGES_AND_HANDOFFS.md) |
 | Bench notes | [`docs/BENCH_NOTES.md`](https://github.com/hilather/nytprof-modernization/blob/main/docs/BENCH_NOTES.md) |
+| Agent notes (failed attempts + language) | [`docs/agent-notes/README.md`](https://github.com/hilather/nytprof-modernization/blob/main/docs/agent-notes/README.md) |

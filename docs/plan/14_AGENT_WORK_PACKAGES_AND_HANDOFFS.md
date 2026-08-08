@@ -8,7 +8,7 @@ Agents own tasks, not architectural truth. The compatibility contract, normative
 
 ## Global rules for every agent
 
-**Repo agent hints (mandatory quality bars):** [`AGENTS.md`](https://github.com/hilather/nytprof-modernization/blob/main/AGENTS.md) — regression tests for every fix; optimal performance and output size; docs kept current; complete release notes between releases; benchmarks kept current vs Perl oracle and vs previous versions.
+**Repo agent hints (mandatory quality bars):** [`AGENTS.md`](https://github.com/hilather/nytprof-modernization/blob/main/AGENTS.md) — regression tests for every fix; optimal performance and output size; docs kept current; complete release notes between releases; benchmarks kept current vs Perl oracle and vs previous versions; **automatic light notes** for failed attempts and Perl/Rust semantics gotchas ([`docs/agent-notes/`](https://github.com/hilather/nytprof-modernization/blob/main/docs/agent-notes/README.md)).
 
 1. Read `01_NON_NEGOTIABLES_AND_COMPATIBILITY_CONTRACT.md` first.
 2. Read the dependency task outputs and current ADRs before implementation.
