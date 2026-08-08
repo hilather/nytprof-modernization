@@ -6,7 +6,7 @@
 #
 # 1. Golden JSONL: nytprof-engine query --json --jsonl default-calls1 ×2
 #    → parse JSON; leaf_returns=15, mid_returns=3, mid_leaf_edge=15;
-#      discount_events=818; is_stream_complete true;
+#      discount_events=818; sub_entry_events=0; is_stream_complete true;
 #      consistent across runs
 # 2. --format=json accepted as alias for --json
 # 3. Human default still greppable when --json absent
@@ -63,7 +63,7 @@ if not isinstance(obj, dict):
 if obj.get("ok") is not True:
     sys.exit(f"ok must be true, got {obj.get('ok')!r}")
 for k, want in (("leaf_returns", 15), ("mid_returns", 3), ("mid_leaf_edge", 15),
-                ("discount_events", 818)):
+                ("discount_events", 818), ("sub_entry_events", 0)):
     got = obj.get(k)
     if got != want:
         sys.exit(f"{k} must be {want}, got {got!r}")
@@ -109,6 +109,7 @@ $(cat "$f")"
       die "mid_returns\n"  unless ($obj->{mid_returns}  // -1) == 3;
       die "mid_leaf_edge\n" unless ($obj->{mid_leaf_edge} // -1) == 15;
       die "discount_events\n" unless ($obj->{discount_events} // -1) == 818;
+      die "sub_entry_events\n" unless ($obj->{sub_entry_events} // -1) == 0;
       my $isc = $obj->{is_stream_complete};
       die "is_stream_complete\n" unless $isc;
       my $reasons = $obj->{incompleteness_reasons};
@@ -140,6 +141,8 @@ $(cat "$f")"
       || fail "$label: missing mid_leaf_edge:15\n$(cat "$f")"
     grep -qE '"discount_events"[[:space:]]*:[[:space:]]*818' "$f" \
       || fail "$label: missing discount_events:818\n$(cat "$f")"
+    grep -qE '"sub_entry_events"[[:space:]]*:[[:space:]]*0' "$f" \
+      || fail "$label: missing sub_entry_events:0\n$(cat "$f")"
     grep -qE '"is_stream_complete"[[:space:]]*:[[:space:]]*true' "$f" \
       || fail "$label: missing is_stream_complete:true\n$(cat "$f")"
     grep -qE '"main::leaf"[[:space:]]*:[[:space:]]*15' "$f" \
@@ -155,7 +158,7 @@ json_core_fingerprint() {
 import json,sys
 o=json.load(open(sys.argv[1],encoding="utf-8"))
 print(o.get("leaf_returns"), o.get("mid_returns"), o.get("mid_leaf_edge"),
-      o.get("discount_events"), o.get("is_stream_complete"),
+      o.get("discount_events"), o.get("sub_entry_events"), o.get("is_stream_complete"),
       o.get("subs",{}).get("main::leaf"), o.get("subs",{}).get("main::mid"),
       o.get("edges",{}).get("main::mid\tmain::leaf"), o.get("ok"))
 ' "$f"
@@ -166,7 +169,8 @@ print(o.get("leaf_returns"), o.get("mid_returns"), o.get("mid_leaf_edge"),
       my $ek = "main::mid\tmain::leaf";
       print join(" ",
         $o->{leaf_returns}//"", $o->{mid_returns}//"", $o->{mid_leaf_edge}//"",
-        $o->{discount_events}//"", $o->{is_stream_complete} ? "1" : "0",
+        $o->{discount_events}//"", $o->{sub_entry_events}//"",
+        $o->{is_stream_complete} ? "1" : "0",
         ($o->{subs}//{})->{"main::leaf"}//"", ($o->{subs}//{})->{"main::mid"}//"",
         ($o->{edges}//{})->{$ek}//"", $o->{ok} ? "1" : "0"), "\n";
     ' "$f"
@@ -198,7 +202,7 @@ fi
 cat "$JOUT1"
 json_assert_mvp "$JOUT1" "json run #1"
 json_assert_mvp "$JOUT2" "json run #2"
-ok "query --json --jsonl ×2: leaf=15 mid=3 edge=15 discount=818 complete"
+ok "query --json --jsonl ×2: leaf=15 mid=3 edge=15 discount=818 sub_entry=0 complete"
 
 FP1="$(json_core_fingerprint "$JOUT1")"
 FP2="$(json_core_fingerprint "$JOUT2")"

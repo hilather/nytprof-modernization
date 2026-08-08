@@ -132,6 +132,70 @@ fn incomplete_stream_cli_prefix_default_calls1() {
     let _ = fs::remove_file(&tmp);
 }
 
+/// JSON-REPORT-INCOMPLETE-FAILCLOSED: `report --json` / `aggregates` on a
+/// record-aligned short prefix must exit non-zero and must not print a
+/// successful complete `{"ok":true,"is_stream_complete":true,...}` object.
+#[test]
+fn incomplete_stream_report_json_prefix_default_calls1() {
+    let golden = fixture_default_calls1();
+    assert!(golden.is_file(), "missing fixture {}", golden.display());
+    let bytes = fs::read(&golden).expect("read golden");
+    assert!(bytes.len() > 500);
+
+    let tmp = temp_path("incomplete-json-500");
+    fs::write(&tmp, &bytes[..500]).expect("write 500-byte prefix");
+    let path = tmp.to_str().expect("utf-8 path");
+
+    // Ensure default fail-closed policy (no salvage env).
+    let cases: &[&[&str]] = &[
+        &["report", "--json", path],
+        &["report", "--format=json", path],
+        &["aggregates", path],
+        &["agg", path],
+    ];
+    for args in cases {
+        let output = Command::new(cli_bin())
+            .args(*args)
+            .env_remove("NYTPROF_ALLOW_INCOMPLETE")
+            .output()
+            .unwrap_or_else(|e| panic!("spawn {:?}: {e}", args));
+        assert!(
+            !output.status.success(),
+            "JSON-REPORT-INCOMPLETE-FAILCLOSED: {:?} must exit non-zero on incomplete prefix, got {:?}\nstdout:\n{}\nstderr:\n{}",
+            args,
+            output.status.code(),
+            String::from_utf8_lossy(&output.stdout),
+            String::from_utf8_lossy(&output.stderr),
+        );
+        let stdout = String::from_utf8_lossy(&output.stdout);
+        // Must not look like text OK or complete success JSON.
+        assert!(
+            !stdout.lines().any(|l| l.starts_with("OK:")),
+            "{args:?}: must not print OK: on incomplete input:\n{stdout}"
+        );
+        let trimmed = stdout.trim();
+        if !trimmed.is_empty() {
+            if let Ok(v) = serde_json::from_str::<serde_json::Value>(trimmed) {
+                if let Some(obj) = v.as_object() {
+                    let ok_true = obj.get("ok") == Some(&serde_json::Value::Bool(true));
+                    let isc_true =
+                        obj.get("is_stream_complete") == Some(&serde_json::Value::Bool(true));
+                    assert!(
+                        !(ok_true && isc_true),
+                        "{args:?}: must not emit ok:true + is_stream_complete:true on incomplete stream\nstdout:\n{stdout}"
+                    );
+                    assert!(
+                        !(ok_true && !obj.contains_key("is_stream_complete")),
+                        "{args:?}: must not emit bare ok:true without stream field on incomplete\nstdout:\n{stdout}"
+                    );
+                }
+            }
+        }
+    }
+
+    let _ = fs::remove_file(&tmp);
+}
+
 /// Golden default-calls1 still verifies OK (exit 0).
 #[test]
 fn verify_cli_default_calls1_ok() {

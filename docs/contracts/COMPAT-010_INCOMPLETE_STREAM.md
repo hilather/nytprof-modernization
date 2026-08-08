@@ -57,6 +57,7 @@ API (pure-Perl dump JSONL; same rules — board **PERL-STREAM-COMPLETE**):
 |------|---------|---------|
 | **`verify` / `inspect`** (`nytprof_report::verify_profile`) | **Fail closed:** incomplete → `Err` / CLI exit ≠ 0; no `OK:` line | `NYTPROF_ALLOW_INCOMPLETE=1` → success with clear `INCOMPLETE:` header + note |
 | **`report` / `summary` / `csv` / `html` / `folded` / `callgrind`** | **Fail closed:** after model load, `require_complete_stream` → `Err` / exit ≠ 0 | Same env allows the report/export to proceed (best-effort salvage) |
+| **`report --json` / `aggregates` / `agg`** (**JSON-REPORT-INCOMPLETE-FAILCLOSED**) | **Fail closed:** same `load_model_for_report` / `require_complete_stream` path as text report → exit ≠ 0; must **not** emit a successful complete `{"ok":true,"is_stream_complete":true,...}` object | Same env may allow JSON emit; must not claim `is_stream_complete:true` on an incomplete stream |
 | **`dump`** | **Lenient:** emit whatever the decoder produced (JSONL of decoded events). Incomplete prefixes that still decode cleanly may dump successfully | N/A — dump is the salvage surface for tooling |
 
 Notes:
@@ -102,9 +103,13 @@ cargo test -p nytprof-report verify_profile_default_calls1_ok -- --nocapture
 
 # CLI process
 cargo test -p nytprof-cli incomplete_stream verify_cli_default -- --nocapture
+cargo test -p nytprof-cli incomplete_stream_report_json report_json_incomplete -- --nocapture
 
 # Shell smoke (verify/report fail on 500-byte prefix; golden OK; optional salvage)
 bash tools/oracle/selftest_incomplete_stream.sh
+
+# Packaging: report --json / aggregates fail-closed on incomplete prefix (native CLI)
+./scripts/packaging/json_report_incomplete_smoke.sh
 ```
 
 ---

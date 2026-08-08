@@ -453,12 +453,41 @@ sub run_query {
 ##     "is_stream_complete": true,
 ##     "incompleteness_reasons": [],
 ##     "time_line_events": N,
+##     "time_block_events": N,   # A2 TIME_BLOCK multiplicity (JSON-TIME-BLOCK-MVP)
 ##     "pid_start_events": N,
-##     "pid_end_events": N
+##     "pid_end_events": N,
+##     "sub_entry_events": N,
+##     "line_calls_1_5": 780,          # A4 line_calls(1,5); 0 if absent
+##     "block_line_calls_1_4": 810,    # A4b block_line_calls(1,4); 0 if absent
+##     "sub_def_leaf": {"fid":1,"first_line":3,"last_line":7},  # or null
+##     "sub_def_mid":  {"fid":1,"first_line":8,"last_line":12}, # or null
+##     "source_line_1_5": "    $x++ for 1 .. 50;\n",            # or null
+##     "attribute_ticks_per_sec": "10000000",                   # or null
+##     "option_calls": "1",                                     # or null
+##     "file_1": ".../workload.pl"                              # or null
+##     "file_1_basename": "workload.pl"                         # or null
 ##   }
 ## Edge keys use the same TAB-joined form as JsonlData C<call_edge_totals>.
-## Convenience integers always present (0 when the name/edge is missing).
+## Convenience integers always present (0 when the name/edge/line is missing).
 ## C<incompleteness_reasons> is C<stream_incompleteness_reasons> as a JSON array.
+## A4/A4b greppable keys (JSON-BLOCKS-MVP): always present; blocks-calls1
+## has line_calls_1_5=780 and block_line_calls_1_4=810; default-calls1 has
+## line_calls_1_5 from TIME_LINE (also 780 on golden) and block_line 0.
+## JSON-SUBDEF-SOURCE-MVP: greppable sample A9/A8 fields always present
+## (null when dump lacks that sub/source); not a full re-export of maps.
+## JSON-META-FILES-MVP: greppable ATTRIBUTE/OPTION/NEW_FID samples always
+## present (null when dump lacks that key/fid); not a full map re-export.
+## JSON-FILE-BASENAME-MVP: greppable file_1_basename always present
+## (string-or-null from file_basename(1); stable vs volatile absolute file_1).
+## JSON-TIME-BLOCK-MVP: time_block_events always present (A2); default-calls1
+## 0, blocks-calls1 916 from real JsonlData / stream recount.
+## JSON-EVENT-COUNTS-MVP: tag multiplicity ints always present (default-calls1
+## sub_return 27 / new_fid 3 / sub_callers 13 / src_line 632 / sub_info 31).
+## JSON-TOTAL-EVENTS-MVP: total_events always present (JsonlData records_seen;
+## dump stream incl. synthetic _END; shared key with native report --json;
+## default-calls1 2474. Native uses model.total_events+1 for the same dump count).
+## JSON-ATTR-BASETIME-MVP: attribute_basetime always present (string-or-null
+## from attribute('basetime'); greppable dump sample, not wall-clock freeze).
 ##
 ## Uses JsonlData APIs only (no reimplementation of aggregation).
 sub print_query_results {
@@ -473,6 +502,20 @@ sub print_query_results {
         my $edge_key = "main::mid\tmain::leaf";
         my $reasons  = $data->stream_incompleteness_reasons;
         $reasons = [] unless defined $reasons && ref($reasons) eq 'ARRAY';
+
+        # JSON-SUBDEF-SOURCE-MVP: sample A9 ranges + A8 hot-loop line only
+        # (JsonlData sub_def / source_line; null when absent).
+        my $sub_def_sample = sub {
+            my ($name) = @_;
+            my $d = $data->sub_def($name);
+            return undef unless defined $d && ref($d) eq 'HASH';
+            return {
+                fid        => 0 + ( $d->{fid}        // 0 ),
+                first_line => 0 + ( $d->{first_line} // 0 ),
+                last_line  => 0 + ( $d->{last_line}  // 0 ),
+            };
+        };
+
         my $obj = {
             ok                     => JSON::PP::true,
             subs                   => { %$totals },
@@ -481,13 +524,49 @@ sub print_query_results {
             mid_returns            => 0 + ( $totals->{'main::mid'}  // 0 ),
             mid_leaf_edge          => 0 + ( $edges->{$edge_key}     // 0 ),
             discount_events        => 0 + ( $data->discount_events // 0 ),
+            # SUB_ENTRY multiplicity (JSON-SUB-ENTRY-MVP); JsonlData API only.
+            # Field name matches ProfileModel / native report --json.
+            sub_entry_events       => 0 + ( $data->sub_entry_events // 0 ),
+            # JSON-TOTAL-EVENTS-MVP: shared key total_events with native report --json.
+            # JsonlData records_seen counts dump JSONL lines incl. synthetic _END
+            # (default-calls1 2474). Native emits model.total_events+1 for the same.
+            total_events           => 0 + ( $data->records_seen // 0 ),
             is_stream_complete     => $data->is_stream_complete
               ? JSON::PP::true
               : JSON::PP::false,
             incompleteness_reasons => [ @$reasons ],
             time_line_events       => 0 + ( $data->time_line_events // 0 ),
+            # JSON-TIME-BLOCK-MVP: A2 TIME_BLOCK multiplicity (JsonlData API only).
+            # Field name matches ProfileModel / native report --json.
+            time_block_events      => 0 + ( $data->time_block_events // 0 ),
             pid_start_events       => 0 + ( $data->pid_start_events // 0 ),
             pid_end_events         => 0 + ( $data->pid_end_events   // 0 ),
+            # JSON-BLOCKS-MVP: greppable A4 / A4b convenience integers
+            # (same style as leaf_returns; 0 when location absent).
+            line_calls_1_5         => 0 + ( $data->line_calls( 1, 5 ) // 0 ),
+            block_line_calls_1_4   => 0 + ( $data->block_line_calls( 1, 4 ) // 0 ),
+            # JSON-SUBDEF-SOURCE-MVP: greppable A9 samples + A8 source text.
+            sub_def_leaf           => $sub_def_sample->('main::leaf'),
+            sub_def_mid            => $sub_def_sample->('main::mid'),
+            source_line_1_5        => $data->source_line( 1, 5 ),
+            # JSON-META-FILES-MVP: greppable ATTRIBUTE / OPTION / NEW_FID samples
+            # (JsonlData attribute / option / file; null when absent).
+            attribute_ticks_per_sec => $data->attribute('ticks_per_sec'),
+            # JSON-ATTR-BASETIME-MVP: greppable ATTRIBUTE basetime sample.
+            # JsonlData attribute('basetime'); string-or-null; not wall-clock freeze.
+            attribute_basetime      => $data->attribute('basetime'),
+            option_calls            => $data->option('calls'),
+            file_1                  => $data->file(1),
+            # JSON-FILE-BASENAME-MVP: stable basename for fid 1
+            # (JsonlData file_basename; absolute file_1 is volatile under /tmp).
+            file_1_basename         => $data->file_basename(1),
+            # JSON-EVENT-COUNTS-MVP: dump tag multiplicity (JsonlData APIs only).
+            # default-calls1 golden: 27 / 3 / 13 / 632 / 31.
+            sub_return_events       => 0 + ( $data->sub_return_events  // 0 ),
+            new_fid_events          => 0 + ( $data->new_fid_events     // 0 ),
+            sub_callers_events      => 0 + ( $data->sub_callers_events // 0 ),
+            src_line_events         => 0 + ( $data->src_line_events    // 0 ),
+            sub_info_events         => 0 + ( $data->sub_info_events    // 0 ),
         };
         my $json = JSON::PP->new->canonical(1)->ascii(1)->encode($obj);
         print $json, "\n";
@@ -1097,10 +1176,13 @@ subroutine return totals, call-edge counts, A9 C<sub_def> ranges
 C<line_calls 1:5> when non-zero, a few A4b C<block_line_calls> samples
 when present, PID lifecycle (C<pid_start_count> / C<pid_end_count> /
 C<pid_start> / C<pid_end>), and ATTRIBUTE/OPTION lines (key names first).
-With C<--json> / C<--format=json> (QUERY-JSON-MVP), stdout is a single
-JSON object with C<ok>, C<subs>, C<edges>, C<leaf_returns>,
-C<mid_returns>, C<mid_leaf_edge> (human form remains the default when
-those flags are absent). Uses JsonlData APIs only. No XS; never puts
+With C<--json> / C<--format=json> (QUERY-JSON-MVP / QUERY-JSON-EXPAND /
+JSON-BLOCKS-MVP), stdout is a single JSON object with C<ok>, C<subs>,
+C<edges>, C<leaf_returns>, C<mid_returns>, C<mid_leaf_edge>,
+C<discount_events>, stream-completeness fields, and greppable A4/A4b
+integers C<line_calls_1_5> / C<block_line_calls_1_4> (0 when absent;
+blocks-calls1: B<780> / B<810>). Human form remains the default when
+those flags are absent. Uses JsonlData APIs only. No XS; never puts
 C<crates/> on oracle C<PERL5LIB>.
 
 Legacy actions (report/verify/etc.) call

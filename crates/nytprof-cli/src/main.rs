@@ -525,6 +525,21 @@ fn parse_report_args(
 /// - `profile` (path string)
 /// - `leaf_returns` / `mid_returns` / `mid_leaf_edge` (convenience ints)
 /// - `discount_events` (A3 count)
+/// - `sub_entry_events` (SUB_ENTRY multiplicity; ProfileModel.sub_entry_events)
+/// - `is_stream_complete` / `incompleteness_reasons` (COMPAT-010; JSON-NATIVE-STREAM-MVP)
+/// - `time_line_events` / `time_block_events` / `pid_start_events` / `pid_end_events` (model counters; JSON-TIME-BLOCK-MVP for A2)
+/// - `line_calls_1_5` / `block_line_calls_1_4` (A4 / A4b greppable ints; JSON-BLOCKS-MVP)
+/// - `sub_def_leaf` / `sub_def_mid` / `source_line_1_5` (A9/A8 samples; JSON-SUBDEF-SOURCE-MVP)
+/// - `attribute_ticks_per_sec` / `option_calls` / `file_1` (ATTRIBUTE/OPTION/NEW_FID; JSON-META-FILES-MVP)
+/// - `attribute_basetime` (ATTRIBUTE basetime sample; JSON-ATTR-BASETIME-MVP)
+/// - `file_1_basename` (stable basename of fid 1; JSON-FILE-BASENAME-MVP)
+/// - `total_events` (canonical dump stream multiplicity; JSON-TOTAL-EVENTS-MVP;
+///   default-calls1 **2474** = golden `readstream.jsonl` lines / `nytprof-cli dump`
+///   lines / JsonlData `records_seen`; includes dump-only synthetic `_END`.
+///   ProfileModel.total_events is decoded binary tags only = total_events−1)
+/// - `sub_return_events` / `new_fid_events` / `sub_callers_events` /
+///   `src_line_events` / `sub_info_events` (tag multiplicity; JSON-EVENT-COUNTS-MVP;
+///   default-calls1 **27** / **3** / **13** / **632** / **31**)
 /// - `subs` map: subname → returns (A5)
 /// - `edges` map: `"caller\\tcalled"` → count (A7; TAB-joined keys)
 fn render_aggregates_json(
@@ -543,6 +558,69 @@ fn render_aggregates_json(
         .call_edge("main::mid", "main::leaf")
         .map(|e| e.count)
         .unwrap_or(0);
+    // JSON-BLOCKS-MVP: same greppable A4/A4b keys as Perl query --json.
+    // blocks-calls1: line 1:5 calls = 780, block_line 1:4 calls = 810.
+    // Absent locations → 0 (default-calls1 has no TIME_BLOCK → block 0).
+    let line_calls_1_5 = model
+        .line_total(1, 5)
+        .map(|t| t.calls)
+        .unwrap_or(0);
+    let block_line_calls_1_4 = model
+        .block_line_total(1, 4)
+        .map(|t| t.calls)
+        .unwrap_or(0);
+
+    // JSON-NATIVE-STREAM-MVP: same keys as Perl query --json (QUERY-JSON-EXPAND).
+    // Reasons come from ProfileModel::stream_incompleteness_reasons (COMPAT-010).
+    let incompleteness_reasons: Vec<Value> = model
+        .stream_incompleteness_reasons()
+        .into_iter()
+        .map(|s| json!(s))
+        .collect();
+
+    // JSON-SUBDEF-SOURCE-MVP: greppable A9 samples + A8 source text.
+    // ProfileModel::sub_def / source_line only (null when absent).
+    let sub_def_json = |name: &str| -> Value {
+        match model.sub_def(name) {
+            Some(d) => json!({
+                "fid": d.fid,
+                "first_line": d.first_line,
+                "last_line": d.last_line,
+            }),
+            None => Value::Null,
+        }
+    };
+    let source_line_1_5 = model
+        .source_line(1, 5)
+        .map(|s| json!(s))
+        .unwrap_or(Value::Null);
+
+    // JSON-META-FILES-MVP: greppable ATTRIBUTE / OPTION / NEW_FID samples.
+    // ProfileModel attributes/options/files (or file_name) only; null when absent.
+    let attr_str = |key: &str| -> Value {
+        model
+            .attributes
+            .get(key)
+            .map(|s| json!(s))
+            .unwrap_or(Value::Null)
+    };
+    let opt_str = |key: &str| -> Value {
+        model
+            .options
+            .get(key)
+            .map(|s| json!(s))
+            .unwrap_or(Value::Null)
+    };
+    let file_1 = model
+        .file_name(1)
+        .map(|s| json!(s))
+        .unwrap_or(Value::Null);
+    // JSON-FILE-BASENAME-MVP: stable basename for fid 1 (absolute path is volatile).
+    // ProfileModel::fid_basename only; null when fid/path absent.
+    let file_1_basename = model
+        .fid_basename(1)
+        .map(|s| json!(s))
+        .unwrap_or(Value::Null);
 
     let mut subs = serde_json::Map::new();
     let mut sub_rows: Vec<_> = model.sub_return_totals.iter().collect();
@@ -568,6 +646,52 @@ fn render_aggregates_json(
     obj.insert("mid_returns".into(), json!(mid_returns));
     obj.insert("mid_leaf_edge".into(), json!(mid_leaf_edge));
     obj.insert("discount_events".into(), json!(model.discount_events));
+    // SUB_ENTRY multiplicity (JSON-SUB-ENTRY-MVP); same field name as JsonlData.
+    obj.insert("sub_entry_events".into(), json!(model.sub_entry_events));
+    // JSON-TOTAL-EVENTS-MVP: canonical dump stream multiplicity (shared key with
+    // Perl query --json / JsonlData records_seen).
+    // ProfileModel.total_events counts decoded binary tags only; `nytprof-cli dump`
+    // always appends one synthetic `_END` (oracle dump_readstream.pl), so dump
+    // line count = model.total_events + 1. default-calls1 golden = 2474.
+    obj.insert(
+        "total_events".into(),
+        json!(model.total_events.saturating_add(1)),
+    );
+    // JSON-NATIVE-STREAM-MVP: stream completeness + dump/model-derived PID/timing counts.
+    obj.insert("is_stream_complete".into(), json!(model.is_stream_complete()));
+    obj.insert(
+        "incompleteness_reasons".into(),
+        Value::Array(incompleteness_reasons),
+    );
+    obj.insert("time_line_events".into(), json!(model.time_line_events));
+    // JSON-TIME-BLOCK-MVP: A2 TIME_BLOCK multiplicity (same field as JsonlData / Perl query).
+    // default-calls1 → 0; blocks-calls1 → 916 (model-matched).
+    obj.insert("time_block_events".into(), json!(model.time_block_events));
+    obj.insert("pid_start_events".into(), json!(model.pid_start_events));
+    obj.insert("pid_end_events".into(), json!(model.pid_end_events));
+    // JSON-BLOCKS-MVP: greppable A4 / A4b convenience integers.
+    obj.insert("line_calls_1_5".into(), json!(line_calls_1_5));
+    obj.insert("block_line_calls_1_4".into(), json!(block_line_calls_1_4));
+    // JSON-SUBDEF-SOURCE-MVP: sample A9 ranges + A8 hot-loop source line.
+    obj.insert("sub_def_leaf".into(), sub_def_json("main::leaf"));
+    obj.insert("sub_def_mid".into(), sub_def_json("main::mid"));
+    obj.insert("source_line_1_5".into(), source_line_1_5);
+    // JSON-META-FILES-MVP: greppable ATTRIBUTE / OPTION / NEW_FID samples.
+    obj.insert("attribute_ticks_per_sec".into(), attr_str("ticks_per_sec"));
+    // JSON-ATTR-BASETIME-MVP: greppable ATTRIBUTE basetime sample (string-or-null).
+    // default-calls1 golden often "1786111723"; not a wall-clock policy freeze.
+    obj.insert("attribute_basetime".into(), attr_str("basetime"));
+    obj.insert("option_calls".into(), opt_str("calls"));
+    obj.insert("file_1".into(), file_1);
+    // JSON-FILE-BASENAME-MVP: stable basename sample (not full files map).
+    obj.insert("file_1_basename".into(), file_1_basename);
+    // JSON-EVENT-COUNTS-MVP: dump/model tag multiplicity (match JsonlData / cross-smoke).
+    // default-calls1: SUB_RETURN 27, NEW_FID 3, SUB_CALLERS 13, SRC_LINE 632, SUB_INFO 31.
+    obj.insert("sub_return_events".into(), json!(model.sub_return_events));
+    obj.insert("new_fid_events".into(), json!(model.new_fid_events));
+    obj.insert("sub_callers_events".into(), json!(model.sub_callers_events));
+    obj.insert("src_line_events".into(), json!(model.src_line_events));
+    obj.insert("sub_info_events".into(), json!(model.sub_info_events));
     obj.insert("subs".into(), Value::Object(subs));
     obj.insert("edges".into(), Value::Object(edges));
 

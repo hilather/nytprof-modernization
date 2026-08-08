@@ -115,6 +115,8 @@ make offline-gate
 | 4 | `./scripts/packaging/engine_auto_fallback_smoke.sh` (ENGINE-AUTO-FALLBACK) | Still required (needs native discoverable or cargo to build) |
 | 5 | `./scripts/packaging/perl_jsonl_data_all_smoke.sh` (pure-Perl JsonlData roll-up) | Still required (golden JSONL; no cargo) |
 | 6 | `./scripts/packaging/perl_query_json_smoke.sh` (QUERY-JSON-MVP / QUERY-JSON-EXPAND / **CI-QUERY-JSON-GATE**) | Still required (golden `--jsonl`; no cargo) |
+| 6b | `./scripts/packaging/json_sub_entry_smoke.sh` (JSON-SUB-ENTRY-MVP) | Still required (`sub_entry_events` **0**/**27**; pure-Perl golden) |
+| 6c | `./scripts/packaging/json_blocks_smoke.sh` (JSON-BLOCKS-MVP) | Still required (blocks-calls1 `line_calls_1_5` **780** / `block_line_calls_1_4` **810**) |
 | 7 | `./scripts/packaging/native_agg_json_smoke.sh` (NATIVE-AGG-JSON) | Optional when native CLI available (**15/3/15**) |
 | 8 | `./scripts/packaging/native_query_json_cross_smoke.sh` (NATIVE-QUERY-JSON-CROSS) | Optional when native: native `report --json` vs Perl `query --json` shared fields **15/3/15** + discount **818** |
 | 9 | `./scripts/packaging/capability_selftest_smoke.sh` (CI-CAPABILITY-GATE) | Honest skip if no cargo **and** no `prefix`/`target` native CLI (same condition as `packaging_gate`; dual_path with cargo usually installs `prefix/bin` first) |
@@ -183,10 +185,11 @@ perl -Iperl/lib perl/bin/nytprof-engine --engine=native callgrind fixtures/v5/de
 ./scripts/packaging/perl_engine_query_smoke.sh
 ./scripts/packaging/perl_engine_query_expand_smoke.sh
 ./scripts/packaging/perl_query_json_smoke.sh
+./scripts/packaging/json_blocks_smoke.sh
 ./scripts/packaging/perl_engine_export_smoke.sh
 ```
 
-- `scripts/ci/offline_gate.sh` is the **CI-OFFLINE-GATE** / **CI-OFFLINE-GATE-EXPAND** / **CI-QUERY-JSON-GATE** / **CI-CAPABILITY-GATE** single entry: optional focused cargo tests → required oracle harness → primary packaging `dual_path_smoke.sh` → `engine_auto_fallback_smoke.sh` → `perl_jsonl_data_all_smoke.sh` → required `perl_query_json_smoke.sh` (QUERY-JSON-MVP / QUERY-JSON-EXPAND golden `--jsonl`) → optional `native_agg_json_smoke` + `native_query_json_cross_smoke` when native available → `capability_selftest_smoke.sh` when cargo or prefix/target CLI present (honest skip otherwise); fails fast.
+- `scripts/ci/offline_gate.sh` is the **CI-OFFLINE-GATE** / **CI-OFFLINE-GATE-EXPAND** / **CI-QUERY-JSON-GATE** / **CI-CAPABILITY-GATE** single entry: optional focused cargo tests → required oracle harness → primary packaging `dual_path_smoke.sh` → `engine_auto_fallback_smoke.sh` → `perl_jsonl_data_all_smoke.sh` → required `perl_query_json_smoke.sh` (QUERY-JSON-MVP / QUERY-JSON-EXPAND golden `--jsonl`) → required `json_sub_entry_smoke` + `json_blocks_smoke` (JSON-BLOCKS-MVP **780**/**810**) → optional `native_agg_json_smoke` + `native_query_json_cross_smoke` when native available → `capability_selftest_smoke.sh` when cargo or prefix/target CLI present (honest skip otherwise); fails fast.
 - `packaging_gate.sh` runs the packaging smokes in order (legacy → engine_select → perl dispatch → native install if present → optional cargo tests) and fails fast.
 - Root `Makefile.PL` is a **candidate packaging facade** (`NYTPROF_NATIVE=0|1|auto`): `make legacy-smoke` / `dual-path-smoke` / `offline-gate` / `native-install` wrap existing scripts; not a full Devel::NYTProf XS CPAN dist (see [`docs/BUILD_SUPPORT_POLICY.md`](docs/BUILD_SUPPORT_POLICY.md)).
 - `legacy_only_smoke.sh` sources oracle env isolation, refuses `/crates/` on `PERL5LIB`, and loads `Devel::NYTProf` from `baseline/6.15/install` only.
@@ -195,6 +198,7 @@ perl -Iperl/lib perl/bin/nytprof-engine --engine=native callgrind fixtures/v5/de
 - `perl_engine_query_smoke.sh` exercises `query` / `data-query` via pure-Perl `JsonlData` (golden `--jsonl` + optional native dump): default-calls1 **leaf=15** / **mid=3** / **mid→leaf=15**.
 - `perl_engine_query_expand_smoke.sh` expands default `query` output: **sub_def** leaf/mid ranges, **source_line 1:5** hot-loop, blocks-calls1 **line_calls 1:5=780** + **block_line_calls 1:4=810** (JsonlData APIs only).
 - `perl_query_json_smoke.sh` (QUERY-JSON-MVP / QUERY-JSON-EXPAND): `query --json --jsonl` ×2 → parse JSON; **leaf_returns=15** / **mid_returns=3** / **mid_leaf_edge=15**; **discount_events=818** / **is_stream_complete=true**; human default unchanged.
+- `json_blocks_smoke.sh` (JSON-BLOCKS-MVP): blocks-calls1 `query --json --jsonl` → **line_calls_1_5=780** / **block_line_calls_1_4=810**; default-calls1 block **0**; optional native `report --json`.
 - `native_query_json_cross_smoke.sh` (NATIVE-QUERY-JSON-CROSS): native `report --json` vs Perl `query --json --jsonl` pair ×2; equal shared fields **15/3/15** + **discount_events=818**; optional `query --json <profile>` dump path.
 - `perl_engine_export_smoke.sh` exercises `folded` / `callgrind` / `cg` via native CLI subprocess (not reimplemented in Perl): default-calls1 `main::mid;main::leaf 15`, `main::RUNTIME;main::mid 3`, callgrind `fn=main::leaf` + `calls`.
 - `install_native.sh` / `native_install_smoke.sh` build and exercise a stable `prefix/bin` CLI used by Perl `find_native_cli`.

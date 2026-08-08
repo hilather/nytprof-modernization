@@ -7,10 +7,11 @@ package Devel::NYTProf::JsonlData;
 # identity (NEW_FID), profile metadata (ATTRIBUTE / OPTION), process
 # lifecycle (PID_START / PID_END), A3 discount event multiplicity
 # (DISCOUNT), SUB_ENTRY event multiplicity (calls=2 call-site entries),
-# and stream-completeness checks aligned with
-# COMPAT-010_INCOMPLETE_STREAM from canonical JSONL (oracle golden or
-# native `nytprof-cli dump`). No XS, no FFI, no oracle PERL5LIB. Core
-# JSON::PP via JsonlReadStream only.
+# stream event multiplicities for SUB_RETURN / NEW_FID / SUB_CALLERS /
+# SRC_LINE / SUB_INFO (JSON-EVENT-COUNTS-MVP), and stream-completeness
+# checks aligned with COMPAT-010_INCOMPLETE_STREAM from canonical JSONL
+# (oracle golden or native `nytprof-cli dump`). No XS, no FFI, no oracle
+# PERL5LIB. Core JSON::PP via JsonlReadStream only.
 #
 # Spec: docs/schemas/perl-jsonl-data-mvp-v0.md
 # Stream: Devel::NYTProf::JsonlReadStream
@@ -19,9 +20,9 @@ package Devel::NYTProf::JsonlData;
 #   (A3 discount_events, A4 lines, A4b block_line, A5 returns, A7 edges,
 #    A8 source_lines, A9 sub_defs; files from NEW_FID; attributes/options
 #    from header; PID_START / PID_END process events; TIME_LINE/TIME_BLOCK
-#    counters; SUB_ENTRY multiplicity. DISCOUNT and SUB_ENTRY are event
-#    multiplicity only — not exclusive-time policy freeze / full call-
-#    stack arg freeze.)
+#    counters; SUB_ENTRY + SUB_RETURN/NEW_FID/SUB_CALLERS/SRC_LINE/SUB_INFO
+#    multiplicity. DISCOUNT and SUB_ENTRY are event multiplicity only —
+#    not exclusive-time policy freeze / full call-stack arg freeze.)
 
 use strict;
 use warnings;
@@ -412,6 +413,56 @@ sub sub_entry_events {
 ## Alias for sub_entry_events (count wording).
 sub sub_entry_count { shift->sub_entry_events }
 
+## Number of SUB_RETURN events successfully ingested (multiplicity only).
+##
+## One increment per matching tag whose args yield a usable subname.
+## Not the same as sum of sub_return_totals when names collide (still 1/tag).
+##
+##   $data->sub_return_events;  # 27 on default-calls1 golden
+##
+sub sub_return_events {
+    my ($self) = @_;
+    return $self->{sub_return_events} // 0;
+}
+
+## Number of NEW_FID events successfully ingested (multiplicity only).
+##
+##   $data->new_fid_events;  # 3 on default-calls1 golden
+##
+sub new_fid_events {
+    my ($self) = @_;
+    return $self->{new_fid_events} // 0;
+}
+
+## Number of SUB_CALLERS events successfully ingested (multiplicity only).
+##
+## One increment per matching tag successfully parsed (not sum of edge counts).
+##
+##   $data->sub_callers_events;  # 13 on default-calls1 golden
+##
+sub sub_callers_events {
+    my ($self) = @_;
+    return $self->{sub_callers_events} // 0;
+}
+
+## Number of SRC_LINE events successfully ingested (A8 stream multiplicity).
+##
+##   $data->src_line_events;  # 632 on default-calls1 golden
+##
+sub src_line_events {
+    my ($self) = @_;
+    return $self->{src_line_events} // 0;
+}
+
+## Number of SUB_INFO events successfully ingested (A9 stream multiplicity).
+##
+##   $data->sub_info_events;  # 31 on default-calls1 golden
+##
+sub sub_info_events {
+    my ($self) = @_;
+    return $self->{sub_info_events} // 0;
+}
+
 ## Whether the ingested stream is complete enough for default verify/report.
 ##
 ## Aligned with ProfileModel / docs/contracts/COMPAT-010_INCOMPLETE_STREAM.md:
@@ -475,6 +526,11 @@ sub _new {
         time_block_events => 0,     # TIME_BLOCK count (stream completeness)
         discount_events   => 0,     # DISCOUNT count (A3 multiplicity only)
         sub_entry_events  => 0,     # SUB_ENTRY count (multiplicity only)
+        sub_return_events => 0,     # SUB_RETURN count (multiplicity; JSON-EVENT-COUNTS-MVP)
+        new_fid_events    => 0,     # NEW_FID count (multiplicity)
+        sub_callers_events => 0,    # SUB_CALLERS tag count (not edge sum)
+        src_line_events   => 0,     # SRC_LINE count (A8 stream)
+        sub_info_events   => 0,     # SUB_INFO count (A9 stream)
         records_seen      => 0,
     }, $class;
 }
@@ -520,6 +576,8 @@ sub _ingest {
                 my $name = $args->[SUB_RETURN_SUBNAME_INDEX];
                 return unless defined $name && length $name;
                 $sub_returns->{$name}++;
+                # JSON-EVENT-COUNTS-MVP: one per successfully ingested tag.
+                $self->{sub_return_events}++;
             }
             elsif ( $tag eq 'SUB_CALLERS' ) {
                 return
@@ -538,6 +596,8 @@ sub _ingest {
                 $count = int($count);
                 my $key = _edge_key( $caller, $callee );
                 $call_edges->{$key} += $count;
+                # JSON-EVENT-COUNTS-MVP: tag multiplicity (not sum of counts).
+                $self->{sub_callers_events}++;
             }
             elsif ( $tag eq 'TIME_LINE' || $tag eq 'TIME_BLOCK' ) {
                 # A4: both tags attribute to statement (fid, line).
@@ -601,6 +661,8 @@ sub _ingest {
                     first_line => int($first),
                     last_line  => int($last),
                 };
+                # JSON-EVENT-COUNTS-MVP: A9 stream multiplicity.
+                $self->{sub_info_events}++;
             }
             elsif ( $tag eq 'NEW_FID' ) {
                 # fid @ 0; path is last arg (schema: name). Store full path.
@@ -615,6 +677,8 @@ sub _ingest {
                   && !ref($path)
                   && length $path;
                 $files->{ int($fid) } = $path;
+                # JSON-EVENT-COUNTS-MVP: one per successfully ingested NEW_FID.
+                $self->{new_fid_events}++;
             }
             elsif ( $tag eq 'SRC_LINE' ) {
                 # A8: fid, line, text — last write wins per (fid, line).
@@ -631,6 +695,8 @@ sub _ingest {
                   && defined $text
                   && !ref($text);
                 $source_lines->{"$fid:$line"} = $text;
+                # JSON-EVENT-COUNTS-MVP: A8 stream multiplicity.
+                $self->{src_line_events}++;
             }
             elsif ( $tag eq 'ATTRIBUTE' ) {
                 # key, value — last write wins per key; store dump values as-is.
@@ -785,6 +851,13 @@ Devel::NYTProf::JsonlData - pure-Perl Data-from-JSONL dump query object
   $data->sub_entry_events;            # 0 on default-calls1; 27 on calls2-default
   $data->sub_entry_count;             # alias for sub_entry_events
 
+  # Stream event multiplicities (JSON-EVENT-COUNTS-MVP; match ProfileModel)
+  $data->sub_return_events;           # 27 on default-calls1
+  $data->new_fid_events;              # 3
+  $data->sub_callers_events;          # 13
+  $data->src_line_events;             # 632
+  $data->sub_info_events;             # 31
+
   # Native dump subprocess (no oracle PERL5LIB)
   my $live = Devel::NYTProf::JsonlData->from_cli(
       [ 'prefix/bin/nytprof-cli', 'dump', 'fixtures/v5/default-calls1/nytprof.out' ]
@@ -798,9 +871,13 @@ source lines, sub definition ranges, file identity, profile
 ATTRIBUTE/OPTION metadata, process lifecycle (C<PID_START> /
 C<PID_END>), A3 C<DISCOUNT> event multiplicity (C<discount_events> /
 C<discount_count>), C<SUB_ENTRY> event multiplicity (C<sub_entry_events> /
-C<sub_entry_count>), and stream-completeness checks aligned with
-C<COMPAT-010_INCOMPLETE_STREAM>. Intended as a lightweight Data-like
-surface before full XS C<Devel::NYTProf::Data> (PERL-*).
+C<sub_entry_count>), stream event multiplicities for C<SUB_RETURN> /
+C<NEW_FID> / C<SUB_CALLERS> / C<SRC_LINE> / C<SUB_INFO>
+(C<sub_return_events>, C<new_fid_events>, C<sub_callers_events>,
+C<src_line_events>, C<sub_info_events>; JSON-EVENT-COUNTS-MVP), and
+stream-completeness checks aligned with C<COMPAT-010_INCOMPLETE_STREAM>.
+Intended as a lightweight Data-like surface before full XS
+C<Devel::NYTProf::Data> (PERL-*).
 
 Uses L<Devel::NYTProf::JsonlReadStream> for JSONL parsing (core C<JSON::PP>
 only). Does B<not> load oracle C<Devel::NYTProf> and never places C<crates/>
@@ -850,6 +927,11 @@ Aligned with dump schema / aggregate-comparison-v0:
                 # discount_events / discount_count: one increment per DISCOUNT tag (A3)
   SUB_ENTRY   => caller_fid, caller_line
                 # sub_entry_events / sub_entry_count: one increment per SUB_ENTRY tag
+  SUB_RETURN  => ... (also sub_return_events: one per successfully ingested tag)
+  SUB_CALLERS => ... (also sub_callers_events: one per successfully ingested tag)
+  NEW_FID     => ... (also new_fid_events: one per successfully ingested tag)
+  SRC_LINE    => ... (also src_line_events: one per successfully ingested tag)
+  SUB_INFO    => ... (also sub_info_events: one per successfully ingested tag)
 
 Call-edge keys sum C<count> across all C<SUB_CALLERS> sites for the same
 C<(caller, callee)> pair. Line totals count one call per timing event and sum
@@ -865,6 +947,10 @@ observes B<818>); this is not exclusive-time policy freeze.
 C<SUB_ENTRY> is counted as event multiplicity only (default-calls1
 B<0> with C<calls=1>; calls2-default B<27> with C<calls=2>); this is not
 full call-stack / arg freeze.
+JSON-EVENT-COUNTS-MVP stream multiplicities on default-calls1 golden:
+C<sub_return_events> B<27>, C<new_fid_events> B<3>, C<sub_callers_events>
+B<13>, C<src_line_events> B<632>, C<sub_info_events> B<31> (match independent
+stream re-count of those tags).
 
 =head1 SEE ALSO
 

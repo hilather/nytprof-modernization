@@ -54,9 +54,9 @@ Policy: [BUILD_SUPPORT_POLICY.md](https://github.com/hilather/nytprof-modernizat
 | 3 | `./scripts/packaging/dual_path_smoke.sh` | **Primary packaging** — legacy always; native install when cargo present |
 | 4 | `./scripts/packaging/engine_auto_fallback_smoke.sh` | **Required** (Perl `engine=auto` prefer-native / fall-back-legacy) |
 | 5 | `./scripts/packaging/perl_jsonl_data_all_smoke.sh` | **Required** (pure-Perl JsonlData roll-up incl. DISCOUNT A3 + **SUB_ENTRY** multiplicity; golden JSONL; no cargo) |
-| 6 | `./scripts/packaging/perl_query_json_smoke.sh` | **Required** (**CI-QUERY-JSON-GATE** / QUERY-JSON-MVP / QUERY-JSON-EXPAND; golden `--jsonl`; no cargo) |
-| 7 | `./scripts/packaging/native_agg_json_smoke.sh` | **Optional when native** (**NATIVE-AGG-JSON**; **15/3/15**) |
-| 8 | `./scripts/packaging/native_query_json_cross_smoke.sh` | **Optional when native** (**NATIVE-QUERY-JSON-CROSS**: native `report --json` ↔ Perl `query --json` **15/3/15** + discount **818**) |
+| 6 | `./scripts/packaging/perl_query_json_smoke.sh` (+ JSON surface smokes 6b–6g) | **Required** (**CI-QUERY-JSON-GATE** / QUERY-JSON-MVP / QUERY-JSON-EXPAND; golden `--jsonl`; no cargo). Also **json_sub_entry** / **json_blocks** / **json_subdef_source** / **json_meta_files** / **json_time_block** / **json_file_basename** / **json_event_counts** / **json_total_basetime** (**JSON-FILE-BASENAME-MVP** / **JSON-EVENT-COUNTS-MVP** / **JSON-TOTAL-EVENTS-MVP** / **JSON-ATTR-BASETIME-MVP**: basename **workload.pl**, `total_events` **2474**, `attribute_basetime`) |
+| 7 | `./scripts/packaging/native_agg_json_smoke.sh` (+ stream + incomplete) | **Optional when native** (**NATIVE-AGG-JSON** **15/3/15**; **JSON-NATIVE-STREAM-MVP**; **JSON-REPORT-INCOMPLETE-FAILCLOSED** via `json_report_incomplete_smoke.sh`) |
+| 8 | `./scripts/packaging/native_query_json_cross_smoke.sh` | **Optional when native** (**NATIVE-QUERY-JSON-CROSS** / **CROSS-EXPAND** / **CROSS-BLOCKS** / **CROSS-META** / **CROSS-TIMEBLOCK** / **CROSS-COUNTS** / **CROSS-TOTAL**: native `report --json` ↔ Perl `query --json` **15/3/15** + discount **818** + `sub_entry_events` **0** when both expose; calls2 **27**; blocks-calls1 **780**/**810**; `time_block_events` **0**/**916** when both expose; event counts **27/3/13/632/31** + `file_1_basename` when both expose; default-calls1 stream/PID + A9/A8 + greppable meta when both expose) |
 | 9 | `./scripts/packaging/capability_selftest_smoke.sh` | Run when cargo **or** `prefix`/`target` native CLI (or `$NYTPROF_NATIVE_CLI`); **honest skip** otherwise (**CI-CAPABILITY-GATE**) |
 
 Not part of this gate (document only): broader `./scripts/packaging/packaging_gate.sh`, `./scripts/packaging/makemaker_dual_path_smoke.sh`. Not multi-OS CI (**BUILD-006**).
@@ -118,18 +118,55 @@ cargo run -q -p nytprof-cli -- report --json fixtures/v5/default-calls1/nytprof.
 ./scripts/packaging/native_agg_json_smoke.sh
 ```
 
-Expect JSON fields: `ok`, `profile`, `leaf_returns` **15**, `mid_returns` **3**, `mid_leaf_edge` **15**, `discount_events`, `subs`, `edges` (TAB edge keys). Fail-closed on incomplete/corrupt streams same as text report.
+Expect JSON fields: `ok`, `profile`, `leaf_returns` **15**, `mid_returns` **3**, `mid_leaf_edge` **15**, `discount_events`, `sub_entry_events` (**JSON-SUB-ENTRY-MVP**; default **0**), greppable A4/A4b `line_calls_1_5` / `block_line_calls_1_4` (**JSON-BLOCKS-MVP**; 0 when absent; blocks-calls1 **780** / **810**), stream/PID (**JSON-NATIVE-STREAM-MVP**: `is_stream_complete` **true**, `incompleteness_reasons` **[]**, `time_line_events` / `pid_start_events` / `pid_end_events`), A2 `time_block_events` (**JSON-TIME-BLOCK-MVP**: default **0** / blocks **916**), A9/A8 samples (**JSON-SUBDEF-SOURCE-MVP**: `sub_def_leaf` / `sub_def_mid` / `source_line_1_5`), ATTRIBUTE/OPTION/file samples (**JSON-META-FILES-MVP**: `attribute_ticks_per_sec` / `option_calls` / `file_1`; null when absent), `subs`, `edges` (TAB edge keys). Fail-closed on incomplete/corrupt streams same as text report (**JSON-REPORT-INCOMPLETE-FAILCLOSED**: incomplete prefix must not emit complete `ok:true` + `is_stream_complete:true`).
+
+```sh
+# Incomplete stream fail-closed (COMPAT-010 / JSON-REPORT-INCOMPLETE-FAILCLOSED):
+./scripts/packaging/json_report_incomplete_smoke.sh
+# TIME_BLOCK multiplicity (JSON-TIME-BLOCK-MVP):
+./scripts/packaging/json_time_block_smoke.sh
+```
 
 Schema: [native-aggregates-json-mvp-v0.md](https://github.com/hilather/nytprof-modernization/blob/main/docs/schemas/native-aggregates-json-mvp-v0.md)
 
-### Cross-check native JSON vs Perl `query --json` (NATIVE-QUERY-JSON-CROSS)
+### ATTRIBUTE / OPTION / file JSON samples (JSON-META-FILES-MVP)
+
+Greppable samples only (not full `attributes` / `options` / `files` maps). Same keys on native `report --json` and Perl `query --json`.
+
+| Field | Source | default-calls1 expect |
+|-------|--------|------------------------|
+| `attribute_ticks_per_sec` | ATTRIBUTE `ticks_per_sec` | string **`10000000`** (null if absent) |
+| `option_calls` | OPTION `calls` | string **`1`** (null if absent) |
+| `file_1` | NEW_FID fid **1** full path | path contains **`workload.pl`** (null if absent; **volatile** under `/tmp`) |
+| `file_1_basename` | basename of fid **1** (**JSON-FILE-BASENAME-MVP**) | equals/contains **`workload.pl`** (typically exact **`"workload.pl"`**; stable contract) |
 
 ```sh
-# Pair: native report --json  vs  Perl query --json --jsonl  (×2 + equal fields)
+# Native (cargo tree preferred for latest fields):
+cargo run -q -p nytprof-cli -- report --json fixtures/v5/default-calls1/nytprof.out \
+  | grep -E 'attribute_ticks_per_sec|option_calls|file_1'
+
+# Perl golden JSONL (no cargo):
+perl -Iperl/lib perl/bin/nytprof-engine query --json \
+  --jsonl fixtures/v5/default-calls1/readstream.jsonl \
+  | grep -E 'attribute_ticks_per_sec|option_calls|file_1'
+
+# Cargo asserts (model-matched):
+cargo test -p nytprof-cli --test native_agg_json
+
+# Focused packaging smokes (Perl golden + optional native):
+./scripts/packaging/json_meta_files_smoke.sh
+./scripts/packaging/json_file_basename_smoke.sh
+```
+
+### Cross-check native JSON vs Perl `query --json` (NATIVE-QUERY-JSON-CROSS / CROSS-EXPAND / CROSS-BLOCKS / CROSS-META / CROSS-TIMEBLOCK / CROSS-COUNTS / CROSS-TOTAL)
+
+```sh
+# Pair: native report --json  vs  Perl query --json --jsonl
+# (×2 + equal fields + event counts 27/3/13/632/31 + basename + calls2 expand + blocks 780/810 + time_block 0/916 + stream/PID + A9/A8 + greppable meta)
 ./scripts/packaging/native_query_json_cross_smoke.sh
 ```
 
-Shared fields must match: `leaf_returns` **15**, `mid_returns` **3**, `mid_leaf_edge` **15**, `discount_events` **818**. Optional path also runs `query --json` on the live profile (native dump → JsonlData). Fails closed without native CLI; pure-Perl query alone is `perl_query_json_smoke.sh`.
+Shared fields must match on default-calls1: `leaf_returns` **15**, `mid_returns` **3**, `mid_leaf_edge` **15**, `discount_events` **818**, and `sub_entry_events` **0** when **both** sides expose SUB_ENTRY. Optional path also runs `query --json` on the live profile (native dump → JsonlData). **Expand (fixture-scoped):** on `fixtures/v5/calls2-default`, when both sides expose `sub_entry_events`, require **27**. **Blocks (NATIVE-QUERY-JSON-CROSS-BLOCKS):** on `fixtures/v5/blocks-calls1`, pair ×2 → `line_calls_1_5` **780** / `block_line_calls_1_4` **810** equal native↔perl. **Timeblock (NATIVE-QUERY-JSON-CROSS-TIMEBLOCK):** when both sides expose `time_block_events`, default-calls1 equal **0**, blocks-calls1 equal **916**. **Counts (NATIVE-QUERY-JSON-CROSS-COUNTS):** when both sides expose event counters (**JSON-EVENT-COUNTS-MVP**), equal `sub_return_events` **27**, `new_fid_events` **3**, `sub_callers_events` **13**, `src_line_events` **632**, `sub_info_events` **31**; when both expose `file_1_basename` (**JSON-FILE-BASENAME-MVP**), exact equal **or** both contain **`workload.pl`** (absolute `file_1` remains volatile; basename is the greppable stable sample). **Meta (NATIVE-QUERY-JSON-CROSS-META):** on default-calls1, when both sides expose stream/PID + A9/A8 samples, require equal `is_stream_complete` **true**, `incompleteness_reasons` **[]**, `time_line_events` / `pid_start_events` / `pid_end_events`, `sub_def_leaf` / `sub_def_mid` / `source_line_1_5`; greppable meta (`attribute_ticks_per_sec`, …) **required** equal when both expose. Fails closed without native CLI; pure-Perl query alone is `perl_query_json_smoke.sh`.
 
 ---
 
@@ -156,9 +193,12 @@ perl -Iperl/lib perl/bin/nytprof-engine --engine=native query \
   fixtures/v5/default-calls1/nytprof.out
 perl -Iperl/lib perl/bin/nytprof-engine query \
   --jsonl fixtures/v5/default-calls1/readstream.jsonl
-# Structured JSON (QUERY-JSON-MVP / QUERY-JSON-EXPAND):
+# Structured JSON (QUERY-JSON-MVP / QUERY-JSON-EXPAND / JSON-SUB-ENTRY-MVP /
+#   JSON-META-FILES-MVP / JSON-SUBDEF-SOURCE-MVP):
 #   leaf_returns=15 / mid_returns=3 / mid_leaf_edge=15
-#   discount_events=818 / is_stream_complete=true
+#   discount_events=818 / sub_entry_events=0 / is_stream_complete=true
+#   attribute_ticks_per_sec=10000000 / option_calls=1 / file_1=…workload.pl
+#   (+ line_calls_1_5 / block_line_calls_1_4 when JSON-BLOCKS-MVP; 0 on this fixture)
 perl -Iperl/lib perl/bin/nytprof-engine query --json \
   --jsonl fixtures/v5/default-calls1/readstream.jsonl
 
@@ -295,7 +335,7 @@ Do **not** claim these under offline R0 / R1-preview (full-R1 residuals; `R1-HON
 | **No multi-OS CI matrix** | Single-host `offline_gate.sh` only (**BUILD-006** open). |
 | **No product default flip** | Native remains opt-in; Perl `engine=auto` is facade behavior, not charter R3 product default. |
 
-Advertised preview **does** include native aggregates JSON, pure-Perl query JSON, **native↔query JSON cross-parity** (when native CLI present), and pure-Perl **SUB_ENTRY** event multiplicity — without promoting those to full R1 / CPAN / FFI readiness.
+Advertised preview **does** include native aggregates JSON (incl. **SUB_ENTRY**, stream/PID, A2 `time_block_events` **0**/**916**, A9/A8 samples, ATTRIBUTE/OPTION/file samples, and blocks A4/A4b greppable ints), pure-Perl query JSON, **JSON report incomplete fail-closed** (COMPAT-010), **native↔query JSON cross-parity** with **CROSS-EXPAND** / **CROSS-BLOCKS** / **CROSS-META** / **CROSS-TIMEBLOCK** (`sub_entry` on default-calls1 **0** + calls2 **27** + blocks **780**/**810** + `time_block_events` **0**/**916** + stream/PID + A9/A8 + greppable meta when native CLI present), and pure-Perl **SUB_ENTRY** event multiplicity — without promoting those to full R1 / CPAN / FFI readiness.
 
 Full residual table: [R1_RESIDUAL_READINESS_MATRIX_v0.md](https://github.com/hilather/nytprof-modernization/blob/main/docs/contracts/R1_RESIDUAL_READINESS_MATRIX_v0.md) § Residual for full R1.
 
@@ -313,11 +353,20 @@ Frozen semantic counts (counts exact; tick/time strings only under COMPAT-003):
 | `main::mid` returns | **3** |
 | `main::mid` → `main::leaf` edge | **15** |
 | `discount_events` (A3) | **818** |
-| `sub_entry_events` (`calls=1`) | **0** |
+| `sub_entry_events` (`calls=1`; JSON + JsonlData) | **0** |
+| `time_block_events` (**JSON-TIME-BLOCK-MVP**) | **0** |
+| `attribute_ticks_per_sec` (**JSON-META-FILES-MVP**) | **`10000000`** |
+| `option_calls` (**JSON-META-FILES-MVP**) | **`1`** |
+| `file_1` (**JSON-META-FILES-MVP**) | path contains **`workload.pl`** (volatile absolute) |
+| `file_1_basename` (**JSON-FILE-BASENAME-MVP**) | **`workload.pl`** (stable) |
+| stream/PID + A9/A8 (**CROSS-META** when both expose) | complete + leaf **1/3–7** / mid **1/8–12** / source `$x++` |
 
 ```sh
 # Native report text should show leaf returns=15, mid returns=3
 ./prefix/bin/nytprof-cli report fixtures/v5/default-calls1/nytprof.out
+# Native / query JSON: leaf_returns=15, mid_returns=3, mid_leaf_edge=15,
+#   discount_events=818, sub_entry_events=0,
+#   attribute_ticks_per_sec=10000000, option_calls=1, file_1=…workload.pl
 
 # Pure-Perl JsonlData from golden dump
 perl -Iperl/lib -MDevel::NYTProf::JsonlData -e '
@@ -340,11 +389,13 @@ perl -Iperl/lib perl/bin/nytprof-engine query \
 bash tools/oracle/report_semantic_parity.sh
 ```
 
-### `fixtures/v5/blocks-calls1` (line 5 = 780)
+### `fixtures/v5/blocks-calls1` (line 5 = 780; A4b 1:4 = 810)
 
 | Check | Expected |
 |-------|----------|
 | `line_total(1,5).calls` / `line_calls(1,5)` (TIME_BLOCK) | **780** |
+| JSON `line_calls_1_5` / `block_line_calls_1_4` (**JSON-BLOCKS-MVP**) | **780** / **810** |
+| `time_block_events` (**JSON-TIME-BLOCK-MVP** / **CROSS-TIMEBLOCK**) | **916** |
 
 ```sh
 perl -Iperl/lib -MDevel::NYTProf::JsonlData -e '
@@ -359,6 +410,12 @@ perl -Iperl/lib -MDevel::NYTProf::JsonlData -e '
 
 # Blocks semantic parity (native path)
 bash tools/oracle/blocks_semantic_parity.sh
+
+# JSON convenience (native + Perl query --json)
+cargo run -q -p nytprof-cli -- report --json fixtures/v5/blocks-calls1/nytprof.out
+perl -Iperl/lib perl/bin/nytprof-engine query --json \
+  --jsonl fixtures/v5/blocks-calls1/readstream.jsonl
+# expect line_calls_1_5=780, block_line_calls_1_4=810
 ```
 
 Also on blocks-calls1 when asserted: leaf returns **15**, mid returns **3** (same workload shape). A4b reference: `block_line_calls(1,4)` → **810**.
@@ -381,8 +438,8 @@ Also on blocks-calls1 when asserted: leaf returns **15**, mid returns **3** (sam
 1. `./scripts/ci/offline_gate.sh` → all steps green (or honest skips only where documented).  
 2. `./scripts/packaging/install_native.sh` + `./prefix/bin/nytprof-cli capability` (+ `--json`).  
 3. `nytprof-engine` report/query/auto paths exercise default-calls1 **15 / 3 / 15**.  
-4. When native present: `./scripts/packaging/native_query_json_cross_smoke.sh` (native↔query JSON **15/3/15** + discount **818**).  
-5. JsonlData roll-up smoke green (incl. SUB_ENTRY **0** / **27**); blocks-calls1 line5 **780**.  
+4. When native present: `./scripts/packaging/native_query_json_cross_smoke.sh` (native↔query JSON **15/3/15** + discount **818** + `sub_entry` **0**; calls2 **27** expand; blocks **780**/**810**; `time_block_events` **0**/**916** **CROSS-TIMEBLOCK**; stream/PID + A9/A8 + greppable meta **CROSS-META**); `./scripts/packaging/json_report_incomplete_smoke.sh` fail-closed.  
+5. JsonlData roll-up smoke green (incl. SUB_ENTRY **0** / **27**); blocks-calls1 line5 **780** + JSON A4/A4b **780**/**810** + `time_block_events` **916**; greppable meta samples **10000000** / **1** / **workload.pl**.  
 6. Read residual honesty before claiming “R1 done.”
 
 ---
@@ -393,8 +450,25 @@ Also on blocks-calls1 when asserted: leaf returns **15**, mid returns **3** (sam
 |----|--------|----------|
 | `R1-PREVIEW-RUNBOOK` | done | this file (`docs/R1_PREVIEW_OPERATOR_RUNBOOK.md`) |
 | `R1-RESIDUAL-MATRIX` | done | [R1_RESIDUAL_READINESS_MATRIX_v0.md](https://github.com/hilather/nytprof-modernization/blob/main/docs/contracts/R1_RESIDUAL_READINESS_MATRIX_v0.md) |
-| `R1-HONESTY-SYNC` | **done** (this slice) | matrix + this runbook advertise **NATIVE-QUERY-JSON-CROSS** (`scripts/packaging/native_query_json_cross_smoke.sh`) + **PERL-SUB-ENTRY-JSONL** (`scripts/packaging/perl_sub_entry_smoke.sh`, `perl/t/jsonl_data_sub_entry.t`) while listing full-R1 residuals (no production FFI/XS Data, no full nytprofhtml DOM, no v6/COL-007, no multi-OS CI, no perf claims). **Before COL-007.** |
+| `R1-HONESTY-SYNC` | **done** | matrix + this runbook advertise **NATIVE-QUERY-JSON-CROSS** / **CROSS-EXPAND** / **CROSS-BLOCKS** / **CROSS-META** / **CROSS-TIMEBLOCK** / **CROSS-COUNTS**, **JSON-EVENT-COUNTS-MVP**, **JSON-FILE-BASENAME-MVP** (absolute `file_1` volatile; basename greppable stable sample), **JSON-TIME-BLOCK-MVP**, **JSON-REPORT-INCOMPLETE-FAILCLOSED**, **JSON-SUB-ENTRY-MVP**, **JSON-BLOCKS-MVP**, **JSON-META-FILES-MVP**, + **PERL-SUB-ENTRY-JSONL** while listing full-R1 residuals (no production FFI/XS Data, no full nytprofhtml DOM, no v6/COL-007, no multi-OS CI, no perf claims). **Before COL-007.** |
 | `NATIVE-QUERY-JSON-CROSS` | done | `scripts/packaging/native_query_json_cross_smoke.sh`; offline_gate step 8 when native |
+| `NATIVE-QUERY-JSON-CROSS-EXPAND` | done | same smoke: `sub_entry_events` **0** on default-calls1 when both expose; calls2-default **27** (fixture-scoped). **Before COL-007.** |
+| `NATIVE-QUERY-JSON-CROSS-BLOCKS` | **done** | same smoke: blocks-calls1 pair ×2 `line_calls_1_5` **780** / `block_line_calls_1_4` **810** equal native↔perl. **Before COL-007.** |
+| `NATIVE-QUERY-JSON-CROSS-META` | **done** | same smoke: default-calls1 stream/PID + A9/A8 equal when both expose; greppable meta when both expose. **Before COL-007.** |
+| `NATIVE-QUERY-JSON-CROSS-TIMEBLOCK` | **done** | same smoke: `time_block_events` default **0** / blocks **916** when both expose. **Before COL-007.** |
+| `NATIVE-QUERY-JSON-CROSS-COUNTS` | **done** | same smoke: default-calls1 event counts **27/3/13/632/31** + `file_1_basename` when both expose. **Before COL-007.** |
+| `JSON-EVENT-COUNTS-MVP` | **done** | event counters on both JSON surfaces; smoke `json_event_counts_smoke / json_total_basetime_smoke.sh`. **Before COL-007.** |
+| `JSON-NATIVE-STREAM-MVP` | **done** | native `report --json` stream/PID fields; `scripts/packaging/json_native_stream_smoke.sh`. **Before COL-007.** |
+| `JSON-TIME-BLOCK-MVP` | **done** | `time_block_events` A2; smoke `scripts/packaging/json_time_block_smoke.sh`; offline_gate step 6f. **Before COL-007.** |
+| `JSON-REPORT-INCOMPLETE-FAILCLOSED` | **done** | `report --json` fail-closed on incomplete streams; smoke `scripts/packaging/json_report_incomplete_smoke.sh`; offline_gate when native. **Before COL-007.** |
+| `JSON-SUBDEF-SOURCE-MVP` | **done** | `sub_def_leaf` / `sub_def_mid` / `source_line_1_5`; `scripts/packaging/json_subdef_source_smoke.sh`. **Before COL-007.** |
+| `JSON-META-FILES-MVP` | **done** | `attribute_ticks_per_sec` / `option_calls` / `file_1` on native + Perl JSON; smoke `scripts/packaging/json_meta_files_smoke.sh`; cargo `native_agg_json.rs`. **Before COL-007.** |
+| `JSON-FILE-BASENAME-MVP` | **done** | `file_1_basename` on native + Perl JSON (**`workload.pl`**); smoke `scripts/packaging/json_file_basename_smoke.sh`; offline_gate step 6g; cargo `native_agg_json.rs`. **Before COL-007.** |
+| `JSON-TOTAL-EVENTS-MVP` | **done** | `total_events` **2474** on both JSON surfaces; smoke `json_total_basetime_smoke.sh`; offline_gate step 6i. **Before COL-007.** |
+| `JSON-ATTR-BASETIME-MVP` | **done** | `attribute_basetime` greppable sample; same smoke. **Before COL-007.** |
+| `NATIVE-QUERY-JSON-CROSS-TOTAL` | **done** | cross equal total_events + basetime. **Before COL-007.** |
+| `JSON-SUB-ENTRY-MVP` | done | `sub_entry_events` on native `report --json` + Perl `query --json` (default **0** / calls2 **27**) |
+| `JSON-BLOCKS-MVP` | done | greppable `line_calls_1_5` / `block_line_calls_1_4` on native + Perl JSON (blocks-calls1 **780** / **810**) |
 | `PERL-SUB-ENTRY-JSONL` | done | `JsonlData` `sub_entry_*`; smoke + test above; roll-up in `perl_jsonl_data_all_smoke.sh` |
 | `COL-007` | deferred | C v6 writer — unblocked for *start* after report-side evidence; not implemented by this runbook |
 

@@ -1,11 +1,14 @@
 #!/usr/bin/env bash
-# NATIVE-AGG-JSON: native CLI structured aggregates JSON smoke.
+# NATIVE-AGG-JSON / JSON-NATIVE-STREAM-MVP: native CLI structured aggregates
+# JSON smoke.
 #
 # Spec: docs/schemas/native-aggregates-json-mvp-v0.md
-# Board: NATIVE-AGG-JSON
+# Board: NATIVE-AGG-JSON / JSON-NATIVE-STREAM-MVP
 #
 # Resolves the native CLI, runs `report --json` twice on default-calls1,
 # asserts leaf_returns=15 / mid_returns=3 / mid_leaf_edge=15 (and maps),
+# sub_entry_events=0 (JSON-SUB-ENTRY-MVP), stream/PID fields
+# (is_stream_complete true, incompleteness_reasons [], time_line/pid ≥ 1),
 # checks format aliases + aggregates subcommand + human default unchanged.
 # Never puts crates/ on oracle PERL5LIB.
 #
@@ -92,6 +95,16 @@ need(o.get("leaf_returns") == 15, "leaf_returns=%r" % (o.get("leaf_returns"),))
 need(o.get("mid_returns") == 3, "mid_returns=%r" % (o.get("mid_returns"),))
 need(o.get("mid_leaf_edge") == 15, "mid_leaf_edge=%r" % (o.get("mid_leaf_edge"),))
 need(isinstance(o.get("discount_events"), int) and o["discount_events"] > 0, "discount_events")
+need(o.get("sub_entry_events") == 0, "sub_entry_events=%r (want 0)" % (o.get("sub_entry_events"),))
+# JSON-NATIVE-STREAM-MVP
+isc = o.get("is_stream_complete")
+need(isc is True or isc == 1, "is_stream_complete=%r (want true)" % (isc,))
+reasons = o.get("incompleteness_reasons")
+need(isinstance(reasons, list) and len(reasons) == 0,
+     "incompleteness_reasons=%r (want [])" % (reasons,))
+for k in ("time_line_events", "pid_start_events", "pid_end_events"):
+    v = o.get(k)
+    need(isinstance(v, int) and v >= 1, "%s=%r (want >= 1)" % (k, v))
 subs=o.get("subs") or {}
 need(subs.get("main::leaf") == 15, "subs leaf")
 need(subs.get("main::mid") == 3, "subs mid")
@@ -112,6 +125,15 @@ $(cat "$f")"
       die "$label: mid_returns\n" unless ($obj->{mid_returns} // -1) == 3;
       die "$label: mid_leaf_edge\n" unless ($obj->{mid_leaf_edge} // -1) == 15;
       die "$label: discount_events\n" unless ($obj->{discount_events} // 0) > 0;
+      die "$label: sub_entry_events\n" unless ($obj->{sub_entry_events} // -1) == 0;
+      my $isc = $obj->{is_stream_complete};
+      die "$label: is_stream_complete\n" unless $isc;
+      my $reasons = $obj->{incompleteness_reasons};
+      die "$label: incompleteness_reasons\n"
+        unless defined $reasons && ref($reasons) eq "ARRAY" && !@$reasons;
+      for my $k (qw(time_line_events pid_start_events pid_end_events)) {
+        die "$label: $k\n" unless ($obj->{$k} // 0) >= 1;
+      }
       my $subs = $obj->{subs};
       die "$label: subs\n" unless ref($subs) eq "HASH";
       die "$label: subs leaf\n" unless ($subs->{"main::leaf"} // -1) == 15;
@@ -133,6 +155,18 @@ $(cat "$f")"
       || fail "$label: missing mid_returns:3\n$(cat "$f")"
     grep -qE '"mid_leaf_edge"[[:space:]]*:[[:space:]]*15' "$f" \
       || fail "$label: missing mid_leaf_edge:15\n$(cat "$f")"
+    grep -qE '"sub_entry_events"[[:space:]]*:[[:space:]]*0' "$f" \
+      || fail "$label: missing sub_entry_events:0\n$(cat "$f")"
+    grep -qE '"is_stream_complete"[[:space:]]*:[[:space:]]*true' "$f" \
+      || fail "$label: missing is_stream_complete:true\n$(cat "$f")"
+    grep -qE '"incompleteness_reasons"[[:space:]]*:[[:space:]]*\[\s*\]' "$f" \
+      || fail "$label: missing incompleteness_reasons:[]\n$(cat "$f")"
+    grep -qE '"time_line_events"[[:space:]]*:[[:space:]]*[1-9]' "$f" \
+      || fail "$label: missing time_line_events >= 1\n$(cat "$f")"
+    grep -qE '"pid_start_events"[[:space:]]*:[[:space:]]*[1-9]' "$f" \
+      || fail "$label: missing pid_start_events >= 1\n$(cat "$f")"
+    grep -qE '"pid_end_events"[[:space:]]*:[[:space:]]*[1-9]' "$f" \
+      || fail "$label: missing pid_end_events >= 1\n$(cat "$f")"
     grep -qE '"main::leaf"[[:space:]]*:[[:space:]]*15' "$f" \
       || fail "$label: missing subs main::leaf 15\n$(cat "$f")"
     log "NOTE: no python3/perl JSON::PP path fully exercised; used key greps for $label"
@@ -146,7 +180,10 @@ json_core_fingerprint() {
 import json,sys
 o=json.load(open(sys.argv[1],encoding="utf-8"))
 print(o.get("leaf_returns"), o.get("mid_returns"), o.get("mid_leaf_edge"),
-      o.get("discount_events"),
+      o.get("discount_events"), o.get("sub_entry_events"),
+      o.get("is_stream_complete"),
+      len(o.get("incompleteness_reasons") or []),
+      o.get("time_line_events"), o.get("pid_start_events"), o.get("pid_end_events"),
       o.get("subs",{}).get("main::leaf"), o.get("subs",{}).get("main::mid"),
       o.get("edges",{}).get("main::mid\tmain::leaf"), o.get("ok"))
 ' "$f"
@@ -155,9 +192,13 @@ print(o.get("leaf_returns"), o.get("mid_returns"), o.get("mid_leaf_edge"),
       open my $fh, "<", $ARGV[0] or die $!;
       local $/; my $o = JSON::PP->new->decode(<$fh>);
       my $ek = "main::mid\tmain::leaf";
+      my $reasons = $o->{incompleteness_reasons};
+      my $nr = (defined $reasons && ref($reasons) eq "ARRAY") ? scalar(@$reasons) : -1;
       print join(" ",
         $o->{leaf_returns}//"", $o->{mid_returns}//"", $o->{mid_leaf_edge}//"",
-        $o->{discount_events}//"",
+        $o->{discount_events}//"", $o->{sub_entry_events}//"",
+        $o->{is_stream_complete} ? "1" : "0", $nr,
+        $o->{time_line_events}//"", $o->{pid_start_events}//"", $o->{pid_end_events}//"",
         ($o->{subs}//{})->{"main::leaf"}//"", ($o->{subs}//{})->{"main::mid"}//"",
         ($o->{edges}//{})->{$ek}//"", $o->{ok} ? "1" : "0"), "\n";
     ' "$f"
@@ -188,7 +229,7 @@ fi
 cat "$JOUT1"
 json_assert_mvp "$JOUT1" "json run #1"
 json_assert_mvp "$JOUT2" "json run #2"
-ok "report --json ×2: leaf=15 mid=3 edge=15"
+ok "report --json ×2: leaf=15 mid=3 edge=15 sub_entry=0 stream complete"
 
 FP1="$(json_core_fingerprint "$JOUT1")"
 FP2="$(json_core_fingerprint "$JOUT2")"

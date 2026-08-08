@@ -211,4 +211,39 @@ SKIP: {
     like( $out, qr/^option calls=/m, 'profile: option calls' );
 }
 
+# ---------------------------------------------------------------------------
+# JSON-SUBDEF-SOURCE-MVP: query --json greppable A9/A8 samples (golden JSONL)
+# ---------------------------------------------------------------------------
+{
+    my $out = '';
+    open my $fh, '>', \$out or die $!;
+    my $old = select $fh;
+    my $rc  = run_query( $repo, jsonl => $jsonl, json => 1 );
+    select $old;
+    close $fh;
+
+    is( $rc, 0, 'run_query(jsonl, json=>1) exit 0' );
+    require JSON::PP;
+    my $obj = JSON::PP->new->decode($out);
+    ok( $obj->{ok}, 'json: ok true' );
+    is_deeply(
+        $obj->{sub_def_leaf},
+        { fid => 1, first_line => 3, last_line => 7 },
+        'json: sub_def_leaf 1/3–7'
+    );
+    is_deeply(
+        $obj->{sub_def_mid},
+        { fid => 1, first_line => 8, last_line => 12 },
+        'json: sub_def_mid 1/8–12'
+    );
+    my $src = $obj->{source_line_1_5} // '';
+    like( $src, qr/\$x\+\+/, 'json: source_line_1_5 has $x++' );
+    like( $src, qr/1 \.\. 50/, 'json: source_line_1_5 has 1 .. 50' );
+    is(
+        $src,
+        "    \$x++ for 1 .. 50;\n",
+        'json: source_line_1_5 exact golden text'
+    );
+}
+
 done_testing();

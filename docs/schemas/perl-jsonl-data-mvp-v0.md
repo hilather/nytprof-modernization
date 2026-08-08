@@ -28,7 +28,8 @@ A **pure-Perl** module under `perl/` that:
 9. Exposes **stream completeness** aligned with [`COMPAT-010_INCOMPLETE_STREAM`](https://github.com/hilather/nytprof-modernization/blob/main/docs/contracts/COMPAT-010_INCOMPLETE_STREAM.md): `is_stream_complete` / `stream_incompleteness_reasons` using `pid_*_events` + `time_line_events` / `time_block_events`
 10. Counts **A3 `discount_events`** from **`DISCOUNT`** tags (empty args; **event multiplicity only** — not exclusive-time policy freeze)
 11. Counts **`sub_entry_events`** from **`SUB_ENTRY`** tags (`caller_fid`, `caller_line`; **event multiplicity only** — not full call-stack / arg freeze)
-12. On `fixtures/v5/default-calls1`, observes from **real dump events**:
+12. Counts stream tag multiplicities (**JSON-EVENT-COUNTS-MVP**): `sub_return_events` / `new_fid_events` / `sub_callers_events` / `src_line_events` / `sub_info_events` — one per matching tag successfully ingested
+13. On `fixtures/v5/default-calls1`, observes from **real dump events**:
    - `main::leaf` returns **15**
    - `main::mid` returns **3**
    - mid→leaf edge count **15**
@@ -41,10 +42,11 @@ A **pure-Perl** module under `perl/` that:
    - `is_stream_complete` **true**; `stream_incompleteness_reasons` **empty**; `time_line_events > 0`
    - `discount_events` / `discount_count` **818** (A3; independent stream re-count of `DISCOUNT` tags)
    - `sub_entry_events` / `sub_entry_count` **0** (`calls=1`; independent stream re-count of `SUB_ENTRY` tags)
+   - `sub_return_events` **27**, `new_fid_events` **3**, `sub_callers_events` **13**, `src_line_events` **632**, `sub_info_events` **31** (stream re-count of tags)
    - `block_line_totals` **empty** (no `TIME_BLOCK`)
-13. On `fixtures/v5/calls2-default` (`calls=2` → `SUB_ENTRY` present), observes:
+14. On `fixtures/v5/calls2-default` (`calls=2` → `SUB_ENTRY` present), observes:
    - `sub_entry_events` / `sub_entry_count` **27** (independent stream re-count of `SUB_ENTRY` tags)
-14. On `fixtures/v5/blocks-calls1` (`blocks=1` → timing as `TIME_BLOCK`), observes:
+15. On `fixtures/v5/blocks-calls1` (`blocks=1` → timing as `TIME_BLOCK`), observes:
    - `line_calls(1, 5) == 780` (A4 hot loop statement line)
    - `block_line_totals` non-empty; sample **`"1:4".calls == 810`** (A4b from `block_line`)
    - `is_stream_complete` **true** (`time_block_events > 0`)
@@ -119,6 +121,11 @@ $data->discount_events;                              # A3 DISCOUNT event count (
 $data->discount_count;                               # alias for discount_events
 $data->sub_entry_events;                             # SUB_ENTRY event count (multiplicity only)
 $data->sub_entry_count;                              # alias for sub_entry_events
+$data->sub_return_events;                            # SUB_RETURN tag multiplicity (JSON-EVENT-COUNTS-MVP)
+$data->new_fid_events;                               # NEW_FID tag multiplicity
+$data->sub_callers_events;                           # SUB_CALLERS tag multiplicity (not edge sum)
+$data->src_line_events;                              # SRC_LINE tag multiplicity
+$data->sub_info_events;                              # SUB_INFO tag multiplicity
 $data->is_stream_complete;                           # 1 iff incompleteness reasons empty
 $data->stream_incompleteness_reasons;                # arrayref of reason strings (empty if complete)
 $data->records_seen;                                 # JSONL records processed
@@ -477,7 +484,7 @@ cargo run -q -p nytprof-cli -- dump fixtures/v5/blocks-calls1/nytprof.out > /tmp
 
 ## Shipped engine entry (PERL-ENGINE-QUERY / PERL-ENGINE-QUERY-EXPAND / PERL-QUERY-PID-META / QUERY-JSON-MVP / QUERY-JSON-EXPAND)
 
-Operator CLI wraps this module. Default `query` output is always-full MVP via `print_query_results` (returns/edges + `sub_def` + `source_line` + `line_calls` / `block_line_calls` samples when present + PID lifecycle + ATTRIBUTE/OPTION). With `--json` / `--format=json`, stdout is a single JSON object (`ok` / `subs` / `edges` / `leaf_returns` / `mid_returns` / `mid_leaf_edge` / `discount_events` / `is_stream_complete` / `incompleteness_reasons` / `time_line_events` / `pid_start_events` / `pid_end_events`):
+Operator CLI wraps this module. Default `query` output is always-full MVP via `print_query_results` (returns/edges + `sub_def` + `source_line` + `line_calls` / `block_line_calls` samples when present + PID lifecycle + ATTRIBUTE/OPTION). With `--json` / `--format=json`, stdout is a single JSON object (`ok` / `subs` / `edges` / `leaf_returns` / `mid_returns` / `mid_leaf_edge` / `discount_events` / `sub_entry_events` / `is_stream_complete` / `incompleteness_reasons` / `time_line_events` / `pid_start_events` / `pid_end_events`):
 
 ```sh
 perl -Iperl/lib perl/bin/nytprof-engine --engine=native query fixtures/v5/default-calls1/nytprof.out
@@ -488,9 +495,10 @@ perl -Iperl/lib perl/bin/nytprof-engine query --jsonl fixtures/v5/blocks-calls1/
 ./scripts/packaging/perl_engine_query_expand_smoke.sh
 ./scripts/packaging/perl_engine_query_pid_meta_smoke.sh
 ./scripts/packaging/perl_query_json_smoke.sh
+./scripts/packaging/json_sub_entry_smoke.sh
 ```
 
-See [`perl-engine-dispatch-mvp-v0.md`](https://github.com/hilather/nytprof-modernization/blob/main/docs/schemas/perl-engine-dispatch-mvp-v0.md) (`run_query` / `print_query_results` / action `query` / QUERY-JSON-MVP / QUERY-JSON-EXPAND).
+See [`perl-engine-dispatch-mvp-v0.md`](https://github.com/hilather/nytprof-modernization/blob/main/docs/schemas/perl-engine-dispatch-mvp-v0.md) (`run_query` / `print_query_results` / action `query` / QUERY-JSON-MVP / QUERY-JSON-EXPAND / JSON-SUB-ENTRY-MVP / JSON-BLOCKS-MVP / JSON-SUBDEF-SOURCE-MVP / JSON-META-FILES-MVP). `query --json` emits **`sub_entry_events`** from `$data->sub_entry_events` (same field name as native `report --json` / `ProfileModel.sub_entry_events`; JsonlData still has method alias `sub_entry_count`), greppable A4/A4b **`line_calls_1_5`** / **`block_line_calls_1_4`**, greppable A9/A8 samples **`sub_def_leaf`** / **`sub_def_mid`** / **`source_line_1_5`** from `$data->sub_def` / `$data->source_line` (**null** when absent), and greppable ATTRIBUTE/OPTION/NEW_FID samples **`attribute_ticks_per_sec`** / **`option_calls`** / **`file_1`** from `$data->attribute` / `$data->option` / `$data->file` (**null** when absent).
 
 ## Non-goals
 

@@ -138,6 +138,9 @@ make offline-gate
 | 4 | `./scripts/packaging/engine_auto_fallback_smoke.sh` | **Required** (ENGINE-AUTO-FALLBACK; needs native discoverable or cargo to build) |
 | 5 | `./scripts/packaging/perl_jsonl_data_all_smoke.sh` | **Required** (pure-Perl JsonlData roll-up: data / line_totals / subdefs / source / a4b / meta / pid / stream_complete / discount / sub_entry) |
 | 6 | `./scripts/packaging/perl_query_json_smoke.sh` | **Required** (**CI-QUERY-JSON-GATE** / QUERY-JSON-MVP / QUERY-JSON-EXPAND: golden `query --json --jsonl`; no cargo) |
+| 6b | `./scripts/packaging/json_sub_entry_smoke.sh` | **Required** (JSON-SUB-ENTRY-MVP: `sub_entry_events` **0** / **27**; pure-Perl golden; native when available) |
+| 6c | `./scripts/packaging/json_blocks_smoke.sh` | **Required** (JSON-BLOCKS-MVP: blocks-calls1 `line_calls_1_5` **780** / `block_line_calls_1_4` **810**; pure-Perl golden; optional native) |
+| 6h | `./scripts/packaging/json_event_counts_smoke.sh` | **Required** (JSON-EVENT-COUNTS-MVP: default-calls1 `sub_return`/**27** `new_fid`/**3** `sub_callers`/**13** `src_line`/**632** `sub_info`/**31**; pure-Perl golden; optional native) |
 | 7 | `./scripts/packaging/native_agg_json_smoke.sh` | **Optional when native:** NATIVE-AGG-JSON structured aggregates JSON (**15/3/15**) |
 | 8 | `./scripts/packaging/native_query_json_cross_smoke.sh` | **Optional when native:** NATIVE-QUERY-JSON-CROSS — native `report --json` vs Perl `query --json` shared fields (**15/3/15** + discount **818**); pure-Perl query alone is step 6 |
 | 9 | `./scripts/packaging/capability_selftest_smoke.sh` | **CI-CAPABILITY-GATE:** run when cargo **or** `prefix`/`target` native CLI (or `$NYTPROF_NATIVE_CLI`) present; **honest skip** otherwise (same condition as `packaging_gate`) |
@@ -151,6 +154,7 @@ Rules:
 - **Primary packaging:** `dual_path_smoke.sh` (BUILD dual-path policy). Not re-run here: `packaging_gate.sh` (broader suite) or `makemaker_dual_path_smoke.sh` (MakeMaker facade).
 - **Expand (CI-OFFLINE-GATE-EXPAND):** after dual-path, also run `engine_auto_fallback_smoke.sh` and the thin `perl_jsonl_data_all_smoke.sh` roll-up of pure-Perl JsonlData smokes.
 - **Query JSON (CI-QUERY-JSON-GATE):** step 6 wires required `perl_query_json_smoke.sh` (QUERY-JSON-MVP / QUERY-JSON-EXPAND golden `--jsonl`; fail if script missing; no cargo).
+- **JSON-SUB-ENTRY-MVP / JSON-BLOCKS-MVP:** steps 6b–6c required pure-Perl (golden `--jsonl`); native half optional when CLI present.
 - **Native aggregates / cross (NATIVE-AGG-JSON / NATIVE-QUERY-JSON-CROSS):** steps 7–8 when native CLI available; cross asserts shared fields equal between `report --json` and `query --json`.
 - **Capability (CI-CAPABILITY-GATE):** step 9 wires `capability_selftest_smoke.sh` into the offline gate with packaging_gate’s native-available condition (fail-fast when native can be exercised).
 
@@ -175,6 +179,8 @@ Behavior:
 | [`scripts/packaging/engine_auto_fallback_smoke.sh`](../scripts/packaging/engine_auto_fallback_smoke.sh) | offline gate step 4 | Prefer-native / fall-back-legacy; never `crates/` on oracle PERL5LIB |
 | [`scripts/packaging/perl_jsonl_data_all_smoke.sh`](../scripts/packaging/perl_jsonl_data_all_smoke.sh) | offline gate step 5 | Thin fail-fast roll-up of pure-Perl JsonlData smokes |
 | [`scripts/packaging/perl_query_json_smoke.sh`](../scripts/packaging/perl_query_json_smoke.sh) | offline gate step 6 (CI-QUERY-JSON-GATE) | QUERY-JSON-MVP / QUERY-JSON-EXPAND: `query --json --jsonl` golden; pure-Perl; no cargo |
+| [`scripts/packaging/json_sub_entry_smoke.sh`](../scripts/packaging/json_sub_entry_smoke.sh) | offline gate step 6b | JSON-SUB-ENTRY-MVP: `sub_entry_events` **0**/**27** |
+| [`scripts/packaging/json_blocks_smoke.sh`](../scripts/packaging/json_blocks_smoke.sh) | offline gate step 6c | JSON-BLOCKS-MVP: blocks-calls1 **780**/**810** greppable A4/A4b ints |
 | [`scripts/packaging/native_agg_json_smoke.sh`](../scripts/packaging/native_agg_json_smoke.sh) | offline gate step 7 (optional when native) | NATIVE-AGG-JSON: `report --json` ×2 → **15/3/15** |
 | [`scripts/packaging/native_query_json_cross_smoke.sh`](../scripts/packaging/native_query_json_cross_smoke.sh) | offline gate step 8 (optional when native) | NATIVE-QUERY-JSON-CROSS: native `report --json` vs Perl `query --json` shared fields **15/3/15** + discount **818** |
 | [`scripts/packaging/capability_selftest_smoke.sh`](../scripts/packaging/capability_selftest_smoke.sh) | offline gate step 9 (CI-CAPABILITY-GATE); also packaging_gate | CAPABILITY-SELFTEST + CAPABILITY-JSON-MVP; fails closed without CLI/cargo when invoked directly; offline/packaging gates skip honestly when native unavailable |
