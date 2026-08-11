@@ -3,7 +3,8 @@
 **Board ID:** BUILD-DUAL-PATH  
 **Status:** landed as dual-path policy + runnable checks (not a full BUILD-001 ADR freeze)  
 **Related:** BUILD-001, BUILD-002, BUILD-003, BUILD-006, COMPAT-009, COMPAT-011, RSK-009  
-**Spike background:** [`docs/PACKAGING_SPIKE.md`](PACKAGING_SPIKE.md)
+**Spike background:** [`docs/PACKAGING_SPIKE.md`](https://github.com/hilather/nytprof-modernization/blob/main/docs/PACKAGING_SPIKE.md)  
+**Collector source-tree (accepted):** [`docs/adrs/0003-collector-packaging-source-tree.md`](https://github.com/hilather/nytprof-modernization/blob/main/docs/adrs/0003-collector-packaging-source-tree.md) — **B0-A overlay** (`collector/`); blocks COL-001 until observed; not COL-007 product
 
 This document freezes the **support-tier dual-path contract** for the modernization repo: what must work without Cargo, what is optional when Cargo is present, and how operators verify each path.
 
@@ -178,6 +179,41 @@ Enforced by `tools/oracle/env.sh`, `scripts/baseline/build_oracle.sh`, and `scri
 
 ---
 
+## Collector overlay source tree (ADR-0003 / B0-A)
+
+**Accepted layout:** modernization collector C/XS sources live under repository-root **`collector/`** (B0-A overlay). The 6.15 oracle pin under `baseline/6.15/` remains archives + isolated install for differential tests. **Do not** implement COL-001..007 by patching `baseline/6.15/src` (B0-B rejected). Full decision: [`docs/adrs/0003-collector-packaging-source-tree.md`](https://github.com/hilather/nytprof-modernization/blob/main/docs/adrs/0003-collector-packaging-source-tree.md).
+
+| Path | Role | On oracle `PERL5LIB`? |
+|------|------|------------------------|
+| `baseline/6.15/archives/` | Immutable pin | N/A |
+| `baseline/6.15/install/` | Oracle install only | **Yes** (only this + optional test-deps) |
+| `collector/` | Overlay sink / writers (PR-B02+) | **Never** |
+| `collector/install/` or `prefix/collector/` | Candidate collector install prefix | **Never** (oracle context) |
+| `fixtures/v6/from-c/**` | C-produced v6 fixture output tree | N/A |
+| `crates/`, `perl/` | Native tools / candidate facade | **Never** (oracle context) |
+
+### Dual-path interaction
+
+| Requirement | Detail |
+|-------------|--------|
+| Legacy-only | Must succeed **without** building `collector/` or a C v6 writer |
+| Optional-native | Unchanged; Cargo optional for Rust tools only |
+| Overlay collector | Opt-in when testing sink/writer; not a dependency of `make legacy-smoke` or the legacy half of `offline_gate` |
+| Pin archives | Never rewritten by collector or fixture jobs |
+
+### CI / offline_gate notes (neutrality proof)
+
+| Phase | Gate expectation |
+|-------|------------------|
+| **Pre-sink (today)** | `./scripts/ci/offline_gate.sh` must stay green when `collector/` is absent; no new hard dependency on a C toolchain for R1-preview steps |
+| **COL-001+ (sink)** | When overlay builds are available, add fail-fast **v5-via-sink neutrality** checks (oracle-aligned stream on the agreed corpus) plus isolation asserts; **honest skip** when C toolchain / overlay build is absent |
+| **Isolation** | Parent offline gate still must not put `crates/` (or `collector/` install) on oracle `PERL5LIB`; child smokes own isolation |
+| **Fixtures** | C writer / dual harness writes under `fixtures/v6/from-c/**` only; never mutates `baseline/6.15/archives/` |
+
+**Merge rule:** PR-B02 (COL-001 semantic sink) **must not merge** without ADR-0003 accepted (this policy section + ADR). This ADR alone does **not** claim COL-007 product, wire freeze, or CLI v6 default.
+
+---
+
 ## How to verify each path
 
 ### Offline R1 gate (CI-OFFLINE-GATE / CI-OFFLINE-GATE-EXPAND / CI-QUERY-JSON-GATE / CI-CAPABILITY-GATE — recommended single operator entry)
@@ -283,12 +319,15 @@ Native install MVP contract: [`docs/schemas/native-install-mvp-v0.md`](schemas/n
 | COMPAT-009 final tier freeze / full BUILD-001 ADR | open | This doc is the runnable dual-path draft feeding that freeze |
 | MSRV freeze | open (ADR-Q017) | Optional-native uses whatever `rustc` is installed until frozen |
 | Default engine/format flips to native | out of first slice | Native remains opt-in |
+| Collector overlay sources / COL-001 sink | open (blocked only on layout — **ADR-0003 accepted**) | Tree lands in sink PRs under `collector/`; not shipped by dual-path policy alone |
+| COL-007 C v6 writer / wire freeze / CLI v6 default | deferred / open | ADR-0003 does **not** complete these |
 
 ---
 
 ## Relationship to packaging spike
 
-- Spike charter and layout notes: [`docs/PACKAGING_SPIKE.md`](PACKAGING_SPIKE.md)
+- Spike charter and layout notes: [`docs/PACKAGING_SPIKE.md`](https://github.com/hilather/nytprof-modernization/blob/main/docs/PACKAGING_SPIKE.md)
+- Collector overlay layout (B0-A): [`docs/adrs/0003-collector-packaging-source-tree.md`](https://github.com/hilather/nytprof-modernization/blob/main/docs/adrs/0003-collector-packaging-source-tree.md)
 - This policy **lands** the dual-path contract with a dedicated smoke; the spike remains historical/background detail.
 - **CI-OFFLINE-GATE** / **CI-OFFLINE-GATE-EXPAND** / **CI-QUERY-JSON-GATE** / **CI-CAPABILITY-GATE** (`scripts/ci/offline_gate.sh`) is the single offline R1 fail-fast entry (cargo tests? + harness + dual-path packaging primary + engine_auto_fallback + pure-Perl JsonlData roll-up + required query-JSON smoke + capability_selftest when native available).
 - Unified packaging gate remains the broader packaging fail-fast suite; dual-path smoke is the support-tier-focused packaging half.
