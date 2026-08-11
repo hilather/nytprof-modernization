@@ -51,16 +51,21 @@
 #   ./scripts/packaging/packaging_gate.sh          # broader packaging suite
 #   ./scripts/packaging/makemaker_dual_path_smoke.sh  # MakeMaker facade
 #
-# Non-goals: multi-OS CI matrix (BUILD-006), full packaging_gate breadth.
+# Non-goals: full multi-OS CI certification (BUILD-006 full), full packaging_gate
+# breadth. Multi-OS MVP entry is separate: scripts/ci/matrix_gate.sh + GHA
+# .github/workflows/ci-matrix.yml (BUILD-006-MVP; honest skips here preserved).
 # Isolation: never puts crates/ on oracle PERL5LIB (parent does not source
 # oracle env; child smokes own isolation).
 #
 # Policy: docs/BUILD_SUPPORT_POLICY.md
 # Board:  CI-OFFLINE-GATE / CI-OFFLINE-GATE-EXPAND / CI-CAPABILITY-GATE /
-#         CI-QUERY-JSON-GATE / NATIVE-QUERY-JSON-CROSS (docs/FIRST_SLICE_BOARD.md)
+#         CI-QUERY-JSON-GATE / NATIVE-QUERY-JSON-CROSS / BUILD-006-MVP
+#         (docs/FIRST_SLICE_BOARD.md)
 #
 # Usage (from repo root or any cwd):
 #   ./scripts/ci/offline_gate.sh
+# Multi-OS matrix entry (BUILD-006 MVP):
+#   ./scripts/ci/matrix_gate.sh
 # Optional Make target (after perl Makefile.PL):
 #   make offline-gate
 set -euo pipefail

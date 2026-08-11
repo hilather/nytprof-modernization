@@ -86,7 +86,7 @@ Behavior:
 |-------------------|----------------------|
 | Candidate dual-path packaging facade | Complete CPAN dist of Devel::NYTProf |
 | Make targets → existing packaging scripts | Full MakeMaker ↔ Cargo XS dual-build (**BUILD-003**) |
-| Default legacy without Cargo | Multi-OS CI matrix (**BUILD-006**) / CPAN upload |
+| Default legacy without Cargo | Full multi-OS CI certification (**BUILD-006** full) / CPAN upload — **MVP** lands GHA Linux+macOS only (**BUILD-006-MVP**) |
 
 ---
 
@@ -122,12 +122,16 @@ Enforced by `tools/oracle/env.sh`, `scripts/baseline/build_oracle.sh`, and `scri
 
 ### Offline R1 gate (CI-OFFLINE-GATE / CI-OFFLINE-GATE-EXPAND / CI-QUERY-JSON-GATE / CI-CAPABILITY-GATE — recommended single operator entry)
 
-Single **fail-fast** gate for critical offline R1 checks. Not a multi-OS CI matrix (**BUILD-006**).
+Single **fail-fast** gate for critical offline R1 checks on the **current host**. Multi-OS expansion is **BUILD-006-MVP** (GHA matrix + `matrix_gate.sh`); full multi-Perl / multi-rustc / Windows matrix remains **BUILD-006** residual.
 
 ```sh
 ./scripts/ci/offline_gate.sh
 # after perl Makefile.PL:
 make offline-gate
+
+# Multi-OS matrix entry (BUILD-006 MVP): host banner + host-local oracle ensure + offline_gate
+./scripts/ci/matrix_gate.sh
+# GitHub Actions: .github/workflows/ci-matrix.yml (ubuntu-latest + macos-latest)
 ```
 
 | Step | What | Cargo |
@@ -176,6 +180,8 @@ Behavior:
 | Script | Tier | Cargo |
 |--------|------|-------|
 | [`scripts/ci/offline_gate.sh`](../scripts/ci/offline_gate.sh) | offline R1 gate (CI-OFFLINE-GATE-EXPAND + CI-QUERY-JSON-GATE + CI-CAPABILITY-GATE) | Cargo tests skip if absent; harness + dual-path + engine_auto_fallback + JsonlData roll-up + query-JSON required; capability when cargo/prefix/target present |
+| [`scripts/ci/matrix_gate.sh`](../scripts/ci/matrix_gate.sh) | multi-OS matrix entry (**BUILD-006-MVP**) | Host identity banner; rebuild host-local oracle when pin paths do not resolve; then `offline_gate.sh` (honest skips preserved). Not full BUILD-006 |
+| [`.github/workflows/ci-matrix.yml`](../.github/workflows/ci-matrix.yml) | GHA multi-OS matrix (**BUILD-006-MVP**) | `ubuntu-latest` (linux-x86_64) + `macos-latest`; each row runs `matrix_gate.sh`. Not multi-Perl / multi-rustc / Windows / coverage dashboard |
 | [`scripts/packaging/engine_auto_fallback_smoke.sh`](../scripts/packaging/engine_auto_fallback_smoke.sh) | offline gate step 4 | Prefer-native / fall-back-legacy; never `crates/` on oracle PERL5LIB |
 | [`scripts/packaging/perl_jsonl_data_all_smoke.sh`](../scripts/packaging/perl_jsonl_data_all_smoke.sh) | offline gate step 5 | Thin fail-fast roll-up of pure-Perl JsonlData smokes |
 | [`scripts/packaging/perl_query_json_smoke.sh`](../scripts/packaging/perl_query_json_smoke.sh) | offline gate step 6 (CI-QUERY-JSON-GATE) | QUERY-JSON-MVP / QUERY-JSON-EXPAND: `query --json --jsonl` golden; pure-Perl; no cargo |
@@ -209,14 +215,44 @@ Native install MVP contract: [`docs/schemas/native-install-mvp-v0.md`](schemas/n
 
 ---
 
+## Multi-OS CI matrix MVP (BUILD-006-MVP)
+
+**Status:** landed as MVP — **not** full BUILD-006 platform certification.
+
+| Piece | Path | Role |
+|-------|------|------|
+| Matrix entry script | [`scripts/ci/matrix_gate.sh`](../scripts/ci/matrix_gate.sh) | Platform banner; host-local oracle ensure; run `offline_gate.sh` |
+| GitHub Actions workflow | [`.github/workflows/ci-matrix.yml`](../.github/workflows/ci-matrix.yml) | Matrix: **ubuntu-latest** (`linux-x86_64`) + **macos-latest** (`macos`) — ≥1 additional OS beyond single-host |
+| Offline gate (unchanged) | [`scripts/ci/offline_gate.sh`](../scripts/ci/offline_gate.sh) | Fail-fast R1 checks; **honest skips** when cargo/native absent |
+
+### Honesty rules
+
+| This MVP **is** | This MVP **is not** |
+|-----------------|---------------------|
+| GHA jobs on Linux x86_64 + macOS running the same offline gate | Multi-Perl / multi-rustc version matrix |
+| Host-local oracle rebuild when tracked pin paths do not resolve | Windows / full platform tier freeze |
+| Preservation of offline_gate / dual_path honest skips | Coverage dashboard or TEST-020 release matrix |
+| Documented BUILD-006 partial close | Product “multi-OS certified” claim or multi-OS prebuilts |
+
+### Definition of done for BUILD-006-MVP
+
+- [x] ≥1 additional OS/arch beyond single-host developer offline_gate path
+- [x] Runnable `scripts/ci/matrix_gate.sh` (oracle ensure + offline_gate)
+- [x] GHA workflow `.github/workflows/ci-matrix.yml` with `fail-fast: false` matrix
+- [x] Honest skips inside offline_gate preserved (no reimplementation of gate steps)
+- [x] Docs: this section + residual matrix + operator runbook + board row; absolute HTTPS links where cross-file
+- [x] Explicit non-claim: full BUILD-006 (multi-Perl, multi-rustc, Windows, dashboard) remains open
+
+---
+
 ## Explicit non-goals (open / future)
 
 | Item | Status | Notes |
 |------|--------|-------|
-| Full CI matrix | **BUILD-006** — open | Multi-OS / multi-Perl / multi-rustc jobs not required by dual-path policy or CI-OFFLINE-GATE |
+| Full CI matrix | **BUILD-006** full — open | Multi-Perl / multi-rustc / Windows / coverage dashboard; **MVP** is **BUILD-006-MVP** only (Linux + macOS offline_gate rows) |
 | Multi-OS prebuilt binaries | open (ADR-Q016) | Distribution model undecided |
 | Full MakeMaker ↔ Cargo CPAN dual-build | **BUILD-003** full — open | Candidate entry is **BUILD-MAKEMAKER-OPT** only; not a complete XS CPAN tarball |
-| Multi-OS CI / CPAN upload | **BUILD-006** / release — open | Not required by the candidate packaging entry; offline gate is single-host only |
+| Full multi-OS certification / CPAN upload | **BUILD-006** full / release — open | MVP GHA matrix does **not** complete product multi-OS certification |
 | COMPAT-009 final tier freeze / full BUILD-001 ADR | open | This doc is the runnable dual-path draft feeding that freeze |
 | MSRV freeze | open (ADR-Q017) | Optional-native uses whatever `rustc` is installed until frozen |
 | Default engine/format flips to native | out of first slice | Native remains opt-in |
@@ -239,7 +275,7 @@ Native install MVP contract: [`docs/schemas/native-install-mvp-v0.md`](schemas/n
 - [x] Critical path: legacy never requires Cargo
 - [x] `crates/` never on oracle `PERL5LIB`
 - [x] Runnable `dual_path_smoke.sh` (legacy required; native if cargo present; honest skip otherwise)
-- [x] Non-goals called out (BUILD-003 full, BUILD-006, multi-OS prebuilts)
+- [x] Non-goals called out (BUILD-003 full, BUILD-006 full vs BUILD-006-MVP, multi-OS prebuilts)
 - [x] Board row + packaging spike pointer
 
 ## Definition of done for BUILD-MAKEMAKER-OPT
@@ -260,7 +296,7 @@ Native install MVP contract: [`docs/schemas/native-install-mvp-v0.md`](schemas/n
 - [x] Never puts `crates/` on oracle `PERL5LIB`
 - [x] Optional `make offline-gate` via root `Makefile.PL`
 - [x] Docs: this section + README; board row **before COL-007**
-- [x] Non-goal: full multi-OS CI (**BUILD-006**)
+- [x] Non-goal: full multi-OS CI (**BUILD-006** full); multi-OS entry is separate **BUILD-006-MVP**
 
 ## Definition of done for CI-OFFLINE-GATE-EXPAND
 
@@ -269,7 +305,7 @@ Native install MVP contract: [`docs/schemas/native-install-mvp-v0.md`](schemas/n
 - [x] Roll-up covers: `perl_jsonl_data` + `perl_line_totals` + `perl_subdefs` + `perl_source` + `perl_a4b` + `perl_meta` + `perl_pid` + `perl_stream_complete` + `perl_discount` + `perl_sub_entry`
 - [x] Fail-fast banners for new steps; never puts `crates/` on oracle `PERL5LIB`
 - [x] Docs: this section + README offline gate table; board row **before COL-007**
-- [x] Non-goal: still not multi-OS CI (**BUILD-006**); still not full `packaging_gate` breadth
+- [x] Non-goal: still not full multi-OS CI (**BUILD-006** full); multi-OS MVP is **BUILD-006-MVP**; still not full `packaging_gate` breadth
 
 ## Definition of done for CI-CAPABILITY-GATE
 
@@ -279,7 +315,7 @@ Native install MVP contract: [`docs/schemas/native-install-mvp-v0.md`](schemas/n
 - [x] Document that dual_path with cargo typically installs `prefix/bin` before native steps, so capability usually runs on cargo hosts
 - [x] Fail-fast banner; never puts `crates/` on oracle `PERL5LIB`
 - [x] Docs: this section + README offline gate table + residual matrix offline gate row; board row **before COL-007**
-- [x] Non-goal: still not multi-OS CI (**BUILD-006**); still not full `packaging_gate` breadth
+- [x] Non-goal: still not full multi-OS CI (**BUILD-006** full); multi-OS MVP is **BUILD-006-MVP**; still not full `packaging_gate` breadth
 
 ## Definition of done for CI-QUERY-JSON-GATE
 
@@ -288,7 +324,7 @@ Native install MVP contract: [`docs/schemas/native-install-mvp-v0.md`](schemas/n
 - [x] Golden `--jsonl` path only; does not require cargo
 - [x] Never puts `crates/` on oracle `PERL5LIB`
 - [x] Docs: this section + README offline gate table + residual matrix offline gate row + R1_PREVIEW_OPERATOR_RUNBOOK; board row **before COL-007**
-- [x] Non-goal: still not multi-OS CI (**BUILD-006**); still not full `packaging_gate` breadth
+- [x] Non-goal: still not full multi-OS CI (**BUILD-006** full); multi-OS MVP is **BUILD-006-MVP**; still not full `packaging_gate` breadth
 
 ## Definition of done for NATIVE-QUERY-JSON-CROSS
 

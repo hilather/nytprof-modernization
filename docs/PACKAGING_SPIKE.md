@@ -20,7 +20,7 @@ CPAN installability without Rust (RSK-009) can kill the program even if the Rust
 ## Non-goals for the spike
 
 - Full MakeMaker ↔ Cargo integration (BUILD-003) — **not** implemented in this spike.
-- Full CI matrix (BUILD-006).
+- Full CI matrix (BUILD-006 full). **MVP:** GHA Linux+macOS offline_gate rows (**BUILD-006-MVP**).
 - Prebuilt binary distribution policy finalization.
 - Shipping native reports as default.
 
@@ -105,7 +105,7 @@ command -v cargo >/dev/null && echo "cargo present (ok; must still not be requir
 | [`scripts/packaging/perl_query_json_smoke.sh`](../scripts/packaging/perl_query_json_smoke.sh) | No (pure-Perl) | QUERY-JSON-MVP / QUERY-JSON-EXPAND: `query --json --jsonl` ×2 + parse; leaf/mid/edge **15/3/15**; `discount_events` **818**; `is_stream_complete` true; human default unchanged |
 
 ```sh
-# Offline R1 gate (single operator entry; not multi-OS CI)
+# Offline R1 gate (single operator entry; multi-OS MVP = matrix_gate / GHA)
 ./scripts/ci/offline_gate.sh
 # make offline-gate   # after perl Makefile.PL
 
@@ -297,7 +297,7 @@ Support tiers and dual-path verification are landed beyond this spike’s prose:
 ./scripts/packaging/packaging_gate.sh
 ```
 
-Full MakeMaker↔Cargo XS CPAN dual-build (**BUILD-003** full), multi-OS CI matrix (BUILD-006), and prebuilt policy remain open. The candidate MakeMaker facade (**BUILD-MAKEMAKER-OPT**) is intentionally thinner than BUILD-003.
+Full MakeMaker↔Cargo XS CPAN dual-build (**BUILD-003** full), full multi-OS CI matrix (**BUILD-006** full: multi-Perl/rustc/Windows/dashboard), and prebuilt policy remain open. Multi-OS **MVP** is **BUILD-006-MVP** (GHA ubuntu+macos + `matrix_gate.sh`). The candidate MakeMaker facade (**BUILD-MAKEMAKER-OPT**) is intentionally thinner than BUILD-003.
 
 ---
 

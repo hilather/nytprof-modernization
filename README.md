@@ -101,12 +101,16 @@ See `baseline/6.15/manifest.json` after a successful pin.
 
 ## Offline R1 gate (CI-OFFLINE-GATE / CI-OFFLINE-GATE-EXPAND / CI-QUERY-JSON-GATE)
 
-Single documented fail-fast gate for critical offline R1 checks (not multi-OS CI):
+Single documented fail-fast gate for critical offline R1 checks on the current host. Multi-OS expansion is **BUILD-006-MVP** (not full multi-Perl/Windows certification):
 
 ```sh
 ./scripts/ci/offline_gate.sh
 # after perl Makefile.PL:
 make offline-gate
+
+# Multi-OS matrix entry (BUILD-006 MVP): host oracle ensure + offline_gate
+./scripts/ci/matrix_gate.sh
+# GitHub Actions: .github/workflows/ci-matrix.yml (ubuntu-latest + macos-latest)
 ```
 
 | Step | Action | If cargo missing |
