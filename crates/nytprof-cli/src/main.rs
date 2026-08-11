@@ -386,11 +386,7 @@ fn resolve_capability_probe(forced: Option<&str>) -> Option<PathBuf> {
         .join("../..")
         .join(DEFAULT_CAPABILITY_FIXTURE);
     if from_manifest.is_file() {
-        return Some(
-            from_manifest
-                .canonicalize()
-                .unwrap_or(from_manifest),
-        );
+        return Some(from_manifest.canonicalize().unwrap_or(from_manifest));
     }
     None
 }
@@ -550,10 +546,7 @@ fn render_aggregates_json(
         .sub_total("main::leaf")
         .map(|t| t.returns)
         .unwrap_or(0);
-    let mid_returns = model
-        .sub_total("main::mid")
-        .map(|t| t.returns)
-        .unwrap_or(0);
+    let mid_returns = model.sub_total("main::mid").map(|t| t.returns).unwrap_or(0);
     let mid_leaf_edge = model
         .call_edge("main::mid", "main::leaf")
         .map(|e| e.count)
@@ -561,14 +554,8 @@ fn render_aggregates_json(
     // JSON-BLOCKS-MVP: same greppable A4/A4b keys as Perl query --json.
     // blocks-calls1: line 1:5 calls = 780, block_line 1:4 calls = 810.
     // Absent locations → 0 (default-calls1 has no TIME_BLOCK → block 0).
-    let line_calls_1_5 = model
-        .line_total(1, 5)
-        .map(|t| t.calls)
-        .unwrap_or(0);
-    let block_line_calls_1_4 = model
-        .block_line_total(1, 4)
-        .map(|t| t.calls)
-        .unwrap_or(0);
+    let line_calls_1_5 = model.line_total(1, 5).map(|t| t.calls).unwrap_or(0);
+    let block_line_calls_1_4 = model.block_line_total(1, 4).map(|t| t.calls).unwrap_or(0);
 
     // JSON-NATIVE-STREAM-MVP: same keys as Perl query --json (QUERY-JSON-EXPAND).
     // Reasons come from ProfileModel::stream_incompleteness_reasons (COMPAT-010).
@@ -611,10 +598,7 @@ fn render_aggregates_json(
             .map(|s| json!(s))
             .unwrap_or(Value::Null)
     };
-    let file_1 = model
-        .file_name(1)
-        .map(|s| json!(s))
-        .unwrap_or(Value::Null);
+    let file_1 = model.file_name(1).map(|s| json!(s)).unwrap_or(Value::Null);
     // JSON-FILE-BASENAME-MVP: stable basename for fid 1 (absolute path is volatile).
     // ProfileModel::fid_basename only; null when fid/path absent.
     let file_1_basename = model
@@ -624,14 +608,14 @@ fn render_aggregates_json(
 
     let mut subs = serde_json::Map::new();
     let mut sub_rows: Vec<_> = model.sub_return_totals.iter().collect();
-    sub_rows.sort_by(|(a, _), (b, _)| a.cmp(b));
+    sub_rows.sort_by_key(|(a, _)| *a);
     for (name, t) in sub_rows {
         subs.insert(name.clone(), json!(t.returns));
     }
 
     let mut edges = serde_json::Map::new();
     let mut edge_rows: Vec<_> = model.call_edges.iter().collect();
-    edge_rows.sort_by(|(a, _), (b, _)| a.cmp(b));
+    edge_rows.sort_by_key(|(a, _)| *a);
     for ((caller, called), e) in edge_rows {
         // TAB-joined key — same convention as QUERY-JSON-MVP / JsonlData.
         let key = format!("{caller}\t{called}");
@@ -658,7 +642,10 @@ fn render_aggregates_json(
         json!(model.total_events.saturating_add(1)),
     );
     // JSON-NATIVE-STREAM-MVP: stream completeness + dump/model-derived PID/timing counts.
-    obj.insert("is_stream_complete".into(), json!(model.is_stream_complete()));
+    obj.insert(
+        "is_stream_complete".into(),
+        json!(model.is_stream_complete()),
+    );
     obj.insert(
         "incompleteness_reasons".into(),
         Value::Array(incompleteness_reasons),
@@ -732,8 +719,7 @@ fn write_stdout_text(text: &str) -> Result<(), Box<dyn std::error::Error>> {
 ///
 /// `-o` / `--output` and `--out-dir` / `--dir` are mutually exclusive.
 fn cmd_html(args: &[String]) -> Result<(), Box<dyn std::error::Error>> {
-    let usage =
-        "Usage: nytprof-cli html <profile.out> [-o path.html | --out-dir DIR]";
+    let usage = "Usage: nytprof-cli html <profile.out> [-o path.html | --out-dir DIR]";
     let mut path: Option<&str> = None;
     let mut out_path: Option<&str> = None;
     let mut out_dir: Option<&str> = None;
@@ -742,9 +728,7 @@ fn cmd_html(args: &[String]) -> Result<(), Box<dyn std::error::Error>> {
         match args[i].as_str() {
             "-o" | "--output" => {
                 i += 1;
-                let p = args
-                    .get(i)
-                    .ok_or(format!("{usage} (-o needs a path)"))?;
+                let p = args.get(i).ok_or(format!("{usage} (-o needs a path)"))?;
                 if out_path.is_some() {
                     return Err(format!("{usage} (duplicate -o)").into());
                 }
@@ -795,6 +779,7 @@ fn cmd_html(args: &[String]) -> Result<(), Box<dyn std::error::Error>> {
             eprintln!("{base}/{filename}");
         }
         eprintln!("{base}/{}", site.source_filename);
+        eprintln!("{base}/{}", site.style_filename);
         return Ok(());
     }
 

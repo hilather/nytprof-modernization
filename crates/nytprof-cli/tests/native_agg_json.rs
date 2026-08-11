@@ -47,18 +47,15 @@ fn cli_bin() -> PathBuf {
 }
 
 fn fixture_default_calls1() -> PathBuf {
-    PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-        .join("../../fixtures/v5/default-calls1/nytprof.out")
+    PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../fixtures/v5/default-calls1/nytprof.out")
 }
 
 fn fixture_calls2_default() -> PathBuf {
-    PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-        .join("../../fixtures/v5/calls2-default/nytprof.out")
+    PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../fixtures/v5/calls2-default/nytprof.out")
 }
 
 fn fixture_blocks_calls1() -> PathBuf {
-    PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-        .join("../../fixtures/v5/blocks-calls1/nytprof.out")
+    PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../fixtures/v5/blocks-calls1/nytprof.out")
 }
 
 fn run_cli(args: &[&str]) -> (i32, String, String) {
@@ -74,9 +71,8 @@ fn run_cli(args: &[&str]) -> (i32, String, String) {
 
 /// Parse and assert MVP aggregate fields for default-calls1.
 fn assert_agg_json_default_calls1(stdout: &str, label: &str) -> Value {
-    let v: Value = serde_json::from_str(stdout.trim()).unwrap_or_else(|e| {
-        panic!("{label}: stdout is not JSON: {e}\nstdout:\n{stdout}")
-    });
+    let v: Value = serde_json::from_str(stdout.trim())
+        .unwrap_or_else(|e| panic!("{label}: stdout is not JSON: {e}\nstdout:\n{stdout}"));
     let obj = v
         .as_object()
         .unwrap_or_else(|| panic!("{label}: expected JSON object\nstdout:\n{stdout}"));
@@ -131,9 +127,8 @@ fn assert_agg_json_default_calls1(stdout: &str, label: &str) -> Value {
     // JSON-NATIVE-STREAM-MVP: match ProfileModel for the same fixture path.
     // default-calls1 is complete; time_line/pid counts ≥ 1 (model-derived).
     let path = fixture_default_calls1();
-    let model = ProfileModel::from_path(&path).unwrap_or_else(|e| {
-        panic!("{label}: ProfileModel::from_path({}): {e}", path.display())
-    });
+    let model = ProfileModel::from_path(&path)
+        .unwrap_or_else(|e| panic!("{label}: ProfileModel::from_path({}): {e}", path.display()));
 
     // JSON-TOTAL-EVENTS-MVP: dump stream multiplicity including synthetic _END.
     // ProfileModel.total_events = decoded binary tags (2473); dump/JSONL lines = 2474.
@@ -302,20 +297,18 @@ fn assert_agg_json_default_calls1(stdout: &str, label: &str) -> Value {
         .attributes
         .get("basetime")
         .map(String::as_str)
-        .unwrap_or_else(|| {
-            panic!("{label}: model missing attributes[basetime] on default-calls1")
-        });
+        .unwrap_or_else(|| panic!("{label}: model missing attributes[basetime] on default-calls1"));
     let want_calls = model
         .options
         .get("calls")
         .map(String::as_str)
         .unwrap_or_else(|| panic!("{label}: model missing options[calls] on default-calls1"));
-    let want_file_1 = model.file_name(1).unwrap_or_else(|| {
-        panic!("{label}: model missing file_name(1) on default-calls1")
-    });
-    let want_file_1_basename = model.fid_basename(1).unwrap_or_else(|| {
-        panic!("{label}: model missing fid_basename(1) on default-calls1")
-    });
+    let want_file_1 = model
+        .file_name(1)
+        .unwrap_or_else(|| panic!("{label}: model missing file_name(1) on default-calls1"));
+    let want_file_1_basename = model
+        .fid_basename(1)
+        .unwrap_or_else(|| panic!("{label}: model missing fid_basename(1) on default-calls1"));
     assert_eq!(
         obj.get("attribute_ticks_per_sec").and_then(|x| x.as_str()),
         Some(want_ticks),
@@ -489,9 +482,8 @@ fn report_json_calls2_default_sub_entry_27() {
         code, 0,
         "report --json calls2-default must exit 0\nstdout:\n{stdout}\nstderr:\n{stderr}"
     );
-    let v: Value = serde_json::from_str(stdout.trim()).unwrap_or_else(|e| {
-        panic!("calls2-default: stdout is not JSON: {e}\nstdout:\n{stdout}")
-    });
+    let v: Value = serde_json::from_str(stdout.trim())
+        .unwrap_or_else(|e| panic!("calls2-default: stdout is not JSON: {e}\nstdout:\n{stdout}"));
     let obj = v
         .as_object()
         .unwrap_or_else(|| panic!("calls2-default: expected JSON object\nstdout:\n{stdout}"));
@@ -517,7 +509,10 @@ fn report_json_blocks_calls1_time_block_916() {
     let p = path.to_str().expect("utf-8 path");
 
     let model = ProfileModel::from_path(&path).unwrap_or_else(|e| {
-        panic!("blocks-calls1: ProfileModel::from_path({}): {e}", path.display())
+        panic!(
+            "blocks-calls1: ProfileModel::from_path({}): {e}",
+            path.display()
+        )
     });
     assert_eq!(
         model.time_block_events, 916,
@@ -535,9 +530,8 @@ fn report_json_blocks_calls1_time_block_916() {
         code, 0,
         "report --json blocks-calls1 must exit 0\nstdout:\n{stdout}\nstderr:\n{stderr}"
     );
-    let v: Value = serde_json::from_str(stdout.trim()).unwrap_or_else(|e| {
-        panic!("blocks-calls1: stdout is not JSON: {e}\nstdout:\n{stdout}")
-    });
+    let v: Value = serde_json::from_str(stdout.trim())
+        .unwrap_or_else(|e| panic!("blocks-calls1: stdout is not JSON: {e}\nstdout:\n{stdout}"));
     let obj = v
         .as_object()
         .unwrap_or_else(|| panic!("blocks-calls1: expected JSON object\nstdout:\n{stdout}"));

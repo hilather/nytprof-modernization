@@ -38,8 +38,8 @@ Related inventories / classification (not re-frozen here):
 |---------|-----|--------|--------------------------------------------------|
 | text report | `report` / `summary` | **advertised** | Human text summary from model (A5/A7 counts). Not full REPORT-001..020 artifact matrix, not HTML/CSS/JS site. |
 | aggregates JSON | `report --json` / `aggregates` | **advertised** | Structured JSON from real ProfileModel (`ok`/`profile`/`leaf_returns`/`mid_returns`/`mid_leaf_edge`/`discount_events`/`subs`/`edges`). Schema [`docs/schemas/native-aggregates-json-mvp-v0.md`](https://github.com/hilather/nytprof-modernization/blob/main/docs/schemas/native-aggregates-json-mvp-v0.md). Not full A1–A9 JSON export or Data.pm. |
-| HTML single-file | `html -o` | **advertised** | Single HTML summary (subs, edges, excl ranking, workload source/line totals, optional A4b table). Not full `nytprofhtml` DOM, tablesorter, flame, Graphviz, or multi-file site assets. |
-| HTML multi-file | `html --out-dir` | **advertised** | `index.html` + per-fid `file-*.html` + `source.html`; atomic publish + out-dir safety. Not full oracle site layout, CSS/JS share assets, flame SVG, or Graphviz `.dot`. |
+| HTML single-file | `html -o` | **advertised** | Single HTML summary (subs, edges, excl ranking, workload source/line totals, optional A4b table) with **inline** shared MVP CSS (`SHARED_STYLE_CSS`). Not full `nytprofhtml` DOM, tablesorter, flame, or Graphviz. Structure: [html-shared-css-structure-mvp-v0.md](https://github.com/hilather/nytprof-modernization/blob/main/docs/schemas/html-shared-css-structure-mvp-v0.md). |
+| HTML multi-file | `html --out-dir` | **advertised** | `index.html` + per-fid `file-*.html` + `source.html` + shared **`style.css`** (MVP); atomic publish + out-dir safety. Not full oracle site layout, Shared JS/tablesorter, oracle `get_css()`, flame SVG, or Graphviz `.dot`. |
 | CSV dual-section | `csv` | **advertised** | Dual-section subs + call_edges CSV (`# subroutines` / `# call_edges`). **Not** Reader line-CSV dialect / per-file oracle `nytprofcsv` layout / `--delim` / `--annotated`. |
 | callgrind | `callgrind` / `cg` | **advertised** | Callgrind-style text with contracted names/counts. **Not** full KCacheGrind byte-id / microsecond scaling / legacy `nytprofcg` byte identity. |
 | folded | `folded` | **advertised** | Folded stacks from call edges (`caller;called count`). Not full multi-file `nytprofcalls` stream path / `--calls` dialect freeze. |
@@ -51,7 +51,7 @@ Related inventories / classification (not re-frozen here):
 - Flame graph / `flamegraph.pl` integration  
 - Graphviz / `.dot` call-graph pages  
 - Full block/sub-level report pages beyond A4/A4b tables already on HTML MVP  
-- Shared CSS/JS / tablesorter / treemap / `index-subs-excl.html` and other oracle-only site assets  
+- Shared **JS** / tablesorter / treemap / `index-subs-excl.html` and other oracle-only site assets (native MVP **`style.css`** / inline CSS **is** advertised — not oracle CSS parity)  
 - `nytprofmerge`  
 - Full plan REPORT-001..020 deliverables (report IR, parallel scheduler, visual regression suite, compact mode, etc.)
 
@@ -123,6 +123,7 @@ Claims of “report parity” in this program slice mean **exact semantic counts
 | Blocks semantic parity (line 5 calls 780) | [blocks-semantic-parity-mvp-v0.md](https://github.com/hilather/nytprof-modernization/blob/main/docs/schemas/blocks-semantic-parity-mvp-v0.md) |
 | HTML single-file | [html-report-mvp-v0.md](https://github.com/hilather/nytprof-modernization/blob/main/docs/schemas/html-report-mvp-v0.md) |
 | HTML multi-file | [html-multifile-mvp-v0.md](https://github.com/hilather/nytprof-modernization/blob/main/docs/schemas/html-multifile-mvp-v0.md) |
+| HTML shared CSS + structure | [html-shared-css-structure-mvp-v0.md](https://github.com/hilather/nytprof-modernization/blob/main/docs/schemas/html-shared-css-structure-mvp-v0.md) |
 | HTML per-file pages | [html-per-file-mvp-v0.md](https://github.com/hilather/nytprof-modernization/blob/main/docs/schemas/html-per-file-mvp-v0.md) |
 | HTML `--out-dir` safety | [html-outdir-safety-mvp-v0.md](https://github.com/hilather/nytprof-modernization/blob/main/docs/schemas/html-outdir-safety-mvp-v0.md) |
 | CSV semantic parity | [csv-semantic-parity-mvp-v0.md](https://github.com/hilather/nytprof-modernization/blob/main/docs/schemas/csv-semantic-parity-mvp-v0.md) |

@@ -42,16 +42,15 @@ fn parse_engine_name(name: &str) -> Result<Engine, String> {
 
 /// Message printed when `--engine=legacy` / `NYTPROF_ENGINE=legacy` is selected.
 pub fn legacy_not_wired_message() -> String {
-    format!(
-        "engine=legacy is not wired into nytprof-cli yet.\n\
-         \n\
-         Legacy reporting uses the pinned oracle install under baseline/6.15\n\
-         (e.g. baseline/6.15/install/bin/nytprofhtml). The full Perl facade\n\
-         is not yet available from this binary.\n\
-         \n\
-         Use --engine=native (default) for the Rust report/verify path, or\n\
-         invoke the oracle tools directly from baseline/6.15."
-    )
+    "engine=legacy is not wired into nytprof-cli yet.\n\
+     \n\
+     Legacy reporting uses the pinned oracle install under baseline/6.15\n\
+     (e.g. baseline/6.15/install/bin/nytprofhtml). The full Perl facade\n\
+     is not yet available from this binary.\n\
+     \n\
+     Use --engine=native (default) for the Rust report/verify path, or\n\
+     invoke the oracle tools directly from baseline/6.15."
+        .to_owned()
 }
 
 /// Peel a leading `--engine=…` / `--engine …` from argv-style args.
@@ -84,9 +83,7 @@ pub fn peel_engine_flag(args: &[String]) -> Result<(Option<String>, Vec<String>)
             i += 1;
             let val = args
                 .get(i)
-                .ok_or_else(|| {
-                    format!("--engine requires a value (allowed: {ALLOWED_ENGINES})")
-                })?;
+                .ok_or_else(|| format!("--engine requires a value (allowed: {ALLOWED_ENGINES})"))?;
             if val.starts_with('-') {
                 return Err(format!(
                     "--engine requires a value (allowed: {ALLOWED_ENGINES})"
@@ -140,10 +137,7 @@ mod tests {
     fn auto_maps_to_native() {
         assert_eq!(resolve_engine(Some("auto"), None).unwrap(), Engine::Native);
         assert_eq!(resolve_engine(None, Some("auto")).unwrap(), Engine::Native);
-        assert_eq!(
-            resolve_engine(Some("AUTO"), None).unwrap(),
-            Engine::Native
-        );
+        assert_eq!(resolve_engine(Some("AUTO"), None).unwrap(), Engine::Native);
     }
 
     #[test]
@@ -169,11 +163,7 @@ mod tests {
 
     #[test]
     fn peel_engine_equals_form() {
-        let args = vec![
-            "--engine=native".into(),
-            "report".into(),
-            "foo.out".into(),
-        ];
+        let args = vec!["--engine=native".into(), "report".into(), "foo.out".into()];
         let (eng, rest) = peel_engine_flag(&args).unwrap();
         assert_eq!(eng.as_deref(), Some("native"));
         assert_eq!(rest, vec!["report", "foo.out"]);

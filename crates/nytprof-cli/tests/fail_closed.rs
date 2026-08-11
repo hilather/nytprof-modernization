@@ -37,8 +37,7 @@ fn cli_bin() -> PathBuf {
 }
 
 fn fixture_default_calls1() -> PathBuf {
-    PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-        .join("../../fixtures/v5/default-calls1/nytprof.out")
+    PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../fixtures/v5/default-calls1/nytprof.out")
 }
 
 fn temp_path(label: &str) -> PathBuf {

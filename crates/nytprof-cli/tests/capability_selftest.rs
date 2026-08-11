@@ -31,8 +31,7 @@ fn cli_bin() -> PathBuf {
 }
 
 fn fixture_default_calls1() -> PathBuf {
-    PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-        .join("../../fixtures/v5/default-calls1/nytprof.out")
+    PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../fixtures/v5/default-calls1/nytprof.out")
 }
 
 fn run_capability(args: &[&str]) -> (i32, String, String) {
@@ -142,7 +141,9 @@ fn capability_forced_bad_profile_fails() {
         "capability on corrupt profile must fail closed\nstdout:\n{stdout}\nstderr:\n{stderr}"
     );
     assert!(
-        !stdout.lines().any(|l| l == "OK: native capability self-test"),
+        !stdout
+            .lines()
+            .any(|l| l == "OK: native capability self-test"),
         "must not print success OK block on failure\nstdout:\n{stdout}"
     );
 }
@@ -170,7 +171,11 @@ fn capability_twice_consistent_markers() {
         v.sort_unstable();
         v
     }
-    assert_eq!(core(&o1), core(&o2), "capability markers must match across runs");
+    assert_eq!(
+        core(&o1),
+        core(&o2),
+        "capability markers must match across runs"
+    );
 }
 
 /// Engine flag must not block capability (reports this binary, not a backend).
@@ -185,9 +190,8 @@ fn capability_works_under_engine_legacy() {
 }
 
 fn assert_json_capability_ok(stdout: &str, label: &str) -> Value {
-    let v: Value = serde_json::from_str(stdout.trim()).unwrap_or_else(|e| {
-        panic!("{label}: stdout is not JSON: {e}\nstdout:\n{stdout}")
-    });
+    let v: Value = serde_json::from_str(stdout.trim())
+        .unwrap_or_else(|e| panic!("{label}: stdout is not JSON: {e}\nstdout:\n{stdout}"));
     let obj = v
         .as_object()
         .unwrap_or_else(|| panic!("{label}: expected JSON object\nstdout:\n{stdout}"));
