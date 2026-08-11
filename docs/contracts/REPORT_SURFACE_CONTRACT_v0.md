@@ -38,8 +38,8 @@ Related inventories / classification (not re-frozen here):
 |---------|-----|--------|--------------------------------------------------|
 | text report | `report` / `summary` | **advertised** | Human text summary from model (A5/A7 counts). Not full REPORT-001..020 artifact matrix, not HTML/CSS/JS site. |
 | aggregates JSON | `report --json` / `aggregates` | **advertised** | Structured JSON from real ProfileModel (`ok`/`profile`/`leaf_returns`/`mid_returns`/`mid_leaf_edge`/`discount_events`/`subs`/`edges`). Schema [`docs/schemas/native-aggregates-json-mvp-v0.md`](https://github.com/hilather/nytprof-modernization/blob/main/docs/schemas/native-aggregates-json-mvp-v0.md). Not full A1–A9 JSON export or Data.pm. |
-| HTML single-file | `html -o` | **advertised** | Single HTML summary (subs, edges, excl ranking, workload source/line totals, optional A4b table) with **inline** shared MVP CSS (`SHARED_STYLE_CSS`). Not full `nytprofhtml` DOM, tablesorter, flame, or Graphviz. Structure: [html-shared-css-structure-mvp-v0.md](https://github.com/hilather/nytprof-modernization/blob/main/docs/schemas/html-shared-css-structure-mvp-v0.md). |
-| HTML multi-file | `html --out-dir` | **advertised** | `index.html` + **`index-subs-excl.html`** (exclusive ranking) + per-fid `file-*.html` + `source.html` + shared **`style.css`** (MVP); atomic publish + out-dir safety. Not full oracle site layout, Shared JS/tablesorter, oracle `get_css()`, flame SVG, or Graphviz `.dot`. Schema [html-subs-excl-index-mvp-v0.md](https://github.com/hilather/nytprof-modernization/blob/main/docs/schemas/html-subs-excl-index-mvp-v0.md). |
+| HTML single-file | `html -o` | **advertised** | Single HTML summary (subs, edges, excl ranking, workload source/line totals, optional A4b table) with **inline** shared MVP CSS (`SHARED_STYLE_CSS`). Optional `--flame` embeds native folded-based SVG (default off). Not full `nytprofhtml` DOM, tablesorter, `flamegraph.pl`, or Graphviz. Structure: [html-shared-css-structure-mvp-v0.md](https://github.com/hilather/nytprof-modernization/blob/main/docs/schemas/html-shared-css-structure-mvp-v0.md); flame: [html-optional-flame-mvp-v0.md](https://github.com/hilather/nytprof-modernization/blob/main/docs/schemas/html-optional-flame-mvp-v0.md). |
+| HTML multi-file | `html --out-dir` | **advertised** | `index.html` + per-fid `file-*.html` + `source.html` + shared **`style.css`** (MVP); atomic publish + out-dir safety. Optional `--flame` adds `all_stacks_by_time.svg` + `.folded` (default **off** — no bloat). Not full oracle site layout, Shared JS/tablesorter, oracle `get_css()`, `flamegraph.pl`, or Graphviz `.dot`. |
 | CSV dual-section | `csv` | **advertised** | Dual-section subs + call_edges CSV (`# subroutines` / `# call_edges`). **Not** Reader line-CSV dialect / per-file oracle `nytprofcsv` layout / `--delim` / `--annotated`. |
 | callgrind | `callgrind` / `cg` | **advertised** | Callgrind-style text with contracted names/counts. **Not** full KCacheGrind byte-id / microsecond scaling / legacy `nytprofcg` byte identity. |
 | folded | `folded` | **advertised** | Folded stacks from call edges (`caller;called count`). Not full multi-file `nytprofcalls` stream path / `--calls` dialect freeze. |
@@ -48,10 +48,10 @@ Related inventories / classification (not re-frozen here):
 
 **Not advertised** on the native path in this slice (remain legacy-only / open; do not claim native parity):
 
-- Flame graph / `flamegraph.pl` integration  
+- Oracle `flamegraph.pl` / multi-frame `nytprofcalls` flame integration (native **opt-in** folded+SVG path **is** advertised — not oracle tool/visual parity; default **off**)  
 - Graphviz / `.dot` call-graph pages  
 - Full block/sub-level report pages beyond A4/A4b tables already on HTML MVP  
-- Shared **JS** / tablesorter / treemap and other oracle-only site assets (native MVP **`style.css`** / inline CSS and multi-file **`index-subs-excl.html`** **are** advertised — not oracle CSS/DOM parity)  
+- Shared **JS** / tablesorter / treemap / `index-subs-excl.html` and other oracle-only site assets (native MVP **`style.css`** / inline CSS **is** advertised — not oracle CSS parity)  
 - `nytprofmerge`  
 - Full plan REPORT-001..020 deliverables (report IR, parallel scheduler, visual regression suite, compact mode, etc.)
 
@@ -104,7 +104,7 @@ This provisional freeze is **not** completion of plan package REPORT-001..020:
 | REPORT-001 full artifact catalog + golden corpus | **not** done — this v0 freezes **advertised MVP surfaces + counts only** |
 | REPORT-002 deterministic report IR | **not** done |
 | Full index / source / block / sub pages (REPORT-004..006) | **partial** HTML MVP only |
-| Flame (REPORT-008) / Graphviz (REPORT-009) | **not** advertised native |
+| Flame (REPORT-008) / Graphviz (REPORT-009) | **partial** native opt-in flame only (REPORT-HTML-OPTIONAL-FLAME); Graphviz **not** advertised |
 | Parallel render / telemetry / visual a11y (REPORT-010, 018, 019) | **not** in this slice |
 | Full `nytprofhtml` DOM / CSS / tablesorter / JS | **out of scope** |
 | Byte-identical HTML / CSV / callgrind vs oracle tools | **out of scope** |
@@ -123,8 +123,8 @@ Claims of “report parity” in this program slice mean **exact semantic counts
 | Blocks semantic parity (line 5 calls 780) | [blocks-semantic-parity-mvp-v0.md](https://github.com/hilather/nytprof-modernization/blob/main/docs/schemas/blocks-semantic-parity-mvp-v0.md) |
 | HTML single-file | [html-report-mvp-v0.md](https://github.com/hilather/nytprof-modernization/blob/main/docs/schemas/html-report-mvp-v0.md) |
 | HTML multi-file | [html-multifile-mvp-v0.md](https://github.com/hilather/nytprof-modernization/blob/main/docs/schemas/html-multifile-mvp-v0.md) |
-| HTML exclusive sub index | [html-subs-excl-index-mvp-v0.md](https://github.com/hilather/nytprof-modernization/blob/main/docs/schemas/html-subs-excl-index-mvp-v0.md) |
 | HTML shared CSS + structure | [html-shared-css-structure-mvp-v0.md](https://github.com/hilather/nytprof-modernization/blob/main/docs/schemas/html-shared-css-structure-mvp-v0.md) |
+| HTML optional flame | [html-optional-flame-mvp-v0.md](https://github.com/hilather/nytprof-modernization/blob/main/docs/schemas/html-optional-flame-mvp-v0.md) |
 | HTML per-file pages | [html-per-file-mvp-v0.md](https://github.com/hilather/nytprof-modernization/blob/main/docs/schemas/html-per-file-mvp-v0.md) |
 | HTML `--out-dir` safety | [html-outdir-safety-mvp-v0.md](https://github.com/hilather/nytprof-modernization/blob/main/docs/schemas/html-outdir-safety-mvp-v0.md) |
 | CSV semantic parity | [csv-semantic-parity-mvp-v0.md](https://github.com/hilather/nytprof-modernization/blob/main/docs/schemas/csv-semantic-parity-mvp-v0.md) |
@@ -184,4 +184,5 @@ Optional companion gates (same count contract on other surfaces):
 |----|--------|----------|
 | `REPORT-CONTRACT-FREEZE` | **done** (this slice) | this file + `tools/oracle/report_semantic_parity.sh` (and related MVP schemas) |
 | `REPORT-HTML-RESIDUAL-INV` | done | [`REPORT_HTML_RESIDUAL_INVENTORY_v0.md`](https://github.com/hilather/nytprof-modernization/blob/main/docs/contracts/REPORT_HTML_RESIDUAL_INVENTORY_v0.md) |
+| `REPORT-HTML-OPTIONAL-FLAME` | done | [html-optional-flame-mvp-v0.md](https://github.com/hilather/nytprof-modernization/blob/main/docs/schemas/html-optional-flame-mvp-v0.md); opt-in `--flame` (default off) |
 | `COL-007` | deferred until after report-side evidence | C v6 writer — unblocked for *start* by this freeze; not implemented here |

@@ -6,7 +6,7 @@
 //! `docs/schemas/html-per-file-mvp-v0.md` (A4b block_line_totals),
 //! `docs/schemas/html-outdir-safety-mvp-v0.md`,
 //! `docs/schemas/html-shared-css-structure-mvp-v0.md` (shared CSS + structure),
-//! `docs/schemas/html-subs-excl-index-mvp-v0.md` (exclusive sub index page),
+//! `docs/schemas/html-optional-flame-mvp-v0.md` (optional `--flame` path),
 //! `docs/schemas/export-formats-mvp-v0.md`,
 //! `docs/schemas/export-semantic-parity-mvp-v0.md`,
 //! `docs/schemas/verify-cli-mvp-v0.md`,
@@ -240,13 +240,23 @@ pub fn escape_html(s: &str) -> String {
     out
 }
 
-/// Multi-file HTML report site (index + per-fid source pages + exclusive sub
-/// index + shared CSS).
+/// Options for native HTML rendering (single-file and multi-file).
+///
+/// Defaults keep sites lean: optional artifacts (flame) are **off** unless
+/// requested. See `docs/schemas/html-optional-flame-mvp-v0.md`.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub struct HtmlRenderOptions {
+    /// Opt-in flame path: publish folded stacks + native SVG (and index links /
+    /// single-file embed). **Default `false`** — no default bloat.
+    pub flame: bool,
+}
+
+/// Multi-file HTML report site (index + per-fid source pages + shared CSS).
 ///
 /// See `docs/schemas/html-multifile-mvp-v0.md`,
 /// `docs/schemas/html-per-file-mvp-v0.md`,
 /// `docs/schemas/html-shared-css-structure-mvp-v0.md`, and
-/// `docs/schemas/html-subs-excl-index-mvp-v0.md`.
+/// `docs/schemas/html-optional-flame-mvp-v0.md` (optional flame fields).
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct HtmlSite {
     /// Contents of `index.html` (summary with relative links to file pages).
@@ -257,13 +267,6 @@ pub struct HtmlSite {
     pub source_filename: String,
     /// Per-fid pages: `(filename, html)` e.g. `("file-1.html", "...")`, sorted by fid.
     pub file_pages: Vec<(String, String)>,
-    /// Full exclusive-time sub ranking page body
-    /// ([`HtmlSite::index_subs_excl_filename`] / `index-subs-excl.html`).
-    pub index_subs_excl_html: String,
-    /// Relative filename of the exclusive sub index (always
-    /// [`INDEX_SUBS_EXCL_FILENAME`] / `"index-subs-excl.html"` from
-    /// [`render_html_site`]).
-    pub index_subs_excl_filename: String,
     /// Shared stylesheet body written as [`HtmlSite::style_filename`] (`style.css`).
     ///
     /// Same text as [`SHARED_STYLE_CSS`]. Multi-file pages link to
@@ -273,6 +276,20 @@ pub struct HtmlSite {
     /// Relative filename of the shared stylesheet (must match page `<link href>`;
     /// always [`STYLE_CSS_FILENAME`] / `"style.css"` from [`render_html_site`]).
     pub style_filename: String,
+    /// Optional folded-stack body for flame tools (`None` when flame is off).
+    ///
+    /// Same text as [`render_folded_stacks`]. Published as
+    /// [`HtmlSite::flame_folded_filename`] when present.
+    pub flame_folded: Option<String>,
+    /// Relative folded filename (e.g. [`FLAME_FOLDED_FILENAME`]) when flame is on.
+    pub flame_folded_filename: Option<String>,
+    /// Optional native flame SVG body (`None` when flame is off).
+    ///
+    /// From [`render_flame_svg`] (folded-based icicle; **not** oracle
+    /// `flamegraph.pl`). Published as [`HtmlSite::flame_svg_filename`].
+    pub flame_svg: Option<String>,
+    /// Relative SVG filename (e.g. [`FLAME_SVG_FILENAME`]) when flame is on.
+    pub flame_svg_filename: Option<String>,
 }
 
 /// How a document loads the shared MVP stylesheet.
@@ -312,17 +329,24 @@ h1,h2{margin-top:1.25rem}\n\
 p.profile-path code{word-break:break-all}\n\
 ul.source-files{list-style:disc;margin-left:1.25rem}\n\
 a{color:#0645ad}\n\
+section.flame{margin:1.25rem 0}\n\
+p.flame-links{font-size:0.95rem}\n\
+.flame-svg-embed{max-width:100%;overflow:auto;border:1px solid #ddd;padding:0.5rem;background:#fafafa}\n\
+.flame-svg-embed svg{display:block;max-width:100%;height:auto}\n\
 ";
 
 /// Canonical multi-file stylesheet filename (`style.css`).
 pub const STYLE_CSS_FILENAME: &str = "style.css";
 
-/// Canonical multi-file exclusive-time sub index filename (`index-subs-excl.html`).
+/// Multi-file folded-stack filename when `--flame` / [`HtmlRenderOptions::flame`].
 ///
-/// Oracle `nytprofhtml` emits the same name for the full exclusive-sorted
-/// subroutine index. Native page is MVP (stable structure classes, not oracle
-/// DOM/tablesorter). See `docs/schemas/html-subs-excl-index-mvp-v0.md`.
-pub const INDEX_SUBS_EXCL_FILENAME: &str = "index-subs-excl.html";
+/// Folded text matches [`render_folded_stacks`] (not oracle `nytprofcalls`
+/// `.calls` dialect). See `docs/schemas/html-optional-flame-mvp-v0.md`.
+pub const FLAME_FOLDED_FILENAME: &str = "all_stacks_by_time.folded";
+
+/// Multi-file native flame SVG filename when flame is on (oracle-aligned basename;
+/// **not** `flamegraph.pl` output).
+pub const FLAME_SVG_FILENAME: &str = "all_stacks_by_time.svg";
 
 /// Self-contained HTML summary report (MVP; see `docs/schemas/html-report-mvp-v0.md`).
 ///
@@ -331,10 +355,26 @@ pub const INDEX_SUBS_EXCL_FILENAME: &str = "index-subs-excl.html";
 ///
 /// **CSS policy:** embeds [`SHARED_STYLE_CSS`] inline so the single document needs
 /// no external assets (see `docs/schemas/html-shared-css-structure-mvp-v0.md`).
+///
+/// **Flame:** off by default; use [`render_html_summary_with_options`] with
+/// [`HtmlRenderOptions::flame`] for an embedded native SVG section.
 pub fn render_html_summary(model: &ProfileModel, profile_path: &str) -> String {
+    render_html_summary_with_options(model, profile_path, HtmlRenderOptions::default())
+}
+
+/// Single-file HTML summary with optional flame embed.
+///
+/// When `opts.flame` is true, inserts a `section.flame` with an inlined native
+/// SVG from [`render_flame_svg`] after the exclusive ranking (before source).
+/// Does **not** write separate flame files (single-file path stays one document).
+pub fn render_html_summary_with_options(
+    model: &ProfileModel,
+    profile_path: &str,
+    opts: HtmlRenderOptions,
+) -> String {
     let title = html_report_title(profile_path);
     let primary_fid = primary_workload_fid(model);
-    let mut out = String::with_capacity(8192);
+    let mut out = String::with_capacity(if opts.flame { 16384 } else { 8192 });
     push_html_doc_start(&mut out, &title, HtmlCssMode::Inline);
     out.push_str(&format!("<h1>{}</h1>\n", escape_html(&title)));
     push_profile_path(&mut out, profile_path);
@@ -343,6 +383,9 @@ pub fn render_html_summary(model: &ProfileModel, profile_path: &str) -> String {
     push_sub_defs_table(&mut out, model);
     push_call_edges_table(&mut out, model);
     push_top_exclusive_table(&mut out, model);
+    if opts.flame {
+        push_flame_section_embedded(&mut out, model);
+    }
     push_source_heading(&mut out, model, primary_fid);
     push_source_table(&mut out, model, primary_fid);
     // A4b: all block_line_totals when present (blocks fixtures).
@@ -351,27 +394,38 @@ pub fn render_html_summary(model: &ProfileModel, profile_path: &str) -> String {
     out
 }
 
-/// Multi-file HTML site: summary index + exclusive sub index + per-fid pages +
-/// shared CSS.
+/// Multi-file HTML site: summary index + one page per eligible fid + shared CSS.
 ///
 /// Eligible fids are those in [`ProfileModel::files`] that have at least one
 /// `source_lines`, `line_totals`, or `block_line_totals` entry.
 ///
-/// Site contents:
-/// - `index.html` — summary; relative links to every `file-<fid>.html`, to
-///   [`HtmlSite::source_filename`] (`source.html`) as a primary alias, and to
-///   [`HtmlSite::index_subs_excl_filename`] (`index-subs-excl.html`)
-/// - `index-subs-excl.html` — full exclusive-time subroutine ranking page
+/// Site contents (default, flame **off**):
+/// - `index.html` — summary; relative links to every `file-<fid>.html` and to
+///   [`HtmlSite::source_filename`] (`source.html`) as a primary alias
 /// - `file-<fid>.html` — source + A4 (and A4b when present) for that fid
 /// - `source.html` — copy of the primary workload file page (back-compat)
 /// - `style.css` — shared MVP stylesheet ([`SHARED_STYLE_CSS`]); pages link via
 ///   `<link rel="stylesheet" href="style.css">`
+///
+/// When [`HtmlRenderOptions::flame`] is set (via
+/// [`render_html_site_with_options`] / [`write_html_site_with_options`]), also:
+/// - `all_stacks_by_time.folded` — folded stacks ([`render_folded_stacks`])
+/// - `all_stacks_by_time.svg` — native folded-based flame SVG ([`render_flame_svg`])
+/// - index links under `section.flame` / `p.flame-links`
 pub fn render_html_site(model: &ProfileModel, profile_path: &str) -> HtmlSite {
+    render_html_site_with_options(model, profile_path, HtmlRenderOptions::default())
+}
+
+/// Multi-file HTML site with optional flame artifacts.
+pub fn render_html_site_with_options(
+    model: &ProfileModel,
+    profile_path: &str,
+    opts: HtmlRenderOptions,
+) -> HtmlSite {
     let source_filename = "source.html".to_owned();
     // Single source for both `<link href>` and the on-disk stylesheet name.
     let style_filename = STYLE_CSS_FILENAME.to_owned();
     let style_css = SHARED_STYLE_CSS.to_owned();
-    let index_subs_excl_filename = INDEX_SUBS_EXCL_FILENAME.to_owned();
     let title = html_report_title(profile_path);
     let primary_fid = primary_workload_fid(model);
     let eligible = eligible_source_fids(model);
@@ -399,12 +453,20 @@ pub fn render_html_site(model: &ProfileModel, profile_path: &str) -> HtmlSite {
             render_file_page(model, primary_fid, profile_base, style_filename.as_str())
         });
 
-    // --- index-subs-excl.html (full exclusive ranking) ---
-    let index_subs_excl_html =
-        render_index_subs_excl_page(model, profile_path, profile_base, style_filename.as_str());
+    // --- optional flame artifacts (opt-in only) ---
+    let (flame_folded, flame_folded_filename, flame_svg, flame_svg_filename) = if opts.flame {
+        (
+            Some(render_folded_stacks(model)),
+            Some(FLAME_FOLDED_FILENAME.to_owned()),
+            Some(render_flame_svg(model)),
+            Some(FLAME_SVG_FILENAME.to_owned()),
+        )
+    } else {
+        (None, None, None, None)
+    };
 
     // --- index.html ---
-    let mut index = String::with_capacity(4096);
+    let mut index = String::with_capacity(if opts.flame { 6144 } else { 4096 });
     push_html_doc_start(&mut index, &title, css);
     index.push_str(&format!("<h1>{}</h1>\n", escape_html(&title)));
     push_profile_path(&mut index, profile_path);
@@ -413,11 +475,13 @@ pub fn render_html_site(model: &ProfileModel, profile_path: &str) -> HtmlSite {
     push_sub_defs_table(&mut index, model);
     push_call_edges_table(&mut index, model);
     push_top_exclusive_table(&mut index, model);
-    // Link from summary exclusive section to the full exclusive sub index page.
-    index.push_str(&format!(
-        "<p class=\"subs-excl-link\"><a href=\"{}\">Full exclusive subroutine index</a></p>\n",
-        escape_html(index_subs_excl_filename.as_str())
-    ));
+    if opts.flame {
+        if let (Some(ref folded_name), Some(ref svg_name)) =
+            (&flame_folded_filename, &flame_svg_filename)
+        {
+            push_flame_section_links(&mut index, folded_name, svg_name);
+        }
+    }
     push_source_file_links(&mut index, model, &eligible, primary_fid, &source_filename);
     index.push_str("</body>\n</html>\n");
 
@@ -426,10 +490,12 @@ pub fn render_html_site(model: &ProfileModel, profile_path: &str) -> HtmlSite {
         source_html,
         source_filename,
         file_pages,
-        index_subs_excl_html,
-        index_subs_excl_filename,
         style_css,
         style_filename,
+        flame_folded,
+        flame_folded_filename,
+        flame_svg,
+        flame_svg_filename,
     }
 }
 
@@ -504,9 +570,9 @@ fn path_os_contains_nul(path: &Path) -> bool {
 ///
 /// Path safety ([`validate_html_out_dir`]) runs before any create/write.
 ///
-/// Writes `index.html`, `index-subs-excl.html`, every `file-<fid>.html` from
-/// [`HtmlSite::file_pages`], `source.html` (primary alias), and shared
-/// [`HtmlSite::style_filename`] (`style.css`).
+/// Writes `index.html`, every `file-<fid>.html` from [`HtmlSite::file_pages`],
+/// `source.html` (primary alias), and shared [`HtmlSite::style_filename`]
+/// (`style.css`). Flame files are **not** written (default options).
 ///
 /// Returns the rendered [`HtmlSite`] so callers can list filenames written.
 pub fn write_html_site(
@@ -514,8 +580,21 @@ pub fn write_html_site(
     profile_path: &str,
     out_dir: &Path,
 ) -> io::Result<HtmlSite> {
+    write_html_site_with_options(model, profile_path, out_dir, HtmlRenderOptions::default())
+}
+
+/// Write multi-file HTML site with options (e.g. opt-in flame artifacts).
+///
+/// When `opts.flame` is true, also publishes [`FLAME_FOLDED_FILENAME`] and
+/// [`FLAME_SVG_FILENAME`] atomically with the rest of the site.
+pub fn write_html_site_with_options(
+    model: &ProfileModel,
+    profile_path: &str,
+    out_dir: &Path,
+    opts: HtmlRenderOptions,
+) -> io::Result<HtmlSite> {
     validate_html_out_dir(out_dir)?;
-    let site = render_html_site(model, profile_path);
+    let site = render_html_site_with_options(model, profile_path, opts);
     publish_html_site_files(&site, out_dir)?;
     Ok(site)
 }
@@ -541,10 +620,6 @@ fn publish_html_site_files(site: &HtmlSite, out_dir: &Path) -> io::Result<()> {
     let temp_dir = create_temp_site_dir(&parent)?;
     let write_result = (|| -> io::Result<()> {
         fs::write(temp_dir.join("index.html"), site.index_html.as_bytes())?;
-        fs::write(
-            temp_dir.join(&site.index_subs_excl_filename),
-            site.index_subs_excl_html.as_bytes(),
-        )?;
         for (filename, html) in &site.file_pages {
             fs::write(temp_dir.join(filename), html.as_bytes())?;
         }
@@ -557,6 +632,13 @@ fn publish_html_site_files(site: &HtmlSite, out_dir: &Path) -> io::Result<()> {
             temp_dir.join(&site.style_filename),
             site.style_css.as_bytes(),
         )?;
+        // Optional flame artifacts (opt-in only; absent on default path).
+        if let (Some(name), Some(body)) = (&site.flame_folded_filename, &site.flame_folded) {
+            fs::write(temp_dir.join(name), body.as_bytes())?;
+        }
+        if let (Some(name), Some(body)) = (&site.flame_svg_filename, &site.flame_svg) {
+            fs::write(temp_dir.join(name), body.as_bytes())?;
+        }
         atomic_replace_dir(&temp_dir, out_dir)
     })();
 
@@ -875,15 +957,16 @@ fn push_call_edges_table(out: &mut String, model: &ProfileModel) {
 }
 
 fn push_top_exclusive_table(out: &mut String, model: &ProfileModel) {
-    // Exclusive-time ranking (summary): excl desc, then name for stability.
-    // Full page lives at `index-subs-excl.html` (see `push_subs_excl_table`).
+    // Exclusive-time ranking: excl desc, then name for stability.
     out.push_str("<h2>Top exclusive</h2>\n");
     out.push_str(
         "<table class=\"top-exclusive\">\n<thead><tr>\
          <th>name</th><th>excl</th><th>returns</th>\
          </tr></thead>\n<tbody>\n",
     );
-    for (name, t) in sorted_subs_by_exclusive(model) {
+    let mut by_excl: Vec<_> = model.sub_return_totals.iter().collect();
+    by_excl.sort_by(|(n1, t1), (n2, t2)| t2.excl.total_cmp(&t1.excl).then_with(|| n1.cmp(n2)));
+    for (name, t) in by_excl {
         out.push_str(&format!(
             "<tr><td>{}</td>\
              <td class=\"num\">{}</td><td class=\"num\">{}</td></tr>\n",
@@ -893,62 +976,6 @@ fn push_top_exclusive_table(out: &mut String, model: &ProfileModel) {
         ));
     }
     out.push_str("</tbody>\n</table>\n");
-}
-
-/// All `sub_return_totals` sorted by exclusive time descending, then name.
-fn sorted_subs_by_exclusive(model: &ProfileModel) -> Vec<(&String, &nytprof_model::SubTotal)> {
-    let mut by_excl: Vec<_> = model.sub_return_totals.iter().collect();
-    by_excl.sort_by(|(n1, t1), (n2, t2)| t2.excl.total_cmp(&t1.excl).then_with(|| n1.cmp(n2)));
-    by_excl
-}
-
-/// Full exclusive-time ranking table for `index-subs-excl.html`.
-///
-/// Columns: name, returns, incl, excl — same fields as the summary Subroutines
-/// table, but sorted by exclusive time (oracle `excl_time` index semantics).
-/// Stable class: `table.subs-excl`.
-fn push_subs_excl_table(out: &mut String, model: &ProfileModel) {
-    out.push_str("<h2>Subroutines by exclusive time</h2>\n");
-    out.push_str(
-        "<table class=\"subs-excl\">\n<thead><tr>\
-         <th>name</th><th>returns</th><th>incl</th><th>excl</th>\
-         </tr></thead>\n<tbody>\n",
-    );
-    for (name, t) in sorted_subs_by_exclusive(model) {
-        out.push_str(&format!(
-            "<tr><td>{}</td><td class=\"num\">{}</td>\
-             <td class=\"num\">{}</td><td class=\"num\">{}</td></tr>\n",
-            escape_html(name),
-            t.returns,
-            format_ticks(t.incl),
-            format_ticks(t.excl),
-        ));
-    }
-    out.push_str("</tbody>\n</table>\n");
-}
-
-/// Render the multi-file exclusive sub index page (`index-subs-excl.html`).
-///
-/// See `docs/schemas/html-subs-excl-index-mvp-v0.md`.
-fn render_index_subs_excl_page(
-    model: &ProfileModel,
-    profile_path: &str,
-    profile_base: &str,
-    style_filename: &str,
-) -> String {
-    let title = format!("Subroutine exclusive index — {profile_base}");
-    let mut page = String::with_capacity(4096);
-    push_html_doc_start(
-        &mut page,
-        &title,
-        HtmlCssMode::LinkedStyleSheet(style_filename),
-    );
-    page.push_str(&format!("<h1>{}</h1>\n", escape_html(&title)));
-    page.push_str("<p><a href=\"index.html\">← Back to index</a></p>\n");
-    push_profile_path(&mut page, profile_path);
-    push_subs_excl_table(&mut page, model);
-    page.push_str("</body>\n</html>\n");
-    page
 }
 
 fn push_source_heading(out: &mut String, model: &ProfileModel, primary_fid: u32) {
@@ -1040,6 +1067,9 @@ fn push_block_line_totals_table(out: &mut String, model: &ProfileModel, only_fid
 ///
 /// Lines are sorted lexicographically for deterministic output. Empty callers
 /// are kept as a leading `;` (i.e. `;called count`).
+///
+/// Also used as the multi-file flame input body when
+/// [`HtmlRenderOptions::flame`] is set (`all_stacks_by_time.folded`).
 pub fn render_folded_stacks(model: &ProfileModel) -> String {
     let mut rows: Vec<((&str, &str), u64)> = model
         .call_edges
@@ -1059,6 +1089,211 @@ pub fn render_folded_stacks(model: &ProfileModel) -> String {
         out.push('\n');
     }
     out
+}
+
+/// Native flame / icicle SVG from call-edge folded stacks (optional HTML path).
+///
+/// **Not** oracle `flamegraph.pl` / full multi-frame `nytprofcalls` stacks.
+/// Each non-zero `call_edges` entry is a two-frame stack `caller;called` with
+/// weight `count`, laid out left-to-right (deterministic name order) with
+/// widths proportional to count. Residual honesty: Graphviz / treemap / oracle
+/// visual parity remain out of scope.
+///
+/// See `docs/schemas/html-optional-flame-mvp-v0.md`.
+pub fn render_flame_svg(model: &ProfileModel) -> String {
+    // Same ordering as folded stacks for determinism.
+    let mut stacks: Vec<((&str, &str), u64)> = model
+        .call_edges
+        .iter()
+        .filter(|(_, e)| e.count > 0)
+        .map(|((caller, called), e)| ((caller.as_str(), called.as_str()), e.count))
+        .collect();
+    stacks.sort_by(|((c1, d1), _), ((c2, d2), _)| c1.cmp(c2).then_with(|| d1.cmp(d2)));
+
+    const SVG_W: f64 = 1200.0;
+    const ROW_H: f64 = 24.0;
+    const DEPTHS: f64 = 2.0;
+    const PAD: f64 = 2.0;
+    let svg_h = ROW_H * DEPTHS + PAD * 2.0;
+
+    let total: u64 = stacks.iter().map(|(_, c)| *c).sum();
+    let mut out = String::with_capacity(stacks.len().saturating_mul(256).max(512));
+    // Use r## so SVG hex colors like "#333" do not terminate the raw string.
+    out.push_str(&format!(
+        r##"<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="{w}" height="{h}" viewBox="0 0 {w} {h}" class="nytprof-flame" role="img" aria-label="NYTProf folded call-edge flame">
+<title>NYTProf folded call-edge flame (native MVP; not flamegraph.pl)</title>
+<desc>Two-level icicle from call_edges folded stacks; widths proportional to call count.</desc>
+"##,
+        w = SVG_W as u32,
+        h = svg_h as u32,
+    ));
+
+    if stacks.is_empty() || total == 0 {
+        out.push_str(
+            r##"<text x="8" y="16" font-family="system-ui,sans-serif" font-size="12" fill="#444">No call edges for flame</text>
+</svg>
+"##,
+        );
+        return out;
+    }
+
+    let mut x = 0.0_f64;
+    for ((caller, called), count) in &stacks {
+        let width = (*count as f64) / (total as f64) * SVG_W;
+        if width <= 0.0 {
+            continue;
+        }
+        let caller_fill = flame_fill_color(caller);
+        let called_fill = flame_fill_color(called);
+        // Depth 0: caller (parent frame)
+        push_flame_rect(
+            &mut out,
+            FlameRect {
+                x,
+                y: PAD,
+                width,
+                height: ROW_H,
+                name: caller,
+                count: *count,
+                fill: caller_fill.as_str(),
+            },
+        );
+        // Depth 1: called (child frame)
+        push_flame_rect(
+            &mut out,
+            FlameRect {
+                x,
+                y: PAD + ROW_H,
+                width,
+                height: ROW_H,
+                name: called,
+                count: *count,
+                fill: called_fill.as_str(),
+            },
+        );
+        x += width;
+    }
+    out.push_str("</svg>\n");
+    out
+}
+
+struct FlameRect<'a> {
+    x: f64,
+    y: f64,
+    width: f64,
+    height: f64,
+    name: &'a str,
+    count: u64,
+    fill: &'a str,
+}
+
+fn push_flame_rect(out: &mut String, r: FlameRect<'_>) {
+    let title = format!("{} ({})", r.name, r.count);
+    // Slight inset so adjacent frames are separable.
+    let ix = r.x + 0.5;
+    let iy = r.y + 0.5;
+    let iw = (r.width - 1.0).max(0.5);
+    let ih = r.height - 1.0;
+    out.push_str(&format!(
+        r##"<g class="flame-frame">
+  <title>{title}</title>
+  <rect x="{ix:.2}" y="{iy:.2}" width="{iw:.2}" height="{ih:.2}" fill="{fill}" stroke="#333" stroke-width="0.5"/>
+"##,
+        title = escape_xml(&title),
+        fill = r.fill,
+    ));
+    // Label only when the frame is wide enough to read.
+    if r.width >= 48.0 {
+        let label = if r.name.is_empty() { "(anon)" } else { r.name };
+        let tx = r.x + 4.0;
+        let ty = r.y + r.height * 0.68;
+        out.push_str(&format!(
+            r##"  <text x="{tx:.2}" y="{ty:.2}" font-family="ui-monospace,monospace" font-size="11" fill="#111">{label}</text>
+"##,
+            label = escape_xml(label),
+        ));
+    }
+    out.push_str("</g>\n");
+}
+
+/// Deterministic pastel fill from subroutine name (not a visual-oracle palette).
+fn flame_fill_color(name: &str) -> String {
+    let mut h: u32 = 2166136261;
+    for b in name.as_bytes() {
+        h ^= u32::from(*b);
+        h = h.wrapping_mul(16777619);
+    }
+    let hue = h % 360;
+    // Soft HSL-ish via fixed saturation/lightness approximation in hex RGB.
+    // Use a small fixed palette keyed by hue bucket for stable SVG without a CSS hsl() dependency.
+    let bucket = (hue / 30) as usize; // 12 buckets
+    const PALETTE: [&str; 12] = [
+        "#f4a3a3", "#f4c3a3", "#f4e3a3", "#d4f4a3", "#a3f4b3", "#a3f4e3", "#a3d4f4", "#a3b3f4",
+        "#c3a3f4", "#e3a3f4", "#f4a3d4", "#f4a3c3",
+    ];
+    PALETTE[bucket % PALETTE.len()].to_owned()
+}
+
+/// Escape text for SVG/XML text nodes and attributes.
+fn escape_xml(s: &str) -> String {
+    let mut out = String::with_capacity(s.len());
+    for ch in s.chars() {
+        match ch {
+            '&' => out.push_str("&amp;"),
+            '<' => out.push_str("&lt;"),
+            '>' => out.push_str("&gt;"),
+            '"' => out.push_str("&quot;"),
+            '\'' => out.push_str("&apos;"),
+            c if c.is_control() => {}
+            c => out.push(c),
+        }
+    }
+    out
+}
+
+/// Multi-file index: links to optional flame artifacts (no embedded SVG bloat).
+fn push_flame_section_links(out: &mut String, folded_filename: &str, svg_filename: &str) {
+    out.push_str("<section class=\"flame\">\n");
+    out.push_str("<h2>Flame graph</h2>\n");
+    out.push_str(
+        "<p class=\"flame-note\">Optional native folded-based flame (not oracle flamegraph.pl / Graphviz / treemap).</p>\n",
+    );
+    out.push_str(&format!(
+        "<p class=\"flame-links\"><a href=\"{svg}\">{svg}</a> · <a href=\"{folded}\">{folded}</a></p>\n",
+        svg = escape_html(svg_filename),
+        folded = escape_html(folded_filename),
+    ));
+    // Lightweight inline preview via object so index stays small if SVG is large.
+    out.push_str(&format!(
+        "<p><object type=\"image/svg+xml\" data=\"{svg}\" class=\"flame-svg-embed\">\
+<a href=\"{svg}\">{svg}</a></object></p>\n",
+        svg = escape_html(svg_filename),
+    ));
+    out.push_str("</section>\n");
+}
+
+/// Single-file: embed native flame SVG inline (self-contained document).
+fn push_flame_section_embedded(out: &mut String, model: &ProfileModel) {
+    out.push_str("<section class=\"flame\">\n");
+    out.push_str("<h2>Flame graph</h2>\n");
+    out.push_str(
+        "<p class=\"flame-note\">Optional native folded-based flame (not oracle flamegraph.pl / Graphviz / treemap).</p>\n",
+    );
+    out.push_str("<div class=\"flame-svg-embed\">\n");
+    // Strip XML declaration when embedding SVG inside HTML.
+    let svg = render_flame_svg(model);
+    let embed = svg
+        .lines()
+        .filter(|l| !l.starts_with("<?xml"))
+        .collect::<Vec<_>>()
+        .join("\n");
+    out.push_str(&embed);
+    if !embed.ends_with('\n') {
+        out.push('\n');
+    }
+    out.push_str("</div>\n");
+    out.push_str("</section>\n");
 }
 
 /// Callgrind-inspired text export (export-formats MVP v0).
@@ -1575,13 +1810,8 @@ mod tests {
         assert_eq!(site.source_filename, "source.html");
         assert_eq!(site.style_filename, STYLE_CSS_FILENAME);
         assert_eq!(site.style_css, SHARED_STYLE_CSS);
-        assert_eq!(site.index_subs_excl_filename, INDEX_SUBS_EXCL_FILENAME);
         assert!(!site.index_html.is_empty());
         assert!(!site.source_html.is_empty());
-        assert!(
-            !site.index_subs_excl_html.is_empty(),
-            "index-subs-excl.html body non-empty"
-        );
         assert!(
             site.file_pages.len() >= 2,
             "default-calls1 must emit ≥2 file pages, got {}: {:?}",
@@ -1648,12 +1878,6 @@ mod tests {
         assert!(
             index.contains("href=\"file-1.html\""),
             "index must link to file-1.html:\n{index}"
-        );
-        // Exclusive sub index page is linked from the summary index.
-        assert!(
-            index.contains(&format!("href=\"{}\"", INDEX_SUBS_EXCL_FILENAME)),
-            "index must link to {}:\n{index}",
-            INDEX_SUBS_EXCL_FILENAME
         );
         let other_file_link = site
             .file_pages
@@ -1763,7 +1987,7 @@ mod tests {
             "file-1.html missing under {}",
             out.display()
         );
-        // Complete site set includes shared CSS + exclusive sub index.
+        // Complete site set includes shared CSS on the atomic publish path.
         let style_path = out.join(STYLE_CSS_FILENAME);
         assert!(
             style_path.is_file(),
@@ -1775,35 +1999,6 @@ mod tests {
         assert!(
             index.contains(&format!("href=\"{}\"", STYLE_CSS_FILENAME)),
             "index must link style.css:\n{index}"
-        );
-        let excl_path = out.join(INDEX_SUBS_EXCL_FILENAME);
-        assert!(
-            excl_path.is_file(),
-            "index-subs-excl.html missing under {}",
-            out.display()
-        );
-        let excl = fs::read_to_string(&excl_path).expect("index-subs-excl.html");
-        assert!(
-            index.contains(&format!("href=\"{}\"", INDEX_SUBS_EXCL_FILENAME)),
-            "index must link exclusive sub index:\n{index}"
-        );
-        assert!(
-            excl.contains(&format!("href=\"{}\"", STYLE_CSS_FILENAME)),
-            "excl index must link style.css:\n{excl}"
-        );
-        assert!(
-            excl.contains("class=\"subs-excl\""),
-            "excl index structure class:\n{excl}"
-        );
-        assert!(
-            excl.contains("main::leaf") && excl.contains(&format!(">{}<", leaf.returns)),
-            "excl page leaf returns {}:\n{excl}",
-            leaf.returns
-        );
-        assert!(
-            excl.contains("main::mid") && excl.contains(&format!(">{}<", mid.returns)),
-            "excl page mid returns {}:\n{excl}",
-            mid.returns
         );
         assert!(
             index.contains("main::leaf") && index.contains(&format!(">{}<", leaf.returns)),
@@ -1902,18 +2097,6 @@ mod tests {
         assert!(index.contains(&format!("href=\"{}\"", STYLE_CSS_FILENAME)));
         assert!(file1.contains(&format!("href=\"{}\"", STYLE_CSS_FILENAME)));
         assert!(source.contains(&format!("href=\"{}\"", STYLE_CSS_FILENAME)));
-        // Exclusive sub index on disk.
-        let excl_path = tmp.join(INDEX_SUBS_EXCL_FILENAME);
-        assert!(
-            excl_path.is_file(),
-            "index-subs-excl.html missing at {}",
-            excl_path.display()
-        );
-        let excl = fs::read_to_string(&excl_path).expect("read index-subs-excl");
-        assert!(index.contains(&format!("href=\"{}\"", INDEX_SUBS_EXCL_FILENAME)));
-        assert!(excl.contains(&format!("href=\"{}\"", STYLE_CSS_FILENAME)));
-        assert!(excl.contains("main::leaf") && excl.contains(">15<"));
-        assert!(excl.contains("main::mid") && excl.contains(">3<"));
 
         let _ = fs::remove_dir_all(&ws);
     }
@@ -1951,10 +2134,6 @@ mod tests {
         );
 
         for (label, html) in std::iter::once(("index", site.index_html.as_str()))
-            .chain(std::iter::once((
-                "index-subs-excl",
-                site.index_subs_excl_html.as_str(),
-            )))
             .chain(std::iter::once(("source", site.source_html.as_str())))
             .chain(
                 site.file_pages
@@ -1986,7 +2165,6 @@ mod tests {
             "class=\"call-edges\"",
             "class=\"top-exclusive\"",
             "class=\"source-files\"",
-            "class=\"subs-excl-link\"",
             "<h2>Event counts</h2>",
             "<h2>Subroutines</h2>",
             "<h2>Call edges</h2>",
@@ -1998,10 +2176,6 @@ mod tests {
                 "index structure missing {needle}:\n{index}"
             );
         }
-        assert!(
-            index.contains(&format!("href=\"{}\"", INDEX_SUBS_EXCL_FILENAME)),
-            "index must link exclusive sub index:\n{index}"
-        );
         // Semantic counts 15/3/15 on index tables.
         assert!(
             index.contains(&format!(
@@ -2041,7 +2215,7 @@ mod tests {
         assert!(source.contains("class=\"source\""));
         assert!(source.contains("$x++") && source.contains("for 1 .. 50"));
 
-        // Disk publish includes style.css + exclusive sub index.
+        // Disk publish includes style.css with exact shared text.
         let ws = unique_html_workspace("shared-css");
         let out = ws.join("site");
         write_html_site(&model, &path_str, &out).expect("write_html_site");
@@ -2070,17 +2244,6 @@ mod tests {
                 && disk_edges.contains(&format!(">{}<", edge.count)),
             "disk index mid→leaf {}:\n{disk_edges}",
             edge.count
-        );
-        let disk_excl =
-            fs::read_to_string(out.join(INDEX_SUBS_EXCL_FILENAME)).expect("disk index-subs-excl");
-        assert!(disk_excl.contains("class=\"subs-excl\""));
-        assert!(
-            disk_excl.contains("main::leaf") && disk_excl.contains(">15<"),
-            "disk excl leaf 15"
-        );
-        assert!(
-            disk_excl.contains("main::mid") && disk_excl.contains(">3<"),
-            "disk excl mid 3"
         );
 
         // --- single-file: inline same CSS, self-contained ---
@@ -2176,137 +2339,6 @@ mod tests {
         );
         assert!(out.join("source.html").is_file());
         assert!(out.join("file-1.html").is_file());
-        assert!(
-            out.join(INDEX_SUBS_EXCL_FILENAME).is_file(),
-            "index-subs-excl.html missing after overwrite"
-        );
-
-        let _ = fs::remove_dir_all(&ws);
-    }
-
-    /// PR-A02 / REPORT-HTML-SUBS-EXCL: exclusive sub index page on default-calls1.
-    ///
-    /// Multi-file site publishes `index-subs-excl.html` with all subs ranked by
-    /// exclusive time; leaf **15** / mid **3** greppable; index links the page;
-    /// shared CSS linked (no inline style). See
-    /// `docs/schemas/html-subs-excl-index-mvp-v0.md`.
-    #[test]
-    fn html_subs_excl_index_default_calls1() {
-        let path = fixture_out("default-calls1");
-        assert!(path.is_file(), "missing fixture {}", path.display());
-        let path_str = path.to_string_lossy();
-        let model = ProfileModel::from_path(&path).expect("ProfileModel::from_path");
-
-        let leaf = model.sub_total("main::leaf").expect("main::leaf");
-        let mid = model.sub_total("main::mid").expect("main::mid");
-        assert_eq!(leaf.returns, 15, "semantic leaf returns");
-        assert_eq!(mid.returns, 3, "semantic mid returns");
-
-        let site = render_html_site(&model, &path_str);
-        assert_eq!(site.index_subs_excl_filename, INDEX_SUBS_EXCL_FILENAME);
-        assert_eq!(site.index_subs_excl_filename, "index-subs-excl.html");
-
-        let excl = &site.index_subs_excl_html;
-        let lower = excl.to_ascii_lowercase();
-        assert!(
-            lower.contains("<!doctype html"),
-            "excl page doctype:\n{}",
-            &excl[..excl.len().min(200)]
-        );
-        assert!(
-            excl.contains(&format!("href=\"{}\"", STYLE_CSS_FILENAME)),
-            "excl page must link style.css:\n{excl}"
-        );
-        assert!(
-            !lower.contains("<style"),
-            "excl page must not inline <style>:\n{excl}"
-        );
-        assert!(
-            excl.contains("href=\"index.html\""),
-            "excl page must link back to index:\n{excl}"
-        );
-        assert!(
-            excl.contains("class=\"subs-excl\""),
-            "excl page table class:\n{excl}"
-        );
-        assert!(
-            excl.contains("<h2>Subroutines by exclusive time</h2>"),
-            "excl page heading:\n{excl}"
-        );
-        assert!(
-            excl.contains("class=\"profile-path\""),
-            "excl page profile path:\n{excl}"
-        );
-        // Semantic counts: leaf 15 / mid 3 in returns cells.
-        assert!(
-            excl.contains("main::leaf") && excl.contains(&format!(">{}<", leaf.returns)),
-            "excl page leaf returns {}:\n{excl}",
-            leaf.returns
-        );
-        assert!(
-            excl.contains("main::mid") && excl.contains(&format!(">{}<", mid.returns)),
-            "excl page mid returns {}:\n{excl}",
-            mid.returns
-        );
-        // Stronger greppable cells next to names (returns column is second).
-        assert!(
-            excl.contains(&format!(
-                "<td>main::leaf</td><td class=\"num\">{}</td>",
-                leaf.returns
-            )),
-            "excl leaf returns cell:\n{excl}"
-        );
-        assert!(
-            excl.contains(&format!(
-                "<td>main::mid</td><td class=\"num\">{}</td>",
-                mid.returns
-            )),
-            "excl mid returns cell:\n{excl}"
-        );
-        // Sort order: exclusive desc — leaf excl equals incl (hot loop); mid
-        // excl is nested work, typically less than leaf, but both must appear.
-        // Verify every model sub appears exactly once in the table body.
-        let table_idx = excl.find("class=\"subs-excl\"").expect("subs-excl table");
-        let table = &excl[table_idx..];
-        for name in model.sub_return_totals.keys() {
-            assert!(
-                table.contains(&escape_html(name)),
-                "excl table missing sub {name}:\n{table}"
-            );
-        }
-        // Index links to the exclusive page (and not the reverse as primary nav).
-        assert!(
-            site.index_html
-                .contains(&format!("href=\"{}\"", INDEX_SUBS_EXCL_FILENAME)),
-            "index must link exclusive page:\n{}",
-            site.index_html
-        );
-        assert!(
-            site.index_html.contains("class=\"subs-excl-link\""),
-            "index exclusive link marker:\n{}",
-            site.index_html
-        );
-
-        // Disk publish: real write path.
-        let ws = unique_html_workspace("subs-excl");
-        let out = ws.join("site");
-        write_html_site(&model, &path_str, &out).expect("write_html_site");
-        assert_no_staging_leftovers(&ws, "site");
-
-        let disk_excl = fs::read_to_string(out.join(INDEX_SUBS_EXCL_FILENAME)).expect("disk excl");
-        assert!(
-            disk_excl.contains("class=\"subs-excl\"")
-                && disk_excl.contains("main::leaf")
-                && disk_excl.contains(">15<")
-                && disk_excl.contains("main::mid")
-                && disk_excl.contains(">3<"),
-            "disk excl 15/3:\n{disk_excl}"
-        );
-        let disk_index = fs::read_to_string(out.join("index.html")).expect("disk index");
-        assert!(
-            disk_index.contains(&format!("href=\"{}\"", INDEX_SUBS_EXCL_FILENAME)),
-            "disk index link:\n{disk_index}"
-        );
 
         let _ = fs::remove_dir_all(&ws);
     }
@@ -3225,6 +3257,163 @@ mod tests {
             .call_edge("main::mid", "main::leaf")
             .expect("model must have mid→leaf");
         assert_eq!(edge.count, 15);
+    }
+
+    /// PR-A03 / REPORT-HTML-OPTIONAL-FLAME: native SVG from call-edge folded stacks.
+    #[test]
+    fn flame_svg_default_calls1_real_render() {
+        let path = fixture_out("default-calls1");
+        assert!(path.is_file(), "missing fixture {}", path.display());
+        let model = ProfileModel::from_path(&path).expect("build model");
+        let svg = render_flame_svg(&model);
+
+        assert!(
+            svg.contains("<svg") && svg.contains("</svg>"),
+            "must be an SVG document:\n{svg}"
+        );
+        assert!(
+            svg.contains("main::leaf") && svg.contains("main::mid"),
+            "SVG must label workload frames:\n{svg}"
+        );
+        assert!(
+            svg.contains("main::leaf") && svg.contains("(15)"),
+            "SVG title/tooltip should carry mid→leaf count 15:\n{svg}"
+        );
+        // Escape path: no raw < from source names in attributes.
+        assert!(
+            !svg.contains("main::leaf</")
+                || svg.contains(">main::leaf<")
+                || svg.contains("main::leaf"),
+            "frame labels present"
+        );
+    }
+
+    /// Default multi-file site must not bloat with flame artifacts.
+    #[test]
+    fn html_site_default_no_flame_artifacts() {
+        let path = fixture_out("default-calls1");
+        assert!(path.is_file(), "missing fixture {}", path.display());
+        let path_str = path.to_string_lossy();
+        let model = ProfileModel::from_path(&path).expect("build model");
+        let site = render_html_site(&model, &path_str);
+        assert!(site.flame_folded.is_none());
+        assert!(site.flame_svg.is_none());
+        assert!(site.flame_folded_filename.is_none());
+        assert!(site.flame_svg_filename.is_none());
+        assert!(
+            !site.index_html.contains("all_stacks_by_time"),
+            "default index must not link flame files:\n{}",
+            site.index_html
+        );
+        assert!(
+            !site.index_html.contains("class=\"flame\""),
+            "default index must not have flame section:\n{}",
+            site.index_html
+        );
+
+        let ws = unique_html_workspace("no-flame");
+        let out = ws.join("site");
+        write_html_site(&model, &path_str, &out).expect("write_html_site");
+        assert!(!out.join(FLAME_FOLDED_FILENAME).exists());
+        assert!(!out.join(FLAME_SVG_FILENAME).exists());
+        assert!(out.join("index.html").is_file());
+        assert!(out.join(STYLE_CSS_FILENAME).is_file());
+        let _ = fs::remove_dir_all(&ws);
+    }
+
+    /// Opt-in flame: multi-file site publishes folded + SVG; index links; counts.
+    #[test]
+    fn html_site_optional_flame_default_calls1() {
+        let path = fixture_out("default-calls1");
+        assert!(path.is_file(), "missing fixture {}", path.display());
+        let path_str = path.to_string_lossy();
+        let model = ProfileModel::from_path(&path).expect("build model");
+        let opts = HtmlRenderOptions { flame: true };
+        let site = render_html_site_with_options(&model, &path_str, opts);
+
+        assert_eq!(
+            site.flame_folded_filename.as_deref(),
+            Some(FLAME_FOLDED_FILENAME)
+        );
+        assert_eq!(site.flame_svg_filename.as_deref(), Some(FLAME_SVG_FILENAME));
+        let folded = site.flame_folded.as_ref().expect("folded body");
+        assert!(
+            folded.contains("main::mid;main::leaf 15"),
+            "flame folded must include mid→leaf 15:\n{folded}"
+        );
+        let svg = site.flame_svg.as_ref().expect("svg body");
+        assert!(svg.contains("main::leaf") && svg.contains("main::mid"));
+
+        let index = &site.index_html;
+        assert!(
+            index.contains("class=\"flame\"") || index.contains("section class=\"flame\""),
+            "index flame section:\n{index}"
+        );
+        assert!(
+            index.contains(&format!("href=\"{FLAME_SVG_FILENAME}\"")),
+            "index must link SVG:\n{index}"
+        );
+        assert!(
+            index.contains(&format!("href=\"{FLAME_FOLDED_FILENAME}\"")),
+            "index must link folded:\n{index}"
+        );
+        // Semantic counts still greppable (15/3/15).
+        assert!(index.contains("main::leaf") && index.contains(">15<"));
+        assert!(index.contains("main::mid") && index.contains(">3<"));
+
+        let ws = unique_html_workspace("flame");
+        let out = ws.join("site");
+        write_html_site_with_options(&model, &path_str, &out, opts).expect("write flame site");
+        assert_no_staging_leftovers(&ws, "site");
+
+        let disk_folded = fs::read_to_string(out.join(FLAME_FOLDED_FILENAME)).expect("folded file");
+        assert_eq!(disk_folded, *folded);
+        let disk_svg = fs::read_to_string(out.join(FLAME_SVG_FILENAME)).expect("svg file");
+        assert_eq!(disk_svg, *svg);
+        let disk_index = fs::read_to_string(out.join("index.html")).expect("index");
+        assert!(disk_index.contains(&format!("href=\"{FLAME_SVG_FILENAME}\"")));
+        // Shared CSS still present.
+        assert_eq!(
+            fs::read_to_string(out.join(STYLE_CSS_FILENAME)).unwrap(),
+            SHARED_STYLE_CSS
+        );
+        let _ = fs::remove_dir_all(&ws);
+    }
+
+    /// Single-file opt-in embeds SVG; default summary has no flame section.
+    #[test]
+    fn html_summary_optional_flame_embed_default_calls1() {
+        let path = fixture_out("default-calls1");
+        assert!(path.is_file(), "missing fixture {}", path.display());
+        let path_str = path.to_string_lossy();
+        let model = ProfileModel::from_path(&path).expect("build model");
+
+        let plain = render_html_summary(&model, &path_str);
+        assert!(
+            !plain.contains("class=\"flame\"") && !plain.contains("section class=\"flame\""),
+            "default summary must not embed flame:\n{plain}"
+        );
+        assert!(!plain.contains("nytprof-flame"));
+
+        let with_flame =
+            render_html_summary_with_options(&model, &path_str, HtmlRenderOptions { flame: true });
+        assert!(
+            with_flame.contains("section class=\"flame\"")
+                || with_flame.contains("class=\"flame\""),
+            "flame summary must have section:\n{with_flame}"
+        );
+        assert!(
+            with_flame.contains("nytprof-flame") || with_flame.contains("<svg"),
+            "flame summary embeds SVG:\n{with_flame}"
+        );
+        assert!(
+            with_flame.contains("main::leaf") && with_flame.contains(">15<"),
+            "leaf 15 still greppable with flame:\n{with_flame}"
+        );
+        assert!(
+            with_flame.contains("main::mid") && with_flame.contains(">3<"),
+            "mid 3 still greppable with flame:\n{with_flame}"
+        );
     }
 
     #[test]
