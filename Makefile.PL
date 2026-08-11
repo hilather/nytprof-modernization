@@ -28,11 +28,12 @@
 #   make legacy-smoke                # scripts/packaging/legacy_only_smoke.sh
 #   make dual-path-smoke             # scripts/packaging/dual_path_smoke.sh
 #   make offline-gate                # scripts/ci/offline_gate.sh
-#   make install-facade              # pure-Perl engine → prefix (no cargo)
+#   make install-facade              # pure-Perl engine → $NYTPROF_PREFIX or $REPO/prefix (no cargo)
 #   make native-install              # scripts/packaging/install_native.sh (needs cargo)
-#   make dual-install                # native-install + install-facade when cargo present
+#   make dual-install                # native-install + install-facade (shared root; needs cargo)
 #   make build003-depth-smoke        # scripts/packaging/makemaker_build003_depth_smoke.sh
-#   NYTPROF_NATIVE=1 perl Makefile.PL && make native-install
+#   NYTPROF_NATIVE=1 perl Makefile.PL && make   # default all → dual-install
+#   make native                      # alias: native-install only
 #
 # Never puts crates/ on oracle PERL5LIB (smokes own isolation).
 

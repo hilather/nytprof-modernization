@@ -116,7 +116,8 @@ command -v cargo >/dev/null && echo "cargo present (ok; must still not be requir
 perl Makefile.PL && make legacy-smoke          # no cargo required
 ./scripts/packaging/makemaker_dual_path_smoke.sh
 # optional native via Make:
-#   make native-install    # or: NYTPROF_NATIVE=1 perl Makefile.PL && make
+#   make dual-install      # or: NYTPROF_NATIVE=1 perl Makefile.PL && make
+#   make native-install    # CLI only alias via make native
 
 # Unified packaging gate (broader operator entry)
 ./scripts/packaging/packaging_gate.sh
@@ -250,7 +251,7 @@ A thin root [`Makefile.PL`](../Makefile.PL) now exists as a **candidate packagin
 | Control / target | Behavior |
 |------------------|----------|
 | `NYTPROF_NATIVE=0` (default) | Legacy-only configure; no Cargo required |
-| `NYTPROF_NATIVE=1` | Configure requires cargo; `make all` → `native-install` |
+| `NYTPROF_NATIVE=1` | Configure requires cargo; `make all` → `dual-install` (native CLI + facade; `make native` remains native-install-only) |
 | `NYTPROF_NATIVE=auto` | Enable native targets when cargo present |
 | `make legacy-smoke` | `scripts/packaging/legacy_only_smoke.sh` |
 | `make dual-path-smoke` | `scripts/packaging/dual_path_smoke.sh` |

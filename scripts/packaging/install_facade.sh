@@ -14,6 +14,8 @@
 #
 # Prefer NYTPROF_PREFIX over bare PREFIX: ExtUtils::MakeMaker defines PREFIX
 # and will rewrite an exported PREFIX when recipes run under `make`.
+# Root resolution is shared with install_native.sh (resolve_packaging_prefix.sh)
+# so dual-install cannot split CLI and facade.
 #
 # With default prefix=$REPO/prefix, the installed engine still discovers the
 # workspace root (Cargo.toml walk) for native CLI lookup under prefix/bin.
@@ -33,16 +35,9 @@ SRC_LIB="$ROOT/perl/lib/Devel/NYTProf"
 [[ -f "$SRC_BIN" ]] || fail "missing facade script: $SRC_BIN"
 [[ -d "$SRC_LIB" ]] || fail "missing facade lib dir: $SRC_LIB"
 
-# NYTPROF_PREFIX wins; bare PREFIX only if set and not the MakeMaker install base
-# pattern when NYTPROF_PREFIX is unset — default is always $ROOT/prefix.
-if [[ -n "${NYTPROF_PREFIX:-}" ]]; then
-  PREFIX="$NYTPROF_PREFIX"
-elif [[ -n "${PREFIX:-}" && "${PREFIX}" != /*/perl5 && "${PREFIX}" != "${HOME}/perl5" ]]; then
-  # Honor explicit operator PREFIX when not the local::lib MakeMaker default.
-  PREFIX="$PREFIX"
-else
-  PREFIX="$ROOT/prefix"
-fi
+# shellcheck source=resolve_packaging_prefix.sh
+source "$ROOT/scripts/packaging/resolve_packaging_prefix.sh"
+PREFIX="$(resolve_packaging_prefix "$ROOT")"
 BIN_DIR="$PREFIX/bin"
 LIB_DEST="$PREFIX/lib/Devel/NYTProf"
 

@@ -57,7 +57,7 @@ Root [`Makefile.PL`](https://github.com/hilather/nytprof-modernization/blob/main
 # Legacy-only (no Cargo on critical path)
 perl Makefile.PL                 # or: NYTPROF_NATIVE=0 perl Makefile.PL
 make legacy-smoke                # → scripts/packaging/legacy_only_smoke.sh
-make install-facade              # pure-Perl nytprof-engine → $PREFIX (default prefix/)
+make install-facade              # pure-Perl nytprof-engine → $NYTPROF_PREFIX (default $REPO/prefix)
 make test                        # same path as legacy-smoke (candidate entry; not full XS suite)
 
 # Dual-path policy via Make targets
@@ -115,7 +115,8 @@ Absolute policy parent: [BUILD-003 task](https://github.com/hilather/nytprof-mod
 | Artifact | Role | Cargo? |
 |----------|------|--------|
 | `make cargo-build` | Direct `cargo build -p nytprof-cli` from Make | Required |
-| `make install-facade` / [`scripts/packaging/install_facade.sh`](https://github.com/hilather/nytprof-modernization/blob/main/scripts/packaging/install_facade.sh) | Install `prefix/bin/nytprof-engine` + `prefix/lib/Devel/NYTProf/*.pm` | **Never** |
+| `make install-facade` / [`scripts/packaging/install_facade.sh`](https://github.com/hilather/nytprof-modernization/blob/main/scripts/packaging/install_facade.sh) | Install `$NYTPROF_PREFIX/bin/nytprof-engine` + `lib/Devel/NYTProf/*.pm` (default `$REPO/prefix`) | **Never** |
+| Shared prefix resolve | [`scripts/packaging/resolve_packaging_prefix.sh`](https://github.com/hilather/nytprof-modernization/blob/main/scripts/packaging/resolve_packaging_prefix.sh) | Used by both install scripts — no dual-install root split |
 | `make dual-install` | `native-install` + `install-facade` | Required |
 | `make packaging-status` | Print `nytprof-packaging.mode` honesty stamps | No |
 | `make build003-depth-smoke` / [`scripts/packaging/makemaker_build003_depth_smoke.sh`](https://github.com/hilather/nytprof-modernization/blob/main/scripts/packaging/makemaker_build003_depth_smoke.sh) | Regression: facade without cargo + dual-install when cargo present | Mixed |
@@ -249,7 +250,8 @@ Behavior:
 | [`scripts/packaging/native_optional_smoke.sh`](../scripts/packaging/native_optional_smoke.sh) | optional-native | Skips cleanly if absent |
 | [`scripts/packaging/dual_path_smoke.sh`](../scripts/packaging/dual_path_smoke.sh) | both (policy entry / offline gate packaging primary) | Legacy always; native if present |
 | [`scripts/packaging/makemaker_dual_path_smoke.sh`](https://github.com/hilather/nytprof-modernization/blob/main/scripts/packaging/makemaker_dual_path_smoke.sh) | both (MakeMaker entry) | `Makefile.PL` + `make legacy-smoke`; native via make when cargo present |
-| [`scripts/packaging/install_facade.sh`](https://github.com/hilather/nytprof-modernization/blob/main/scripts/packaging/install_facade.sh) | BUILD-003-DEPTH (facade half) | Pure-Perl engine + modules → `$PREFIX`; **no cargo** |
+| [`scripts/packaging/install_facade.sh`](https://github.com/hilather/nytprof-modernization/blob/main/scripts/packaging/install_facade.sh) | BUILD-003-DEPTH (facade half) | Pure-Perl engine + modules → `$NYTPROF_PREFIX` (default `$REPO/prefix`); **no cargo**; shared root resolve with native |
+| [`scripts/packaging/resolve_packaging_prefix.sh`](https://github.com/hilather/nytprof-modernization/blob/main/scripts/packaging/resolve_packaging_prefix.sh) | BUILD-003-DEPTH (shared) | Identical `NYTPROF_PREFIX` / bare-`PREFIX` denylist (`$HOME/perl5`, `*/perl5`, trailing `/`) for dual-install |
 | [`scripts/packaging/makemaker_build003_depth_smoke.sh`](https://github.com/hilather/nytprof-modernization/blob/main/scripts/packaging/makemaker_build003_depth_smoke.sh) | BUILD-003-DEPTH | Facade without cargo + dual-install when cargo; honesty stamps |
 | Root [`Makefile.PL`](https://github.com/hilather/nytprof-modernization/blob/main/Makefile.PL) | packaging facade + depth | Default legacy; `NYTPROF_NATIVE=0\|1\|auto`; `install-facade` / `dual-install`; not full XS CPAN; `make offline-gate` |
 | [`scripts/packaging/packaging_gate.sh`](https://github.com/hilather/nytprof-modernization/blob/main/scripts/packaging/packaging_gate.sh) | broader packaging gate | Mixed fail-fast (legacy + engine select + Perl dispatch + native when present) |

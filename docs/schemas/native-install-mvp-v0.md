@@ -28,6 +28,12 @@ Behavior:
 
 Default install root `$REPO_ROOT/prefix`. Prefer **`NYTPROF_PREFIX`** over bare `PREFIX` when calling from MakeMaker recipes (MakeMaker defines `PREFIX` and rewrites an exported `PREFIX` in child environments).
 
+Shared resolution (also used by `install_facade.sh` so **dual-install cannot split roots**): [`scripts/packaging/resolve_packaging_prefix.sh`](https://github.com/hilather/nytprof-modernization/blob/main/scripts/packaging/resolve_packaging_prefix.sh).
+
+1. `NYTPROF_PREFIX` always wins (trailing `/` stripped).  
+2. Bare `PREFIX` only if, after stripping one trailing `/`, it is **not** `$HOME/perl5` and **not** any path ending in `/perl5` (MakeMaker/local::lib denylist).  
+3. Else `$REPO_ROOT/prefix`.
+
 ## Discovery order (`find_native_cli`)
 
 0. If `$ENV{NYTPROF_FORCE_NO_NATIVE}` is truthy → fail immediately (**test hook only**; ENGINE-AUTO-FALLBACK)  

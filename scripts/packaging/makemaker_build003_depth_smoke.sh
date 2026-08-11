@@ -113,6 +113,71 @@ grep -q 'not_full_xs_cpan=1' "$DEPTH_PREFIX/nytprof-facade.install" \
   || fail "facade stamp missing not_full_xs_cpan=1"
 ok "install-facade populated private prefix (no cargo)"
 
+# ---------------------------------------------------------------------------
+# 2b. PREFIX trap: MakeMaker/local::lib bare PREFIX must not escape intended root
+# ---------------------------------------------------------------------------
+banner "PREFIX trap denylist (shared resolve; no escape to ~/perl5 or */perl5)"
+# shellcheck source=resolve_packaging_prefix.sh
+source "$ROOT/scripts/packaging/resolve_packaging_prefix.sh"
+[[ -f "$ROOT/scripts/packaging/resolve_packaging_prefix.sh" ]] \
+  || fail "missing resolve_packaging_prefix.sh"
+
+# With NYTPROF_PREFIX set, polluted PREFIX must be ignored.
+export NYTPROF_PREFIX="$DEPTH_PREFIX"
+export PREFIX="${HOME}/perl5"
+resolved="$(resolve_packaging_prefix "$ROOT")"
+[[ "$resolved" == "$DEPTH_PREFIX" ]] \
+  || fail "NYTPROF_PREFIX should win over PREFIX=\$HOME/perl5 (got $resolved)"
+export PREFIX="${HOME}/perl5/"
+resolved="$(resolve_packaging_prefix "$ROOT")"
+[[ "$resolved" == "$DEPTH_PREFIX" ]] \
+  || fail "NYTPROF_PREFIX should win over PREFIX=\$HOME/perl5/ (got $resolved)"
+ok "NYTPROF_PREFIX wins over polluted PREFIX (incl. trailing slash)"
+
+# Without NYTPROF_PREFIX, denylist bare PREFIX → default $ROOT/prefix (not HOME/perl5).
+unset NYTPROF_PREFIX
+export PREFIX="${HOME}/perl5"
+resolved="$(resolve_packaging_prefix "$ROOT")"
+[[ "$resolved" == "$ROOT/prefix" ]] \
+  || fail "denylist \$HOME/perl5 should fall back to \$ROOT/prefix (got $resolved)"
+export PREFIX="${HOME}/perl5/"
+resolved="$(resolve_packaging_prefix "$ROOT")"
+[[ "$resolved" == "$ROOT/prefix" ]] \
+  || fail "denylist \$HOME/perl5/ (trailing slash) should fall back (got $resolved)"
+export PREFIX="/opt/toolchains/perl5"
+resolved="$(resolve_packaging_prefix "$ROOT")"
+[[ "$resolved" == "$ROOT/prefix" ]] \
+  || fail "denylist */perl5 should fall back to \$ROOT/prefix (got $resolved)"
+export PREFIX="/opt/toolchains/perl5/"
+resolved="$(resolve_packaging_prefix "$ROOT")"
+[[ "$resolved" == "$ROOT/prefix" ]] \
+  || fail "denylist */perl5/ (trailing slash) should fall back (got $resolved)"
+# Explicit non-denylist PREFIX still honored (operator override without NYTPROF_PREFIX).
+export PREFIX="/tmp/nytprof-explicit-prefix-ok"
+resolved="$(resolve_packaging_prefix "$ROOT")"
+[[ "$resolved" == "/tmp/nytprof-explicit-prefix-ok" ]] \
+  || fail "non-denylist PREFIX should be honored (got $resolved)"
+ok "bare PREFIX denylist: \$HOME/perl5, trailing slash, */perl5 → \$ROOT/prefix"
+
+# Live install-facade under polluted PREFIX must still land in NYTPROF_PREFIX root.
+export NYTPROF_PREFIX="$DEPTH_PREFIX"
+export PREFIX="${HOME}/perl5/"
+rm -f "$HOME/perl5/bin/nytprof-engine" 2>/dev/null || true
+if ! make install-facade; then
+  fail "make install-facade under PREFIX=\$HOME/perl5/ failed"
+fi
+[[ -x "$DEPTH_PREFIX/bin/nytprof-engine" ]] \
+  || fail "trap: facade not under NYTPROF_PREFIX after polluted PREFIX make"
+if [[ -e "$HOME/perl5/bin/nytprof-engine" ]]; then
+  # Only fail if our smoke just wrote it (file mtime recent); best-effort: path should not be used.
+  fail "trap: install-facade wrote under \$HOME/perl5 despite NYTPROF_PREFIX"
+fi
+ok "make install-facade under PREFIX=\$HOME/perl5/ stays in NYTPROF_PREFIX"
+
+# Restore smoke defaults for remaining steps.
+export NYTPROF_PREFIX="$DEPTH_PREFIX"
+unset PREFIX 2>/dev/null || true
+
 # Pure-Perl query --jsonl via installed facade (no native CLI required).
 banner "installed facade: query --json --jsonl (pure-Perl; no cargo)"
 ENGINE="$DEPTH_PREFIX/bin/nytprof-engine"
@@ -153,15 +218,28 @@ fi
 if command -v cargo >/dev/null 2>&1; then
   ok "cargo present: $(cargo --version 2>/dev/null || echo unknown)"
 
-  banner "make dual-install (native CLI + facade)"
+  banner "make dual-install (native CLI + facade; shared root)"
+  # Pollute bare PREFIX so dual-install must still co-locate under NYTPROF_PREFIX.
+  export PREFIX="${HOME}/perl5/"
   if ! make dual-install; then
     fail "make dual-install failed with cargo present"
   fi
+  unset PREFIX 2>/dev/null || true
   [[ -x "$DEPTH_PREFIX/bin/nytprof-cli" || -x "$DEPTH_PREFIX/bin/nytprof-dump" ]] \
     || fail "dual-install did not install native CLI under $DEPTH_PREFIX/bin"
   [[ -x "$DEPTH_PREFIX/bin/nytprof-engine" ]] \
     || fail "dual-install missing nytprof-engine"
-  ok "dual-install → native CLI + facade under private prefix"
+  [[ -f "$DEPTH_PREFIX/nytprof-facade.install" ]] \
+    || fail "dual-install missing facade stamp under shared root"
+  [[ -f "$DEPTH_PREFIX/nytprof-native.install" ]] \
+    || fail "dual-install missing native stamp under shared root"
+  facade_root="$(grep -E '^prefix=' "$DEPTH_PREFIX/nytprof-facade.install" | head -1 | cut -d= -f2-)"
+  native_root="$(grep -E '^prefix=' "$DEPTH_PREFIX/nytprof-native.install" | head -1 | cut -d= -f2-)"
+  [[ -n "$facade_root" && "$facade_root" == "$native_root" ]] \
+    || fail "dual-install split roots: facade=$facade_root native=$native_root"
+  [[ "$facade_root" == "$DEPTH_PREFIX" ]] \
+    || fail "dual-install stamps not under DEPTH_PREFIX (got $facade_root)"
+  ok "dual-install → native CLI + facade under one private prefix (no split)"
 
   banner "installed facade: --engine=native report via prefix CLI"
   # Prefer prefix binary; do not put crates/ on PERL5LIB.
@@ -196,7 +274,7 @@ if command -v cargo >/dev/null 2>&1; then
 else
   banner "optional-native"
   echo "SKIP: cargo not on PATH — dual-install / native report half not exercised"
-  echo "  (legacy install-facade + pure-Perl query succeeded; valid depth outcome)"
+  echo "  (legacy install-facade + pure-Perl query + PREFIX trap succeeded; valid depth outcome)"
 fi
 
 banner "ALL PASSED"
