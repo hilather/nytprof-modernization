@@ -179,7 +179,7 @@ Every residual below has disposition **CLOSE** (named Phase A PR), **WAIVE**, or
 | Claim level | Meaning |
 |-------------|---------|
 | **Offline R0 / R1-preview ready** | Documented surfaces + gates above pass on this host when cargo/oracle fixtures are present; dual-path legacy still works without Cargo |
-| **Full R1 ready** | Residual table closed **or** explicitly waived per **ADR-0003** (HTML per-class map; **OQ-2** FFI/XS must be **closed** via PR-A05/A06, not waived) with product packaging, API materializers, report completeness, and certification policy as required by the plan DoD |
+| **Full R1 ready** | Per **ADR-0003**: residual table rows closed **or** waived. **Required CLOSE:** PR-A05/A06 (OQ-2 FFI/XS — not waive). **Preferred CLOSE:** PR-A07/A08 (BUILD-006/003) **or** superseding waiver ADR. **HTML:** PR-A01–A03 for classes marked CLOSE; WAIVE rows stay residual-honest. **Perf:** PR-A09 if claiming, else WAIVE public claims. PR-A04 map required before A10 HTML posture. No COL-007 / wire freeze / R3–R4 default claims. |
 | **Not claimed** | Multi-OS CI green matrix, CPAN upload, performance SLOs, v6 collection, FFI ABI stability — until the matching CLOSE PR lands and honesty docs flip |
 
 ### Operator re-verify (preview)

@@ -177,12 +177,14 @@ Record decisions that affect stable semantics, wire bytes, platform support, pac
 
 ### ADR-Q018 - Native FFI versus subprocess for report operations
 
-- **Status:** open
+- **Status:** partial (full-R1 product disposition fixed; operation map open)
 - **Blocks:** PERL-005, RUST-010, TOOL-010
 - **Question:** Which operations run in-process through XS/FFI versus invoke a native CLI subprocess?
 - **Evidence required:** API compatibility, startup overhead, failure isolation, packaging, old Perl, callback needs.
 - **Recommended direction:** in-process coarse FFI for public Perl Data/ReadStream compatibility; CLI/subprocess acceptable for standalone report commands where it improves isolation and preserves behavior.
 - **Decision must specify:** operation map and error/stream handling.
+- **Full-R1 disposition (resolved by user OQ-2 / ADR-0003):** do **not** waive production FFI or XS Data/ReadStream for full R1. Close via **PR-A05** (`nytprof-ffi`) and **PR-A06** (XS Data / ReadStream). CLI subprocess remains the R0/R1-preview bridge and standalone report path. Normative: [`docs/adrs/0003-r1-full-residual-policy.md`](https://github.com/hilather/nytprof-modernization/blob/main/docs/adrs/0003-r1-full-residual-policy.md).
+- **Still open:** exact per-operation map (which report/query surfaces are in-process vs subprocess), error/stream handling, and packaging load rules for the dylib — decided when A05/A06 implement, not re-openable as “waive FFI/XS for full R1” without a superseding ADR.
 
 ### ADR-Q019 - Lazy Perl object materialization
 
@@ -195,12 +197,14 @@ Record decisions that affect stable semantics, wire bytes, platform support, pac
 
 ### ADR-Q020 - Report compatibility threshold
 
-- **Status:** open
+- **Status:** partial (full-R1 CLOSE/WAIVE map fixed; per-artifact comparison class open)
 - **Blocks:** REPORT-001, REPORT-002, REPORT-009, TEST-009
 - **Question:** Which HTML details require byte identity, normalized DOM identity, semantic identity, or may intentionally change?
 - **Evidence required:** existing tests/downstream consumers, links/bookmarks/styles, user expectations.
 - **Recommended direction:** exact data/filenames/anchors/links/source/order and normalized DOM semantics; byte identity only for machine formats or known consumers. Visual redesign is out of scope for default compatibility mode.
 - **Decision must specify:** per-artifact comparison class.
+- **Full-R1 disposition (resolved by ADR-0003 / PR-A04):** every HTML residual **class** is mapped to **CLOSE** (PR-A01–A03) or **WAIVE** (Graphviz, treemap, block/sub page modes, naming alias, presentation chrome, etc.). Semantic counts remain exact; full oracle DOM is not required for full R1. Normative map: [`docs/adrs/0003-r1-full-residual-policy.md`](https://github.com/hilather/nytprof-modernization/blob/main/docs/adrs/0003-r1-full-residual-policy.md) + inventory disposition column in [`REPORT_HTML_RESIDUAL_INVENTORY_v0.md`](https://github.com/hilather/nytprof-modernization/blob/main/docs/contracts/REPORT_HTML_RESIDUAL_INVENTORY_v0.md).
+- **Still open:** finer comparison class per closed artifact (byte vs normalized DOM vs semantic-only) when each CLOSE PR lands; waived classes need no native comparison class until a superseding ADR re-opens them.
 
 ### ADR-Q021 - Default report worker count and memory budgeting
 

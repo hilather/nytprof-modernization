@@ -8,9 +8,12 @@ Queue: [`docs/plan/18_OPEN_QUESTIONS_AND_ADR_QUEUE.md`](https://github.com/hilat
 
 | ADR | Title | Status |
 |-----|-------|--------|
-| 0001 | *(reserved)* Format v6 event-body packing candidate | reserved for R2 runway candidate (land/accept via packing work + PR-B01) |
-| 0002 | *(reserved)* Format v6 FOOTER string-pool / dictionary candidate | reserved for R2 runway candidate (land/accept via packing work + PR-B01) |
-| [0003](https://github.com/hilather/nytprof-modernization/blob/main/docs/adrs/0003-r1-full-residual-policy.md) | Full R1 residual close-or-waive policy (HTML map + OQ-2) | **accepted** |
+| 0001 | *(reserved)* Format v6 event-body packing candidate | reserved for R2 runway (land/accept via packing work + **PR-B01** / OQ-1) |
+| 0002 | *(reserved)* Format v6 FOOTER string-pool / dictionary candidate | reserved for R2 runway (land/accept via packing work + **PR-B01** / OQ-1) |
+| [0003](https://github.com/hilather/nytprof-modernization/blob/main/docs/adrs/0003-r1-full-residual-policy.md) | Full R1 residual close-or-waive policy (HTML map + OQ-2) | **accepted** (**PR-A04**) |
+| 0004 | *(reserved)* Collector packaging / source-tree layout | reserved for **PR-B00** (`0004-collector-packaging-source-tree.md` when that PR lands; do **not** reuse 0003) |
+
+**Numbering coordination (PLAN `8c9b1a63`):** 0001–0002 = format packing track (B01); **0003 = this residual policy (A04)**; **0004 = collector packaging (B00)**. Later ADRs start at **0005+**. Do not steal 0001–0004.
 
 Governance ratifications (not format ADRs):
 

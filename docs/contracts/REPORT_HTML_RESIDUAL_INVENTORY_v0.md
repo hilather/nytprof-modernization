@@ -37,6 +37,7 @@ PR-A10 must not claim full R1 HTML posture without that map. Preview advertiseme
 | Full R1 **CLOSE / WAIVE** disposition per class (ADR-0003) | Claiming waived classes as native-ready |
 
 **Residual honesty (from REPORT_SURFACE_CONTRACT):** native HTML is an MVP summary + multi-file site. Flame, Graphviz, shared CSS/JS, tablesorter, block/sub-level oracle page modes, and full DOM are **not advertised** under R1-preview.
+
 ---
 
 ## How to produce the oracle site
@@ -117,8 +118,9 @@ Legend for **Full R1 disposition** ([ADR-0003](https://github.com/hilather/nytpr
 |-------|---------|
 | **CLOSE** + PR | Must land named Phase A PR + tests before PR-A10 claims the class closed |
 | **WAIVE** | Not required for full R1 native HTML posture; keep residual honesty; legacy oracle may retain |
+| **done** | Already advertised ready under R1-preview (no further Phase A close work) |
 | **N/A** | Not an oracle gap (native-only convenience) |
-| **done** | Already advertised ready under R1-preview |
+| **OUT-OF-R1** | Not used for HTML classes in this inventory (see residual matrix for v6/R3/R4) |
 
 | Artifact class | Oracle (yes / example names) | Native (yes / path) | residual? | Full R1 disposition (ADR-0003) |
 |----------------|------------------------------|---------------------|-----------|--------------------------------|

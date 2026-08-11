@@ -25,7 +25,15 @@ Full product **R1** requires every residual row to be either **closed with imple
 
 User **OQ-2** (resolved): **close both** production FFI (`nytprof-ffi`) and XS Data / ReadStream product paths. Do **not** waive those rows for full R1.
 
-Numbering note: **ADR-0001** / **ADR-0002** are reserved for the v6 packing / FOOTER string-pool candidates (R2 runway). This residual policy is **ADR-0003**.
+Numbering coordination (PLAN `8c9b1a63`):
+
+| Number | Owner | Topic |
+|--------|-------|--------|
+| **0001** / **0002** | **PR-B01** | v6 packing / FOOTER string-pool candidates (OQ-1) |
+| **0003** | **PR-A04** (this ADR) | Full R1 residual close-or-waive policy |
+| **0004** | **PR-B00** | Collector packaging / source-tree (file lands as `0004-collector-packaging-source-tree.md` when B00 renumbers) |
+
+Do **not** reuse 0003 for packaging or packing ADRs.
 
 ---
 
@@ -49,8 +57,10 @@ This ADR does **not** close residuals by itself — it freezes **disposition**. 
 
 | Disposition | Meaning |
 |-------------|---------|
-| **CLOSE** | Must be implemented (or already advertised ready) before PR-A10 may claim the residual closed. Named close PR(s) are binding for Phase A. |
+| **CLOSE** | Must be implemented before PR-A10 may claim the residual/class closed. Named close PR(s) are binding for Phase A. |
 | **WAIVE** | Explicitly **not** required for full R1 product claim. Legacy oracle tools may retain the capability. Residual matrix / inventory remain honest; PR-A10 must not advertise the waived class as native-ready. |
+| **done** | Already advertised ready under offline R0 / R1-preview (no further Phase A close work for this class/path). Prefer this token over “CLOSE (done)” so “CLOSE” always means remaining implement work. |
+| **N/A** | Not an oracle gap (e.g. native-only convenience). Not something to close or waive against `nytprofhtml`. |
 | **OUT-OF-R1** | Tracked elsewhere (R2+ collector/format, R3/R4 defaults). Not a Phase A close/waive choice. |
 
 ### OQ-2 — FFI and XS (binding)
@@ -84,35 +94,35 @@ PR-A06: XS Data / ReadStream over binary profiles (may use FFI or pure-XS);
 
 ### HTML residual class map (binding for PR-A10 HTML posture)
 
-Every artifact class from [`REPORT_HTML_RESIDUAL_INVENTORY_v0.md`](https://github.com/hilather/nytprof-modernization/blob/main/docs/contracts/REPORT_HTML_RESIDUAL_INVENTORY_v0.md) maps to **CLOSE** (named PR) or **WAIVE**. Semantic counts (leaf **15** / mid **3** / mid→leaf **15** on default-calls1) are **already advertised** and are not residuals.
+Every artifact class from [`REPORT_HTML_RESIDUAL_INVENTORY_v0.md`](https://github.com/hilather/nytprof-modernization/blob/main/docs/contracts/REPORT_HTML_RESIDUAL_INVENTORY_v0.md) maps to **CLOSE**, **WAIVE**, **done**, or **N/A**. First-column labels match the inventory class names exactly. Semantic counts (leaf **15** / mid **3** / mid→leaf **15** on default-calls1) are **already advertised** and are not residuals.
 
 | Artifact class | Inventory residual? | Disposition | Close PR or waive note |
 |----------------|---------------------|-------------|------------------------|
-| Index / home page | partial | **CLOSE** (structure/CSS depth) | **PR-A01** — shared CSS + structure contract; counts already ready |
-| Full sub index (excl sort) (`index-subs-excl.html`) | yes | **CLOSE** | **PR-A02** |
-| Exclusive-time ranking (full excl page / oracle CSS) | partial | **CLOSE** | **PR-A02** (full page); index “Top exclusive” section already MVP |
-| Per-file / line source pages (oracle `{safe}-{fid}-line.html` naming) | partial | **WAIVE** (naming alias) | Keep permanent native `file-<fid>.html` + `source.html`; document alias residual — no separate naming-compat PR required for full R1 |
-| Block-level report pages (`*-block.html` oracle page mode) | yes / partial | **WAIVE** | Native A4b block_line table remains MVP when present; no oracle block page mode for full R1 |
-| Sub-level report pages (`*-sub.html`) | yes | **WAIVE** | Legacy `nytprofhtml` retains sub page mode |
-| Shared CSS (`style.css`) | yes | **CLOSE** | **PR-A01** |
-| Shared JS (jquery / tablesorter / floatThead / sort icons) | yes | **CLOSE** | **PR-A01** (minimal tablesorter **or** pure-CSS sort equivalent documented in A01 contract) |
-| JIT / treemap assets (`js/jit/*`) | yes | **WAIVE** | |
-| Treemap HTML page (`subs-treemap-excl.html`) | yes | **WAIVE** | |
-| Flame graph SVG (`all_stacks_by_time.svg`) | yes | **CLOSE** | **PR-A03** — optional `--flame`; no default site bloat |
-| Call-stack flame inputs (`.calls`, `flamegraph_subattr.txt` as site artifacts) | yes | **CLOSE** (with flame path) | **PR-A03**; native `folded` CLI remains related export outside HTML site |
-| Packages call graph (Graphviz `.dot`) | yes | **WAIVE** | Waive-by-default unless later demand + new ADR/PR |
-| Subs call graph (Graphviz `.dot`) | yes | **WAIVE** | same |
+| Index / home page | partial | **CLOSE** | **PR-A01** — structure/CSS depth; counts already ready |
+| Full sub index (excl sort) | yes | **CLOSE** | **PR-A02** (`index-subs-excl.html`) |
+| Exclusive-time ranking | partial | **CLOSE** | **PR-A02** (full excl page); index “Top exclusive” section already MVP |
+| Per-file / line source pages | partial | **WAIVE** | Naming alias: keep permanent native `file-<fid>.html` + `source.html` (not oracle `{safe}-{fid}-line.html`) |
+| Block-level report pages | yes / partial | **WAIVE** | No oracle `*-block.html` page mode; native A4b block_line table remains MVP when present |
+| Sub-level report pages | yes | **WAIVE** | No `*-sub.html`; legacy `nytprofhtml` retains sub page mode |
+| Shared CSS | yes | **CLOSE** | **PR-A01** (`style.css` or documented equivalent) |
+| Shared JS (jquery / tablesorter / floatThead) | yes | **CLOSE** | **PR-A01** (minimal tablesorter **or** pure-CSS sort) |
+| JIT / treemap assets | yes | **WAIVE** | `js/jit/*` |
+| Treemap HTML page | yes | **WAIVE** | `subs-treemap-excl.html` |
+| Flame graph SVG | yes | **CLOSE** | **PR-A03** — optional `--flame`; no default site bloat (`all_stacks_by_time.svg`) |
+| Call-stack flame inputs | yes | **CLOSE** | **PR-A03** (site `.calls` / `flamegraph_subattr.txt`); native `folded` remains related export outside HTML |
+| Packages call graph (Graphviz) | yes | **WAIVE** | Waive-by-default unless later demand + new ADR/PR |
+| Subs call graph (Graphviz) | yes | **WAIVE** | same |
 | Per-file call graph `.dot` | yes | **WAIVE** | same |
-| Call-edges table (oracle presentation) | partial | **WAIVE** (presentation) | Semantic counts already advertised on native tables |
-| Subroutine returns table (oracle tablesorter chrome) | partial | **WAIVE** (presentation) | Counts advertised; interactive oracle chrome not required if A01 ships minimal sort |
-| Source line table A4 (oracle DOM) | partial | **WAIVE** (presentation) | MVP tables advertised; oracle DOM not required |
-| A4b block_line totals (oracle block-mode presentation) | partial | **WAIVE** (presentation beyond MVP table) | Native A4b table already MVP when model has data |
-| Multi-file site directory publish | no | **CLOSE** (done) | Already advertised (`html --out-dir`) |
+| Call-edges table (caller/called/count) | partial | **WAIVE** | Oracle presentation residual; semantic counts already advertised |
+| Subroutine returns table | partial | **WAIVE** | Oracle tablesorter chrome residual; counts advertised |
+| Source line table (A4) | partial | **WAIVE** | Oracle DOM residual; MVP tables advertised |
+| A4b block_line totals | partial | **WAIVE** | Presentation beyond MVP table residual |
+| Multi-file site directory publish | no | **done** | Already advertised (`html --out-dir`) |
 | Single self-contained HTML | no (native-only) | **N/A** | Native convenience; not an oracle gap to close |
-| Browser open helper (`--open`) | yes | **WAIVE** | |
-| Delete-out-dir flag (`-d` / `--delete`) | partial | **WAIVE** | Atomic out-dir overwrite accepted as product behavior |
+| Browser open helper | yes | **WAIVE** | Oracle `--open` |
+| Delete-out-dir flag | partial | **WAIVE** | Exact `-d` / `--delete`; atomic out-dir overwrite accepted |
 | Eval merge UI / `--mergeevals` | yes | **WAIVE** | |
-| Footer / version branding (oracle Devel::NYTProf footer) | partial | **WAIVE** | Native titles sufficient for full R1 |
+| Footer / version branding | partial | **WAIVE** | Oracle Devel::NYTProf footer; native titles sufficient for full R1 |
 
 **PR-A10 rule:** full R1 HTML posture may be claimed only when every class above is either **closed with evidence** (CLOSE rows + tests + inventory flip) or still listed as **WAIVE** with residual honesty. PR-A10 must **not** claim full oracle `nytprofhtml` DOM.
 
@@ -129,7 +139,7 @@ Every artifact class from [`REPORT_HTML_RESIDUAL_INVENTORY_v0.md`](https://githu
 | **PR-A07** | Multi-OS CI matrix (BUILD-006 MVP) |
 | **PR-A08** | Packaging depth toward BUILD-003 |
 | **PR-A09** | Optional R1-scoped perf certification (else waive public claims) |
-| **PR-A10** | Full R1 readiness cut (matrix + release notes); depends on A04 map + A05/A06 close evidence for FFI/XS claims |
+| **PR-A10** | Full R1 readiness cut (matrix + release notes). Depends on: **A04 map** (this ADR); **required CLOSE** **A05/A06** (OQ-2 FFI/XS); **preferred CLOSE** **A07/A08** (BUILD-006 / BUILD-003) **or** a superseding waiver ADR; **A01–A03** CLOSE evidence for HTML classes marked CLOSE (plus inventory flip); **A09** optional (else **WAIVE** public perf claims). Must not claim full oracle DOM, COL-007, wire freeze, or R3/R4 defaults. |
 
 ---
 
