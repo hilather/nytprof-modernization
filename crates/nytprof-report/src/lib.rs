@@ -6,6 +6,7 @@
 //! `docs/schemas/html-per-file-mvp-v0.md` (A4b block_line_totals),
 //! `docs/schemas/html-outdir-safety-mvp-v0.md`,
 //! `docs/schemas/html-shared-css-structure-mvp-v0.md` (shared CSS + structure),
+//! `docs/schemas/html-subs-excl-index-mvp-v0.md` (exclusive sub index page),
 //! `docs/schemas/export-formats-mvp-v0.md`,
 //! `docs/schemas/export-semantic-parity-mvp-v0.md`,
 //! `docs/schemas/verify-cli-mvp-v0.md`,
@@ -239,11 +240,13 @@ pub fn escape_html(s: &str) -> String {
     out
 }
 
-/// Multi-file HTML report site (index + per-fid source pages + shared CSS).
+/// Multi-file HTML report site (index + per-fid source pages + exclusive sub
+/// index + shared CSS).
 ///
 /// See `docs/schemas/html-multifile-mvp-v0.md`,
-/// `docs/schemas/html-per-file-mvp-v0.md`, and
-/// `docs/schemas/html-shared-css-structure-mvp-v0.md`.
+/// `docs/schemas/html-per-file-mvp-v0.md`,
+/// `docs/schemas/html-shared-css-structure-mvp-v0.md`, and
+/// `docs/schemas/html-subs-excl-index-mvp-v0.md`.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct HtmlSite {
     /// Contents of `index.html` (summary with relative links to file pages).
@@ -254,6 +257,13 @@ pub struct HtmlSite {
     pub source_filename: String,
     /// Per-fid pages: `(filename, html)` e.g. `("file-1.html", "...")`, sorted by fid.
     pub file_pages: Vec<(String, String)>,
+    /// Full exclusive-time sub ranking page body
+    /// ([`HtmlSite::index_subs_excl_filename`] / `index-subs-excl.html`).
+    pub index_subs_excl_html: String,
+    /// Relative filename of the exclusive sub index (always
+    /// [`INDEX_SUBS_EXCL_FILENAME`] / `"index-subs-excl.html"` from
+    /// [`render_html_site`]).
+    pub index_subs_excl_filename: String,
     /// Shared stylesheet body written as [`HtmlSite::style_filename`] (`style.css`).
     ///
     /// Same text as [`SHARED_STYLE_CSS`]. Multi-file pages link to
@@ -307,6 +317,13 @@ a{color:#0645ad}\n\
 /// Canonical multi-file stylesheet filename (`style.css`).
 pub const STYLE_CSS_FILENAME: &str = "style.css";
 
+/// Canonical multi-file exclusive-time sub index filename (`index-subs-excl.html`).
+///
+/// Oracle `nytprofhtml` emits the same name for the full exclusive-sorted
+/// subroutine index. Native page is MVP (stable structure classes, not oracle
+/// DOM/tablesorter). See `docs/schemas/html-subs-excl-index-mvp-v0.md`.
+pub const INDEX_SUBS_EXCL_FILENAME: &str = "index-subs-excl.html";
+
 /// Self-contained HTML summary report (MVP; see `docs/schemas/html-report-mvp-v0.md`).
 ///
 /// Includes profile path, event counts, subroutine table from `sub_return_totals`,
@@ -334,14 +351,17 @@ pub fn render_html_summary(model: &ProfileModel, profile_path: &str) -> String {
     out
 }
 
-/// Multi-file HTML site: summary index + one page per eligible fid + shared CSS.
+/// Multi-file HTML site: summary index + exclusive sub index + per-fid pages +
+/// shared CSS.
 ///
 /// Eligible fids are those in [`ProfileModel::files`] that have at least one
 /// `source_lines`, `line_totals`, or `block_line_totals` entry.
 ///
 /// Site contents:
-/// - `index.html` — summary; relative links to every `file-<fid>.html` and to
-///   [`HtmlSite::source_filename`] (`source.html`) as a primary alias
+/// - `index.html` — summary; relative links to every `file-<fid>.html`, to
+///   [`HtmlSite::source_filename`] (`source.html`) as a primary alias, and to
+///   [`HtmlSite::index_subs_excl_filename`] (`index-subs-excl.html`)
+/// - `index-subs-excl.html` — full exclusive-time subroutine ranking page
 /// - `file-<fid>.html` — source + A4 (and A4b when present) for that fid
 /// - `source.html` — copy of the primary workload file page (back-compat)
 /// - `style.css` — shared MVP stylesheet ([`SHARED_STYLE_CSS`]); pages link via
@@ -351,6 +371,7 @@ pub fn render_html_site(model: &ProfileModel, profile_path: &str) -> HtmlSite {
     // Single source for both `<link href>` and the on-disk stylesheet name.
     let style_filename = STYLE_CSS_FILENAME.to_owned();
     let style_css = SHARED_STYLE_CSS.to_owned();
+    let index_subs_excl_filename = INDEX_SUBS_EXCL_FILENAME.to_owned();
     let title = html_report_title(profile_path);
     let primary_fid = primary_workload_fid(model);
     let eligible = eligible_source_fids(model);
@@ -378,6 +399,10 @@ pub fn render_html_site(model: &ProfileModel, profile_path: &str) -> HtmlSite {
             render_file_page(model, primary_fid, profile_base, style_filename.as_str())
         });
 
+    // --- index-subs-excl.html (full exclusive ranking) ---
+    let index_subs_excl_html =
+        render_index_subs_excl_page(model, profile_path, profile_base, style_filename.as_str());
+
     // --- index.html ---
     let mut index = String::with_capacity(4096);
     push_html_doc_start(&mut index, &title, css);
@@ -388,6 +413,11 @@ pub fn render_html_site(model: &ProfileModel, profile_path: &str) -> HtmlSite {
     push_sub_defs_table(&mut index, model);
     push_call_edges_table(&mut index, model);
     push_top_exclusive_table(&mut index, model);
+    // Link from summary exclusive section to the full exclusive sub index page.
+    index.push_str(&format!(
+        "<p class=\"subs-excl-link\"><a href=\"{}\">Full exclusive subroutine index</a></p>\n",
+        escape_html(index_subs_excl_filename.as_str())
+    ));
     push_source_file_links(&mut index, model, &eligible, primary_fid, &source_filename);
     index.push_str("</body>\n</html>\n");
 
@@ -396,6 +426,8 @@ pub fn render_html_site(model: &ProfileModel, profile_path: &str) -> HtmlSite {
         source_html,
         source_filename,
         file_pages,
+        index_subs_excl_html,
+        index_subs_excl_filename,
         style_css,
         style_filename,
     }
@@ -472,9 +504,9 @@ fn path_os_contains_nul(path: &Path) -> bool {
 ///
 /// Path safety ([`validate_html_out_dir`]) runs before any create/write.
 ///
-/// Writes `index.html`, every `file-<fid>.html` from [`HtmlSite::file_pages`],
-/// `source.html` (primary alias), and shared [`HtmlSite::style_filename`]
-/// (`style.css`).
+/// Writes `index.html`, `index-subs-excl.html`, every `file-<fid>.html` from
+/// [`HtmlSite::file_pages`], `source.html` (primary alias), and shared
+/// [`HtmlSite::style_filename`] (`style.css`).
 ///
 /// Returns the rendered [`HtmlSite`] so callers can list filenames written.
 pub fn write_html_site(
@@ -509,6 +541,10 @@ fn publish_html_site_files(site: &HtmlSite, out_dir: &Path) -> io::Result<()> {
     let temp_dir = create_temp_site_dir(&parent)?;
     let write_result = (|| -> io::Result<()> {
         fs::write(temp_dir.join("index.html"), site.index_html.as_bytes())?;
+        fs::write(
+            temp_dir.join(&site.index_subs_excl_filename),
+            site.index_subs_excl_html.as_bytes(),
+        )?;
         for (filename, html) in &site.file_pages {
             fs::write(temp_dir.join(filename), html.as_bytes())?;
         }
@@ -839,16 +875,15 @@ fn push_call_edges_table(out: &mut String, model: &ProfileModel) {
 }
 
 fn push_top_exclusive_table(out: &mut String, model: &ProfileModel) {
-    // Exclusive-time ranking: excl desc, then name for stability.
+    // Exclusive-time ranking (summary): excl desc, then name for stability.
+    // Full page lives at `index-subs-excl.html` (see `push_subs_excl_table`).
     out.push_str("<h2>Top exclusive</h2>\n");
     out.push_str(
         "<table class=\"top-exclusive\">\n<thead><tr>\
          <th>name</th><th>excl</th><th>returns</th>\
          </tr></thead>\n<tbody>\n",
     );
-    let mut by_excl: Vec<_> = model.sub_return_totals.iter().collect();
-    by_excl.sort_by(|(n1, t1), (n2, t2)| t2.excl.total_cmp(&t1.excl).then_with(|| n1.cmp(n2)));
-    for (name, t) in by_excl {
+    for (name, t) in sorted_subs_by_exclusive(model) {
         out.push_str(&format!(
             "<tr><td>{}</td>\
              <td class=\"num\">{}</td><td class=\"num\">{}</td></tr>\n",
@@ -858,6 +893,62 @@ fn push_top_exclusive_table(out: &mut String, model: &ProfileModel) {
         ));
     }
     out.push_str("</tbody>\n</table>\n");
+}
+
+/// All `sub_return_totals` sorted by exclusive time descending, then name.
+fn sorted_subs_by_exclusive(model: &ProfileModel) -> Vec<(&String, &nytprof_model::SubTotal)> {
+    let mut by_excl: Vec<_> = model.sub_return_totals.iter().collect();
+    by_excl.sort_by(|(n1, t1), (n2, t2)| t2.excl.total_cmp(&t1.excl).then_with(|| n1.cmp(n2)));
+    by_excl
+}
+
+/// Full exclusive-time ranking table for `index-subs-excl.html`.
+///
+/// Columns: name, returns, incl, excl — same fields as the summary Subroutines
+/// table, but sorted by exclusive time (oracle `excl_time` index semantics).
+/// Stable class: `table.subs-excl`.
+fn push_subs_excl_table(out: &mut String, model: &ProfileModel) {
+    out.push_str("<h2>Subroutines by exclusive time</h2>\n");
+    out.push_str(
+        "<table class=\"subs-excl\">\n<thead><tr>\
+         <th>name</th><th>returns</th><th>incl</th><th>excl</th>\
+         </tr></thead>\n<tbody>\n",
+    );
+    for (name, t) in sorted_subs_by_exclusive(model) {
+        out.push_str(&format!(
+            "<tr><td>{}</td><td class=\"num\">{}</td>\
+             <td class=\"num\">{}</td><td class=\"num\">{}</td></tr>\n",
+            escape_html(name),
+            t.returns,
+            format_ticks(t.incl),
+            format_ticks(t.excl),
+        ));
+    }
+    out.push_str("</tbody>\n</table>\n");
+}
+
+/// Render the multi-file exclusive sub index page (`index-subs-excl.html`).
+///
+/// See `docs/schemas/html-subs-excl-index-mvp-v0.md`.
+fn render_index_subs_excl_page(
+    model: &ProfileModel,
+    profile_path: &str,
+    profile_base: &str,
+    style_filename: &str,
+) -> String {
+    let title = format!("Subroutine exclusive index — {profile_base}");
+    let mut page = String::with_capacity(4096);
+    push_html_doc_start(
+        &mut page,
+        &title,
+        HtmlCssMode::LinkedStyleSheet(style_filename),
+    );
+    page.push_str(&format!("<h1>{}</h1>\n", escape_html(&title)));
+    page.push_str("<p><a href=\"index.html\">← Back to index</a></p>\n");
+    push_profile_path(&mut page, profile_path);
+    push_subs_excl_table(&mut page, model);
+    page.push_str("</body>\n</html>\n");
+    page
 }
 
 fn push_source_heading(out: &mut String, model: &ProfileModel, primary_fid: u32) {
@@ -1484,8 +1575,13 @@ mod tests {
         assert_eq!(site.source_filename, "source.html");
         assert_eq!(site.style_filename, STYLE_CSS_FILENAME);
         assert_eq!(site.style_css, SHARED_STYLE_CSS);
+        assert_eq!(site.index_subs_excl_filename, INDEX_SUBS_EXCL_FILENAME);
         assert!(!site.index_html.is_empty());
         assert!(!site.source_html.is_empty());
+        assert!(
+            !site.index_subs_excl_html.is_empty(),
+            "index-subs-excl.html body non-empty"
+        );
         assert!(
             site.file_pages.len() >= 2,
             "default-calls1 must emit ≥2 file pages, got {}: {:?}",
@@ -1552,6 +1648,12 @@ mod tests {
         assert!(
             index.contains("href=\"file-1.html\""),
             "index must link to file-1.html:\n{index}"
+        );
+        // Exclusive sub index page is linked from the summary index.
+        assert!(
+            index.contains(&format!("href=\"{}\"", INDEX_SUBS_EXCL_FILENAME)),
+            "index must link to {}:\n{index}",
+            INDEX_SUBS_EXCL_FILENAME
         );
         let other_file_link = site
             .file_pages
@@ -1661,7 +1763,7 @@ mod tests {
             "file-1.html missing under {}",
             out.display()
         );
-        // Complete site set includes shared CSS on the atomic publish path.
+        // Complete site set includes shared CSS + exclusive sub index.
         let style_path = out.join(STYLE_CSS_FILENAME);
         assert!(
             style_path.is_file(),
@@ -1673,6 +1775,35 @@ mod tests {
         assert!(
             index.contains(&format!("href=\"{}\"", STYLE_CSS_FILENAME)),
             "index must link style.css:\n{index}"
+        );
+        let excl_path = out.join(INDEX_SUBS_EXCL_FILENAME);
+        assert!(
+            excl_path.is_file(),
+            "index-subs-excl.html missing under {}",
+            out.display()
+        );
+        let excl = fs::read_to_string(&excl_path).expect("index-subs-excl.html");
+        assert!(
+            index.contains(&format!("href=\"{}\"", INDEX_SUBS_EXCL_FILENAME)),
+            "index must link exclusive sub index:\n{index}"
+        );
+        assert!(
+            excl.contains(&format!("href=\"{}\"", STYLE_CSS_FILENAME)),
+            "excl index must link style.css:\n{excl}"
+        );
+        assert!(
+            excl.contains("class=\"subs-excl\""),
+            "excl index structure class:\n{excl}"
+        );
+        assert!(
+            excl.contains("main::leaf") && excl.contains(&format!(">{}<", leaf.returns)),
+            "excl page leaf returns {}:\n{excl}",
+            leaf.returns
+        );
+        assert!(
+            excl.contains("main::mid") && excl.contains(&format!(">{}<", mid.returns)),
+            "excl page mid returns {}:\n{excl}",
+            mid.returns
         );
         assert!(
             index.contains("main::leaf") && index.contains(&format!(">{}<", leaf.returns)),
@@ -1771,6 +1902,18 @@ mod tests {
         assert!(index.contains(&format!("href=\"{}\"", STYLE_CSS_FILENAME)));
         assert!(file1.contains(&format!("href=\"{}\"", STYLE_CSS_FILENAME)));
         assert!(source.contains(&format!("href=\"{}\"", STYLE_CSS_FILENAME)));
+        // Exclusive sub index on disk.
+        let excl_path = tmp.join(INDEX_SUBS_EXCL_FILENAME);
+        assert!(
+            excl_path.is_file(),
+            "index-subs-excl.html missing at {}",
+            excl_path.display()
+        );
+        let excl = fs::read_to_string(&excl_path).expect("read index-subs-excl");
+        assert!(index.contains(&format!("href=\"{}\"", INDEX_SUBS_EXCL_FILENAME)));
+        assert!(excl.contains(&format!("href=\"{}\"", STYLE_CSS_FILENAME)));
+        assert!(excl.contains("main::leaf") && excl.contains(">15<"));
+        assert!(excl.contains("main::mid") && excl.contains(">3<"));
 
         let _ = fs::remove_dir_all(&ws);
     }
@@ -1808,6 +1951,10 @@ mod tests {
         );
 
         for (label, html) in std::iter::once(("index", site.index_html.as_str()))
+            .chain(std::iter::once((
+                "index-subs-excl",
+                site.index_subs_excl_html.as_str(),
+            )))
             .chain(std::iter::once(("source", site.source_html.as_str())))
             .chain(
                 site.file_pages
@@ -1839,6 +1986,7 @@ mod tests {
             "class=\"call-edges\"",
             "class=\"top-exclusive\"",
             "class=\"source-files\"",
+            "class=\"subs-excl-link\"",
             "<h2>Event counts</h2>",
             "<h2>Subroutines</h2>",
             "<h2>Call edges</h2>",
@@ -1850,6 +1998,10 @@ mod tests {
                 "index structure missing {needle}:\n{index}"
             );
         }
+        assert!(
+            index.contains(&format!("href=\"{}\"", INDEX_SUBS_EXCL_FILENAME)),
+            "index must link exclusive sub index:\n{index}"
+        );
         // Semantic counts 15/3/15 on index tables.
         assert!(
             index.contains(&format!(
@@ -1889,7 +2041,7 @@ mod tests {
         assert!(source.contains("class=\"source\""));
         assert!(source.contains("$x++") && source.contains("for 1 .. 50"));
 
-        // Disk publish includes style.css with exact shared text.
+        // Disk publish includes style.css + exclusive sub index.
         let ws = unique_html_workspace("shared-css");
         let out = ws.join("site");
         write_html_site(&model, &path_str, &out).expect("write_html_site");
@@ -1918,6 +2070,17 @@ mod tests {
                 && disk_edges.contains(&format!(">{}<", edge.count)),
             "disk index mid→leaf {}:\n{disk_edges}",
             edge.count
+        );
+        let disk_excl =
+            fs::read_to_string(out.join(INDEX_SUBS_EXCL_FILENAME)).expect("disk index-subs-excl");
+        assert!(disk_excl.contains("class=\"subs-excl\""));
+        assert!(
+            disk_excl.contains("main::leaf") && disk_excl.contains(">15<"),
+            "disk excl leaf 15"
+        );
+        assert!(
+            disk_excl.contains("main::mid") && disk_excl.contains(">3<"),
+            "disk excl mid 3"
         );
 
         // --- single-file: inline same CSS, self-contained ---
@@ -2013,6 +2176,137 @@ mod tests {
         );
         assert!(out.join("source.html").is_file());
         assert!(out.join("file-1.html").is_file());
+        assert!(
+            out.join(INDEX_SUBS_EXCL_FILENAME).is_file(),
+            "index-subs-excl.html missing after overwrite"
+        );
+
+        let _ = fs::remove_dir_all(&ws);
+    }
+
+    /// PR-A02 / REPORT-HTML-SUBS-EXCL: exclusive sub index page on default-calls1.
+    ///
+    /// Multi-file site publishes `index-subs-excl.html` with all subs ranked by
+    /// exclusive time; leaf **15** / mid **3** greppable; index links the page;
+    /// shared CSS linked (no inline style). See
+    /// `docs/schemas/html-subs-excl-index-mvp-v0.md`.
+    #[test]
+    fn html_subs_excl_index_default_calls1() {
+        let path = fixture_out("default-calls1");
+        assert!(path.is_file(), "missing fixture {}", path.display());
+        let path_str = path.to_string_lossy();
+        let model = ProfileModel::from_path(&path).expect("ProfileModel::from_path");
+
+        let leaf = model.sub_total("main::leaf").expect("main::leaf");
+        let mid = model.sub_total("main::mid").expect("main::mid");
+        assert_eq!(leaf.returns, 15, "semantic leaf returns");
+        assert_eq!(mid.returns, 3, "semantic mid returns");
+
+        let site = render_html_site(&model, &path_str);
+        assert_eq!(site.index_subs_excl_filename, INDEX_SUBS_EXCL_FILENAME);
+        assert_eq!(site.index_subs_excl_filename, "index-subs-excl.html");
+
+        let excl = &site.index_subs_excl_html;
+        let lower = excl.to_ascii_lowercase();
+        assert!(
+            lower.contains("<!doctype html"),
+            "excl page doctype:\n{}",
+            &excl[..excl.len().min(200)]
+        );
+        assert!(
+            excl.contains(&format!("href=\"{}\"", STYLE_CSS_FILENAME)),
+            "excl page must link style.css:\n{excl}"
+        );
+        assert!(
+            !lower.contains("<style"),
+            "excl page must not inline <style>:\n{excl}"
+        );
+        assert!(
+            excl.contains("href=\"index.html\""),
+            "excl page must link back to index:\n{excl}"
+        );
+        assert!(
+            excl.contains("class=\"subs-excl\""),
+            "excl page table class:\n{excl}"
+        );
+        assert!(
+            excl.contains("<h2>Subroutines by exclusive time</h2>"),
+            "excl page heading:\n{excl}"
+        );
+        assert!(
+            excl.contains("class=\"profile-path\""),
+            "excl page profile path:\n{excl}"
+        );
+        // Semantic counts: leaf 15 / mid 3 in returns cells.
+        assert!(
+            excl.contains("main::leaf") && excl.contains(&format!(">{}<", leaf.returns)),
+            "excl page leaf returns {}:\n{excl}",
+            leaf.returns
+        );
+        assert!(
+            excl.contains("main::mid") && excl.contains(&format!(">{}<", mid.returns)),
+            "excl page mid returns {}:\n{excl}",
+            mid.returns
+        );
+        // Stronger greppable cells next to names (returns column is second).
+        assert!(
+            excl.contains(&format!(
+                "<td>main::leaf</td><td class=\"num\">{}</td>",
+                leaf.returns
+            )),
+            "excl leaf returns cell:\n{excl}"
+        );
+        assert!(
+            excl.contains(&format!(
+                "<td>main::mid</td><td class=\"num\">{}</td>",
+                mid.returns
+            )),
+            "excl mid returns cell:\n{excl}"
+        );
+        // Sort order: exclusive desc — leaf excl equals incl (hot loop); mid
+        // excl is nested work, typically less than leaf, but both must appear.
+        // Verify every model sub appears exactly once in the table body.
+        let table_idx = excl.find("class=\"subs-excl\"").expect("subs-excl table");
+        let table = &excl[table_idx..];
+        for name in model.sub_return_totals.keys() {
+            assert!(
+                table.contains(&escape_html(name)),
+                "excl table missing sub {name}:\n{table}"
+            );
+        }
+        // Index links to the exclusive page (and not the reverse as primary nav).
+        assert!(
+            site.index_html
+                .contains(&format!("href=\"{}\"", INDEX_SUBS_EXCL_FILENAME)),
+            "index must link exclusive page:\n{}",
+            site.index_html
+        );
+        assert!(
+            site.index_html.contains("class=\"subs-excl-link\""),
+            "index exclusive link marker:\n{}",
+            site.index_html
+        );
+
+        // Disk publish: real write path.
+        let ws = unique_html_workspace("subs-excl");
+        let out = ws.join("site");
+        write_html_site(&model, &path_str, &out).expect("write_html_site");
+        assert_no_staging_leftovers(&ws, "site");
+
+        let disk_excl = fs::read_to_string(out.join(INDEX_SUBS_EXCL_FILENAME)).expect("disk excl");
+        assert!(
+            disk_excl.contains("class=\"subs-excl\"")
+                && disk_excl.contains("main::leaf")
+                && disk_excl.contains(">15<")
+                && disk_excl.contains("main::mid")
+                && disk_excl.contains(">3<"),
+            "disk excl 15/3:\n{disk_excl}"
+        );
+        let disk_index = fs::read_to_string(out.join("index.html")).expect("disk index");
+        assert!(
+            disk_index.contains(&format!("href=\"{}\"", INDEX_SUBS_EXCL_FILENAME)),
+            "disk index link:\n{disk_index}"
+        );
 
         let _ = fs::remove_dir_all(&ws);
     }

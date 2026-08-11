@@ -22,6 +22,7 @@
 //! HTML MVP: `docs/schemas/html-report-mvp-v0.md`
 //! HTML multi-file: `docs/schemas/html-multifile-mvp-v0.md`
 //! HTML shared CSS + structure: `docs/schemas/html-shared-css-structure-mvp-v0.md`
+//! HTML exclusive sub index: `docs/schemas/html-subs-excl-index-mvp-v0.md`
 //! HTML out-dir safety: `docs/schemas/html-outdir-safety-mvp-v0.md`
 //! HTML per-file: `docs/schemas/html-per-file-mvp-v0.md`
 //! Export MVP: `docs/schemas/export-formats-mvp-v0.md`
@@ -717,11 +718,13 @@ fn write_stdout_text(text: &str) -> Result<(), Box<dyn std::error::Error>> {
 /// - `html <profile.out>` — single-file HTML to stdout (inline shared CSS)
 /// - `html <profile.out> -o path.html` — single-file to path
 /// - `html <profile.out> --out-dir DIR` — multi-file site:
-///   `index.html` + `file-*.html` + `source.html` + shared `style.css`
+///   `index.html` + `index-subs-excl.html` + `file-*.html` + `source.html` +
+///   shared `style.css`
 ///
 /// `-o` / `--output` and `--out-dir` / `--dir` are mutually exclusive.
-/// See `docs/schemas/html-multifile-mvp-v0.md` and
-/// `docs/schemas/html-shared-css-structure-mvp-v0.md`.
+/// See `docs/schemas/html-multifile-mvp-v0.md`,
+/// `docs/schemas/html-shared-css-structure-mvp-v0.md`, and
+/// `docs/schemas/html-subs-excl-index-mvp-v0.md`.
 fn cmd_html(args: &[String]) -> Result<(), Box<dyn std::error::Error>> {
     let usage = "Usage: nytprof-cli html <profile.out> [-o path.html | --out-dir DIR]";
     let mut path: Option<&str> = None;
@@ -779,6 +782,7 @@ fn cmd_html(args: &[String]) -> Result<(), Box<dyn std::error::Error>> {
         // Paths written (stderr so stdout stays free for piping other modes).
         let base = dir.trim_end_matches('/');
         eprintln!("{base}/index.html");
+        eprintln!("{base}/{}", site.index_subs_excl_filename);
         for (filename, _) in &site.file_pages {
             eprintln!("{base}/{filename}");
         }

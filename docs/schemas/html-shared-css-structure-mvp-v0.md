@@ -17,7 +17,7 @@ Native HTML uses **one** shared stylesheet body: `nytprof_report::SHARED_STYLE_C
 **Rules:**
 
 1. Multi-file and single-file CSS **text is identical** (`SHARED_STYLE_CSS`).  
-2. Multi-file `write_html_site` publishes `style.css` atomically with `index.html` / `file-*.html` / `source.html` (same temp-then-rename path).  
+2. Multi-file `write_html_site` publishes `style.css` atomically with `index.html` / `index-subs-excl.html` / `file-*.html` / `source.html` (same temp-then-rename path).  
 3. This is **not** oracle `style.css` from `get_css()` / `_output_additional`, and **not** tablesorter / jquery / floatThead CSS or JS.  
 4. No client-side sort JS in this slice (tablesorter residual remains **yes**). Zebra/hover rows are pure CSS only.
 
@@ -25,10 +25,11 @@ Native HTML uses **one** shared stylesheet body: `nytprof_report::SHARED_STYLE_C
 
 ```text
 {out-dir}/
-  index.html          # summary; <link rel="stylesheet" href="style.css">
-  source.html         # primary workload alias
-  file-<fid>.html     # per-fid pages (same link)
-  style.css           # SHARED_STYLE_CSS body
+  index.html              # summary; <link rel="stylesheet" href="style.css">
+  index-subs-excl.html    # exclusive sub index (same link; PR-A02)
+  source.html             # primary workload alias
+  file-<fid>.html         # per-fid pages (same link)
+  style.css               # SHARED_STYLE_CSS body
 ```
 
 ## Document structure contract
@@ -96,7 +97,7 @@ Tests must load the real profile via `ProfileModel::from_path` (or shipped CLI) 
 - jquery / tablesorter / floatThead / sort icons  
 - Treemap / JIT CSS  
 - Client-side column sort  
-- Flame / Graphviz / `index-subs-excl.html` (other PR slices / map)
+- Flame / Graphviz (other PR slices / map). Exclusive sub index page is PR-A02 ([html-subs-excl-index-mvp-v0.md](https://github.com/hilather/nytprof-modernization/blob/main/docs/schemas/html-subs-excl-index-mvp-v0.md)).
 
 ## Tests
 
