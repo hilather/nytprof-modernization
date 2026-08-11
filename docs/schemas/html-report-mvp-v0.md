@@ -9,11 +9,9 @@
 ```text
 nytprof-cli html <profile.out>                 # write HTML to stdout
 nytprof-cli html <profile.out> -o report.html  # write to file
-nytprof-cli html <profile.out> --flame         # opt-in embed native flame SVG (default off)
 ```
 
-Library: `nytprof_report::render_html_summary(model: &ProfileModel, profile_path: &str) -> String`  
-Optional flame: `render_html_summary_with_options(..., HtmlRenderOptions { flame: true })` — see [html-optional-flame-mvp-v0.md](https://github.com/hilather/nytprof-modernization/blob/main/docs/schemas/html-optional-flame-mvp-v0.md).
+Library: `nytprof_report::render_html_summary(model: &ProfileModel, profile_path: &str) -> String`
 
 ## Required HTML content (self-contained single document)
 
@@ -29,6 +27,5 @@ Optional flame: `render_html_summary_with_options(..., HtmlRenderOptions { flame
 
 ## Explicit non-requirements
 
-- tablesorter / oracle CSS / `flamegraph.pl` / Graphviz / CSS polish parity with legacy nytprofhtml
-  (opt-in native folded flame is separate: [html-optional-flame-mvp-v0.md](https://github.com/hilather/nytprof-modernization/blob/main/docs/schemas/html-optional-flame-mvp-v0.md))
+- tablesorter / oracle CSS / flame / Graphviz / CSS polish parity with legacy nytprofhtml
 - Exact DOM match to legacy nytprofhtml

@@ -31,7 +31,7 @@ This document **does not** claim full `nytprofhtml` DOM / CSS / tablesorter / fl
 | Exact semantic counts on native HTML (15 / 3 / 15) | Full plan REPORT-001..020 |
 | How to regenerate the oracle site under isolated `PERL5LIB` | Closing residuals in this board |
 
-**Residual honesty (from REPORT_SURFACE_CONTRACT):** native HTML is an MVP summary + multi-file site (including MVP shared `style.css` / documented inline CSS policy — **not** oracle CSS/JS). Optional `--flame` (off by default) publishes folded+native SVG site artifacts — **not** oracle default-on `flamegraph.pl` / multi-frame stacks. Graphviz, treemap, Shared JS / tablesorter, block/sub-level oracle page modes, and full DOM remain residual.
+**Residual honesty (from REPORT_SURFACE_CONTRACT):** native HTML is an MVP summary + multi-file site (including MVP shared `style.css` / documented inline CSS policy — **not** oracle CSS/JS). Flame, Graphviz, Shared JS / tablesorter, block/sub-level oracle page modes, and full DOM are **not advertised**.
 
 ---
 
@@ -119,8 +119,8 @@ Legend for **residual?**:
 | Shared JS (jquery / tablesorter / floatThead) | **yes** — `js/jquery-min.js`, `js/jquery.tablesorter.min.js`, `js/style-tablesorter.css`, sort icons `js/asc.png` `js/bg.png` `js/desc.png`; HTML also references `js/jquery.floatThead.min.js` when jquery headers emit | **no** | **yes** |
 | JIT / treemap assets | **yes** — `js/jit/*` (jit.js, gradients, Treemap.css) when treemap page is generated | **no** | **yes** |
 | Treemap HTML page | **yes** when `JSON::MaybeXS` (or compatible) available — `subs-treemap-excl.html` | **no** | **yes** |
-| Flame graph SVG | **yes** when `--flame` (default) and `calls` option on — `all_stacks_by_time.svg` via bundled `flamegraph.pl` + `nytprofcalls` | **partial** — opt-in `html --flame` writes native `all_stacks_by_time.svg` (folded-based icicle; **not** `flamegraph.pl`); default HTML has **no** SVG (no default bloat) | **partial** — path advertised; not oracle tool/visual parity |
-| Call-stack flame inputs | **yes** — `all_stacks_by_time.calls`, `flamegraph_subattr.txt` | **partial** — opt-in `all_stacks_by_time.folded` (= `render_folded_stacks` / call_edges); separate `folded` CLI remains; no `flamegraph_subattr.txt` / oracle `.calls` dialect | **partial** (site folded) / export **mapped** |
+| Flame graph SVG | **yes** when `--flame` (default) and `calls` option on — `all_stacks_by_time.svg` via bundled `flamegraph.pl` + `nytprofcalls` | **no** (folded export is a separate CLI for external flame tools; not embedded SVG site) | **yes** |
+| Call-stack flame inputs | **yes** — `all_stacks_by_time.calls`, `flamegraph_subattr.txt` | **no** as HTML site artifacts; native `folded` CLI is a related operator export | **yes** (site) / related export **mapped** outside HTML |
 | Packages call graph (Graphviz) | **yes** non-minimal — `packages-callgraph.dot` | **no** | **yes** |
 | Subs call graph (Graphviz) | **yes** non-minimal — `subs-callgraph.dot` | **no** | **yes** |
 | Per-file call graph `.dot` | **yes** non-minimal — `{html_safe_filename(filestr)}.dot` for files with subs | **no** | **yes** |
@@ -157,12 +157,9 @@ From `baseline/6.15` install share (`Devel/NYTProf/js/`):
   file-2.html         # typically warnings.pm (or next eligible fid)
   file-N.html         # other eligible fids
   style.css           # SHARED_STYLE_CSS (MVP; not oracle get_css)
-  # only when html --flame (opt-in; default absent):
-  all_stacks_by_time.svg     # native folded-based SVG
-  all_stacks_by_time.folded  # call_edges folded stacks
 ```
 
-No `js/`, no Graphviz `*.dot`, no `index-subs-excl.html` on this branch base. Shared CSS is MVP-native (partial residual vs oracle stylesheet). Flame files appear **only** with `--flame`.
+No `js/`, no `*.svg`, no `*.dot`, no `index-subs-excl.html`. Shared CSS is MVP-native (partial residual vs oracle stylesheet).
 
 ### Native single-file layout (advertised MVP)
 
@@ -170,7 +167,6 @@ No `js/`, no Graphviz `*.dot`, no `index-subs-excl.html` on this branch base. Sh
 # stdout or -o path.html — one self-contained document with:
 #   inline SHARED_STYLE_CSS (<style>), event counts, subroutines, call edges,
 #   top exclusive, source, optional A4b
-#   optional section.flame with embedded SVG when --flame
 report.html
 ```
 
@@ -180,11 +176,10 @@ report.html
 
 1. **Semantic counts are not residual** on default-calls1: native HTML must show leaf **15**, mid **3**, mid→leaf **15**; oracle must produce a non-empty HTML site under isolated `PERL5LIB`.  
 2. **Shared CSS (MVP closed as partial):** multi-file sites ship `style.css`; single-file inlines the same body — structure/CSS policy in [html-shared-css-structure-mvp-v0.md](https://github.com/hilather/nytprof-modernization/blob/main/docs/schemas/html-shared-css-structure-mvp-v0.md). Oracle `get_css()` / tablesorter CSS remain residual.  
-3. **Optional flame (MVP partial):** `html --flame` (default **off**) publishes `all_stacks_by_time.svg` + `.folded` and index links — **not** oracle default-on, not `flamegraph.pl`, not multi-frame `nytprofcalls`. Schema [html-optional-flame-mvp-v0.md](https://github.com/hilather/nytprof-modernization/blob/main/docs/schemas/html-optional-flame-mvp-v0.md).  
-4. **Largest residual classes** vs oracle site: shared **JS/tablesorter**, oracle **flamegraph.pl** visual/multi-frame path, **Graphviz** (`packages-callgraph.dot`, `subs-callgraph.dot`, per-file `.dot`), **treemap**, **index-subs-excl.html** (unless closed by another PR), **block/sub page modes** (`*-block.html` / `*-sub.html`).  
-5. **Partial maps** (do not overclaim): multi-file `index.html` + `file-*.html` + `source.html` + MVP `style.css` vs oracle `{safe}-{fid}-line.html` + oracle CSS/JS tree; call-edges and excl ranking as **tables**, not oracle interactive widgets; opt-in folded flame ≠ oracle SVG.  
-6. **Native-only (not an oracle residual to “fix”):** single-file `html -o` summary (inline CSS); flame default-off policy.  
-7. **Never** put `crates/` on oracle `PERL5LIB` when regenerating this inventory.
+3. **Largest residual classes** vs oracle site: shared **JS/tablesorter**, **flame SVG** + call-stack inputs, **Graphviz** (`packages-callgraph.dot`, `subs-callgraph.dot`, per-file `.dot`), **treemap**, **index-subs-excl.html**, **block/sub page modes** (`*-block.html` / `*-sub.html`).  
+4. **Partial maps** (do not overclaim): multi-file `index.html` + `file-*.html` + `source.html` + MVP `style.css` vs oracle `{safe}-{fid}-line.html` + oracle CSS/JS tree; call-edges and excl ranking as **tables**, not oracle interactive widgets.  
+5. **Native-only (not an oracle residual to “fix”):** single-file `html -o` summary (inline CSS).  
+6. **Never** put `crates/` on oracle `PERL5LIB` when regenerating this inventory.
 
 These residuals match REPORT_SURFACE_CONTRACT **not advertised** list and R1 residual row “No full nytprofhtml DOM / REPORT-001..020”.
 
@@ -222,7 +217,6 @@ Exact per-file basename prefixes depend on profile FID paths and `html_safe_file
 | `{out-dir}/file-1.html` (+ ≥1 other `file-*.html`) | source + A4; hot loop text; link `style.css` |
 | `{out-dir}/source.html` | copy of primary workload page |
 | `{out-dir}/style.css` | shared MVP stylesheet body (`SHARED_STYLE_CSS`) |
-| `{out-dir}/all_stacks_by_time.svg` + `.folded` | **only** with `html --flame`; absent by default |
 
 ---
 
@@ -253,7 +247,6 @@ Closing a residual class (e.g. shipping native flame SVG) requires: board/ADR + 
 |----|--------|----------|
 | `REPORT-HTML-RESIDUAL-INV` | **done** (this slice) | this file + `tools/oracle/list_html_artifacts.sh` + `tools/oracle/report_semantic_parity.sh` |
 | `REPORT-HTML-SHARED-CSS` | **done** (PR-A01) | native multi-file `style.css` + single-file inline policy; structure contract [html-shared-css-structure-mvp-v0.md](https://github.com/hilather/nytprof-modernization/blob/main/docs/schemas/html-shared-css-structure-mvp-v0.md); cargo `html_shared_css_structure_contract_default_calls1` (15/3/15) |
-| `REPORT-HTML-OPTIONAL-FLAME` | **done** (PR-A03) | opt-in `html --flame` (default off); `all_stacks_by_time.svg` + `.folded`; schema [html-optional-flame-mvp-v0.md](https://github.com/hilather/nytprof-modernization/blob/main/docs/schemas/html-optional-flame-mvp-v0.md); cargo `html_site_optional_flame_default_calls1` + CLI `html_optional_flame` (15/3/15). Not flamegraph.pl / Graphviz / treemap |
 | `REPORT-CONTRACT-FREEZE` | done | [`REPORT_SURFACE_CONTRACT_v0.md`](https://github.com/hilather/nytprof-modernization/blob/main/docs/contracts/REPORT_SURFACE_CONTRACT_v0.md) |
 | `REPORT-SEMANTIC-PARITY` | done | [`report-semantic-parity-mvp-v0.md`](https://github.com/hilather/nytprof-modernization/blob/main/docs/schemas/report-semantic-parity-mvp-v0.md) |
 | `COL-007` | deferred | C v6 writer — after report-side evidence; not implemented here |

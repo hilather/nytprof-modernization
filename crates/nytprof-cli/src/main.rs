@@ -7,8 +7,7 @@
 //! - `summary <file>` — alias for `report` (also accepts `--json`)
 //! - `aggregates <file>` — alias for `report --json`
 //! - `csv <file>`    — dual-section CSV (subs + call edges); optional `--subs` / `--edges`
-//! - `html <file>`   — HTML summary (stdout, `-o path.html`, or `--out-dir DIR` multi-file);
-//!   optional `--flame` for folded+SVG flame path (off by default)
+//! - `html <file>`   — HTML summary (stdout, `-o path.html`, or `--out-dir DIR` multi-file)
 //! - `folded <file>` — folded-stack lines (flamegraph input)
 //! - `callgrind <file>` / `cg <file>` — Callgrind-style text export
 //! - `verify <file>` / `inspect <file>` — decode + model load; short OK summary
@@ -22,8 +21,6 @@
 //! Native aggregates JSON: `docs/schemas/native-aggregates-json-mvp-v0.md`
 //! HTML MVP: `docs/schemas/html-report-mvp-v0.md`
 //! HTML multi-file: `docs/schemas/html-multifile-mvp-v0.md`
-//! HTML shared CSS + structure: `docs/schemas/html-shared-css-structure-mvp-v0.md`
-//! HTML optional flame: `docs/schemas/html-optional-flame-mvp-v0.md`
 //! HTML out-dir safety: `docs/schemas/html-outdir-safety-mvp-v0.md`
 //! HTML per-file: `docs/schemas/html-per-file-mvp-v0.md`
 //! Export MVP: `docs/schemas/export-formats-mvp-v0.md`
@@ -43,8 +40,8 @@ use nytprof_format_v5::decode_path;
 use nytprof_model::ProfileModel;
 use nytprof_report::{
     render_callgrind, render_csv_report, render_edges_csv, render_folded_stacks,
-    render_html_summary_with_options, render_subs_csv, render_summary_text,
-    require_complete_stream, verify_profile, write_html_site_with_options, HtmlRenderOptions,
+    render_html_summary, render_subs_csv, render_summary_text, require_complete_stream,
+    verify_profile, write_html_site,
 };
 use nytprof_types::{tags, Event};
 use serde_json::{json, Value};
@@ -189,7 +186,6 @@ fn print_usage() {
          nytprof-cli html <profile.out>          HTML summary to stdout\n  \
          nytprof-cli html <profile.out> -o path  HTML summary to file\n  \
          nytprof-cli html <profile.out> --out-dir DIR  Multi-file HTML site\n  \
-         nytprof-cli html … --flame              Opt-in flame (folded+SVG; default off)\n  \
          nytprof-cli folded <profile.out>        Folded-stack lines (flamegraph)\n  \
          nytprof-cli callgrind <profile.out>     Callgrind-style text export\n  \
          nytprof-cli cg <profile.out>            Alias for callgrind\n  \
@@ -717,24 +713,16 @@ fn write_stdout_text(text: &str) -> Result<(), Box<dyn std::error::Error>> {
 }
 
 /// Parse `html` args:
-/// - `html <profile.out>` — single-file HTML to stdout (inline shared CSS)
+/// - `html <profile.out>` — single-file HTML to stdout
 /// - `html <profile.out> -o path.html` — single-file to path
-/// - `html <profile.out> --out-dir DIR` — multi-file site:
-///   `index.html` + `file-*.html` + `source.html` + shared `style.css`
-/// - `html … --flame` — opt-in flame path (folded + native SVG; **default off**)
-/// - `html … --no-flame` — explicit off (default)
+/// - `html <profile.out> --out-dir DIR` — multi-file site (`index.html` + `source.html`)
 ///
 /// `-o` / `--output` and `--out-dir` / `--dir` are mutually exclusive.
-/// See `docs/schemas/html-multifile-mvp-v0.md`,
-/// `docs/schemas/html-shared-css-structure-mvp-v0.md`, and
-/// `docs/schemas/html-optional-flame-mvp-v0.md`.
 fn cmd_html(args: &[String]) -> Result<(), Box<dyn std::error::Error>> {
-    let usage =
-        "Usage: nytprof-cli html <profile.out> [-o path.html | --out-dir DIR] [--flame|--no-flame]";
+    let usage = "Usage: nytprof-cli html <profile.out> [-o path.html | --out-dir DIR]";
     let mut path: Option<&str> = None;
     let mut out_path: Option<&str> = None;
     let mut out_dir: Option<&str> = None;
-    let mut flame: Option<bool> = None;
     let mut i = 0;
     while i < args.len() {
         match args[i].as_str() {
@@ -762,18 +750,6 @@ fn cmd_html(args: &[String]) -> Result<(), Box<dyn std::error::Error>> {
                 }
                 out_dir = Some(p.as_str());
             }
-            "--flame" => {
-                if flame == Some(false) {
-                    return Err(format!("{usage} (--flame and --no-flame conflict)").into());
-                }
-                flame = Some(true);
-            }
-            "--no-flame" => {
-                if flame == Some(true) {
-                    return Err(format!("{usage} (--flame and --no-flame conflict)").into());
-                }
-                flame = Some(false);
-            }
             "-h" | "--help" => {
                 print_usage();
                 return Ok(());
@@ -793,13 +769,9 @@ fn cmd_html(args: &[String]) -> Result<(), Box<dyn std::error::Error>> {
 
     let path = path.ok_or(usage)?;
     let model = load_model_for_report(path)?;
-    // Default off: no flame bloat unless operators pass --flame.
-    let opts = HtmlRenderOptions {
-        flame: flame.unwrap_or(false),
-    };
 
     if let Some(dir) = out_dir {
-        let site = write_html_site_with_options(&model, path, Path::new(dir), opts)?;
+        let site = write_html_site(&model, path, Path::new(dir))?;
         // Paths written (stderr so stdout stays free for piping other modes).
         let base = dir.trim_end_matches('/');
         eprintln!("{base}/index.html");
@@ -808,16 +780,10 @@ fn cmd_html(args: &[String]) -> Result<(), Box<dyn std::error::Error>> {
         }
         eprintln!("{base}/{}", site.source_filename);
         eprintln!("{base}/{}", site.style_filename);
-        if let Some(name) = &site.flame_svg_filename {
-            eprintln!("{base}/{name}");
-        }
-        if let Some(name) = &site.flame_folded_filename {
-            eprintln!("{base}/{name}");
-        }
         return Ok(());
     }
 
-    let html = render_html_summary_with_options(&model, path, opts);
+    let html = render_html_summary(&model, path);
     if let Some(dest) = out_path {
         fs::write(dest, html.as_bytes())?;
     } else {
