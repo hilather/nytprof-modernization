@@ -33,8 +33,20 @@ Opcodes and field layouts may change under future ADR + golden vectors.
 | Field | Encoding | Notes |
 |-------|----------|-------|
 | opcode | strict ULEB128 | Provisional table below |
-| flags | `u8` | `FLAG_OPCODE_REQUIRED = 0x01` |
+| flags | `u8` | See flag bits below |
+| seq (optional) | ULEB128 | Present when `FLAG_HAS_SEQ` (packing residual; ADR-0001) |
 | typed-body | per opcode | Composed from existing primitives |
+
+### Provisional flags (`u8`)
+
+| Bit | Name | Role |
+|----:|------|------|
+| `0x01` | `FLAG_OPCODE_REQUIRED` | Unknown opcode → **Err** |
+| `0x02` | `FLAG_BODY_LENGTH` | Length-framed unknown optional skip (preflight) |
+| `0x04` | `FLAG_SITE_DELTA` | **Reserved** packing (ADR-0001); site field ZigZag deltas — encode/decode residual |
+| `0x08` | `FLAG_HAS_SEQ` | **Reserved** packing / OI-001-03 runway (ADR-0001); ULEB seq after flags — encode residual |
+
+Numeric IDs are shared with the provisional ID lockfile: [`docs/contracts/V6_PROVISIONAL_ID_LOCKFILE_v0.md`](https://github.com/hilather/nytprof-modernization/blob/main/docs/contracts/V6_PROVISIONAL_ID_LOCKFILE_v0.md) (Rust `event_body` + C `collector/include/nytprof_v6_ids.h`). **Not** a permanent flag-bit freeze.
 
 ### Provisional opcodes
 
@@ -58,9 +70,11 @@ Opcodes and field layouts may change under future ADR + golden vectors.
 | 15 | `COMMENT` | string-blob `text` |
 | 16 | `START_DEFLATE` | empty typed body (opcode + flags only; marker presence) |
 | 17 | `VERSION` | two ULEB128 `u64`: `major`, `minor` |
-| other | unknown | Required flag → `UnknownRequiredOpcode`; optional + `FLAG_BODY_LENGTH` → **skip** length-framed body (preflight); else `UnknownOpcode` |
+| 18 | `TIME_LINE_RUN` | **Reserved** packing (ADR-0001): `fid`, `line`, `N`, then `N` × `ticks` (all ULEB128); expands to N logical `TIME_LINE`. **Encode/decode residual** — not in `is_known_opcode` until packing preflight / COL-007. Do **not** treat as free unknown-optional-skip space. |
+| 19 | `TIME_BLOCK_RUN` | **Reserved** packing (ADR-0001): `fid`, `line`, `block_line`, `N`, then `N` × `ticks` (all ULEB128); expands to N logical `TIME_BLOCK`. **Encode/decode residual** — same residual rules as `TIME_LINE_RUN`. |
+| other | unknown | Required flag → `UnknownRequiredOpcode`; optional + `FLAG_BODY_LENGTH` → **skip** length-framed body (preflight); else `UnknownOpcode`. Opcodes **18/19 are reserved** (lockfile) even while encode residual — do not invent alternate IDs. |
 
-Expanded opcodes (TIME_BLOCK through VERSION) are **provisional preflight** layouts (v5-ish shapes; integer ULEB ticks/times; string projection for ATTRIBUTE/OPTION/COMMENT; START_DEFLATE is a marker only; VERSION is dump-aligned major/minor) — **not** a full logical-event catalog freeze, dual-equality, or wire freeze.
+Expanded opcodes (TIME_BLOCK through VERSION) are **provisional preflight** layouts (v5-ish shapes; integer ULEB ticks/times; string projection for ATTRIBUTE/OPTION/COMMENT; START_DEFLATE is a marker only; VERSION is dump-aligned major/minor). Opcodes 18/19 + packing flags are **ID-reserved** for ADR-0001 packing (see lockfile) — **not** a full logical-event catalog freeze, dual-equality, packing encode claim, or wire freeze.
 
 ### Fail-closed rules
 

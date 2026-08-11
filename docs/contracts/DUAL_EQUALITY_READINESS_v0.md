@@ -1,7 +1,7 @@
 # Dual-equality readiness contract (provisional) — v0
 
 **Status:** provisional readiness checklist for R2 / COL-007 runway — **not** a dual-equality product freeze; **not** COL-007 done  
-**Board IDs:** `DUAL-EQUALITY-READINESS-PROVISIONAL` (contract), `DUAL-EQUALITY-READINESS-MVP` (doc shipped + residual honesty)  
+**Board ID:** `DUAL-EQUALITY-READINESS-MVP` (authoritative — contract shipped + residual honesty; no separate PROVISIONAL board row)  
 **Depends on:** offline R0 / R1-preview residual matrix; **accepted** packing ADR [`docs/adrs/0001-v6-event-body-packing-candidate.md`](https://github.com/hilather/nytprof-modernization/blob/main/docs/adrs/0001-v6-event-body-packing-candidate.md); **accepted** string-pool ADR [`docs/adrs/0002-v6-string-pool-candidate.md`](https://github.com/hilather/nytprof-modernization/blob/main/docs/adrs/0002-v6-string-pool-candidate.md); provisional ID lockfile [`docs/contracts/V6_PROVISIONAL_ID_LOCKFILE_v0.md`](https://github.com/hilather/nytprof-modernization/blob/main/docs/contracts/V6_PROVISIONAL_ID_LOCKFILE_v0.md); `nytprof-format-v6` preflight stack  
 **Gate:** done **before COL-007** product claim (C v6 writer)
 

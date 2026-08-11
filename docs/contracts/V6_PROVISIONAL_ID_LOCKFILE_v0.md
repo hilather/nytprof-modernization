@@ -168,4 +168,4 @@ Values match `nytprof-format-v6` at acceptance of this lockfile. All multi-byte 
 
 - Not COL-007/008 done; not CLI v6 default; not default-parse always-inflate.
 - Not multi-OS CI, full R1 HTML/XS/FFI, or performance certification.
-- Opcode 18/19 and packing flags may land in crate/preflight after this doc; values here are the **agreed provisional numbers** for implementers.
+- Opcode 18/19 and packing flags are **reserved** in crate (`event_body`) + C header; packing encode/decode remains residual until packing preflight / COL-007.

@@ -60,21 +60,23 @@ Record decisions that affect stable semantics, wire bytes, platform support, pac
 
 ### ADR-Q005 - Dictionary scope and reset policy
 
-- **Status:** open
+- **Status:** partially accepted (FOOTER-local intent frozen); residual open for global/cross-file
 - **Blocks:** FMT-005, COL-010, RUST-011
-- **Question:** Stream-wide, process-generation, chunk-local, or hybrid dictionaries by string class?
-- **Evidence required:** hit rate, collector memory/CPU, chunk independence, recovery, fork/high-cardinality workloads.
-- **Recommended direction:** stream/process-scoped stable dictionaries for high-value identity strings plus chunk reset/snapshot rules that retain independent recovery; exact choice may differ by class.
-- **Decision must specify:** definition ordering, reset, maximum entries/bytes, OOM/fallback, fork behavior.
+- **Accepted binding ADR:** [`docs/adrs/0002-v6-string-pool-candidate.md`](https://github.com/hilather/nytprof-modernization/blob/main/docs/adrs/0002-v6-string-pool-candidate.md) (**accepted** OQ-1) — FOOTER-local, single-profile string dictionary intent for COL-007 dict emit + E3 dict cases.
+- **Question (remaining open):** Global / cross-file / process-lifetime intern pool (COL-010 class), fork/reset inheritance across profiles, and multi-FOOTER policy beyond FOOTER-local.
+- **Evidence required (residual):** hit rate, collector memory/CPU, chunk independence, recovery, fork/high-cardinality workloads for any **global** pool.
+- **Recommended direction (residual):** keep FOOTER-local as product baseline until COL-010 evidence; do **not** re-litigate FOOTER-local without superseding ADR-0002.
+- **Decision must specify (residual):** global definition ordering, reset, maximum entries/bytes, OOM/fallback, fork behavior — only if global pool is adopted later.
 
 ### ADR-Q006 - Reversible run/pattern records
 
-- **Status:** open
+- **Status:** accepted (packing intent frozen via ADR-0001); wire encode residual open
 - **Blocks:** FMT-007, COL-012
-- **Question:** Which repeated event patterns justify specialized records without complicating exactness/recovery?
-- **Evidence required:** real event distributions, collector encode cost, worst-case expansion, decoder complexity, canonical equality.
-- **Recommended direction:** defer beyond first stable v6 unless a simple pattern has clear benefit after dictionaries/deltas/compression. Any accepted run record must preserve per-event timing/order exactly.
-- **Decision must specify:** expansion semantics, limits, chunk interaction.
+- **Accepted binding ADR:** [`docs/adrs/0001-v6-event-body-packing-candidate.md`](https://github.com/hilather/nytprof-modernization/blob/main/docs/adrs/0001-v6-event-body-packing-candidate.md) (**accepted** OQ-1) — site deltas, `FLAG_HAS_SEQ`, `TIME_LINE_RUN` / `TIME_BLOCK_RUN` expansion, multi-chunk/mid-stream packing continuity.
+- **Provisional IDs:** opcodes 18/19 + flags `FLAG_SITE_DELTA`/`FLAG_HAS_SEQ` in [`V6_PROVISIONAL_ID_LOCKFILE_v0.md`](https://github.com/hilather/nytprof-modernization/blob/main/docs/contracts/V6_PROVISIONAL_ID_LOCKFILE_v0.md) — **not** wire freeze; packing encode/decode preflight residual.
+- **Question (closed for product intent):** Which repeated event patterns justify specialized records — answered by ADR-0001 (runs + site-delta + seq compose; absolute baseline retained).
+- **Residual open:** packing encode/decode preflight land; dual-equality E2/E3 with packed profiles; formal wire freeze of numeric IDs after E3/E4.
+- **Decision must specify (done in ADR-0001):** expansion semantics, continuity, limits intent; wire numeric freeze remains separate.
 
 ### ADR-Q007 - Source blob hashing and identity
 

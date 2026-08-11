@@ -2444,8 +2444,12 @@ mod tests {
 
     /// Provisional ID lockfile alignment (docs/contracts/V6_PROVISIONAL_ID_LOCKFILE_v0.md
     /// + collector/include/nytprof_v6_ids.h). Not a wire freeze; packing encode residual.
+    ///
+    /// Values must match the C header `#define NYTPROF_V6_*` catalog. If you change
+    /// a constant here, update `collector/include/nytprof_v6_ids.h` in the same commit.
     #[test]
     fn provisional_id_lockfile_packing_constants() {
+        // Event-body flags + packing reservations
         assert_eq!(FLAG_OPCODE_REQUIRED, 0x01);
         assert_eq!(FLAG_BODY_LENGTH, 0x02);
         assert_eq!(FLAG_SITE_DELTA, 0x04);
@@ -2457,5 +2461,59 @@ mod tests {
         // Run opcodes reserved in lockfile but not yet absolute-path known codecs.
         assert!(!is_known_opcode(opcode::TIME_LINE_RUN));
         assert!(!is_known_opcode(opcode::TIME_BLOCK_RUN));
+
+        // Full lockfile catalog mirrored by C header (MAGIC / chunk / TLV / caps).
+        assert_eq!(crate::MAGIC, b"NYTPROF6");
+        assert_eq!(crate::SUPPORTED_MAJOR, 6);
+        assert_eq!(crate::HEADER_LEN_MIN, 16);
+        assert_eq!(crate::HEADER_LEN_FULL, 36);
+        assert_eq!(crate::MAX_HEADER_LEN, 1024 * 1024);
+
+        assert_eq!(crate::chunk::CHUNK_SYNC, u32::from_le_bytes(*b"NYT6"));
+        assert_eq!(crate::chunk::CHUNK_SYNC, 0x3654_594E);
+        assert_eq!(crate::chunk::CHUNK_HEADER_LEN, 40);
+        assert_eq!(crate::chunk::MAX_CHUNK_PAYLOAD, 64 * 1024 * 1024);
+        assert_eq!(crate::chunk::FLAG_KIND_REQUIRED, 0x0001);
+        assert_eq!(crate::chunk::kind::RESERVED, 0);
+        assert_eq!(crate::chunk::kind::EVENT, 1);
+        assert_eq!(crate::chunk::kind::SOURCE, 2);
+        assert_eq!(crate::chunk::kind::INDEX, 3);
+        assert_eq!(crate::chunk::kind::SUMMARY, 4);
+        assert_eq!(crate::chunk::kind::FOOTER, 5);
+        assert_eq!(crate::chunk::codec::NONE, 0);
+        assert_eq!(crate::chunk::codec::ZLIB, 1);
+        assert_eq!(crate::chunk::codec::ZSTD, 2);
+        assert_eq!(crate::chunk::codec::LZ4, 3);
+
+        assert_eq!(opcode::RESERVED, 0);
+        assert_eq!(opcode::MARK, 1);
+        assert_eq!(opcode::TIME_LINE, 2);
+        assert_eq!(opcode::TIME_BLOCK, 3);
+        assert_eq!(opcode::SUB_ENTRY, 4);
+        assert_eq!(opcode::SUB_RETURN, 5);
+        assert_eq!(opcode::SUB_INFO, 6);
+        assert_eq!(opcode::SRC_LINE, 7);
+        assert_eq!(opcode::NEW_FID, 8);
+        assert_eq!(opcode::PID_START, 9);
+        assert_eq!(opcode::PID_END, 10);
+        assert_eq!(opcode::SUB_CALLERS, 11);
+        assert_eq!(opcode::DISCOUNT, 12);
+        assert_eq!(opcode::ATTRIBUTE, 13);
+        assert_eq!(opcode::OPTION, 14);
+        assert_eq!(opcode::COMMENT, 15);
+        assert_eq!(opcode::START_DEFLATE, 16);
+
+        assert_eq!(crate::string::FLAG_UTF8, 0x01);
+        assert_eq!(crate::string::MAX_STRING_BYTES, 16 * 1024 * 1024);
+
+        assert_eq!(crate::tlv::type_id::RESERVED, 0);
+        assert_eq!(crate::tlv::type_id::PRODUCER, 1);
+        assert_eq!(crate::tlv::type_id::TICKS_PER_SEC, 2);
+        assert_eq!(crate::tlv::type_id::END, 0x7e);
+        assert_eq!(crate::tlv::FLAG_TYPE_REQUIRED, 0x01);
+        assert_eq!(crate::tlv::MAX_TLV_VALUE_BYTES, 16 * 1024 * 1024);
+        assert_eq!(crate::tlv::MAX_TLV_REGION_BYTES, 64 * 1024 * 1024);
+
+        assert_eq!(MAX_EVENT_BODY_BYTES, 64 * 1024 * 1024);
     }
 }
