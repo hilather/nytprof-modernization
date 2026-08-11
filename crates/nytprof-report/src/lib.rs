@@ -256,10 +256,12 @@ pub struct HtmlSite {
     pub file_pages: Vec<(String, String)>,
     /// Shared stylesheet body written as [`HtmlSite::style_filename`] (`style.css`).
     ///
-    /// Same text as [`SHARED_STYLE_CSS`]. Multi-file pages link to it via
-    /// `<link rel="stylesheet" href="style.css">` (no inline `<style>`).
+    /// Same text as [`SHARED_STYLE_CSS`]. Multi-file pages link to
+    /// [`HtmlSite::style_filename`] via `<link rel="stylesheet" href="…">`
+    /// (no inline `<style>`).
     pub style_css: String,
-    /// Relative filename of the shared stylesheet (`"style.css"`).
+    /// Relative filename of the shared stylesheet (must match page `<link href>`;
+    /// always [`STYLE_CSS_FILENAME`] / `"style.css"` from [`render_html_site`]).
     pub style_filename: String,
 }
 
@@ -267,12 +269,15 @@ pub struct HtmlSite {
 ///
 /// See `docs/schemas/html-shared-css-structure-mvp-v0.md`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-enum HtmlCssMode {
+enum HtmlCssMode<'a> {
     /// Single-file / stdout summary: embed [`SHARED_STYLE_CSS`] in a `<style>` tag
     /// so the document is self-contained (no external asset).
     Inline,
-    /// Multi-file site: link to sibling `style.css` (written by [`write_html_site`]).
-    LinkedStyleSheet,
+    /// Multi-file site: link to sibling stylesheet written by [`write_html_site`].
+    ///
+    /// The filename must match [`HtmlSite::style_filename`] / the file published
+    /// as `style.css` (normally [`STYLE_CSS_FILENAME`]).
+    LinkedStyleSheet(&'a str),
 }
 
 /// Shared MVP stylesheet for native HTML reports.
@@ -343,6 +348,7 @@ pub fn render_html_summary(model: &ProfileModel, profile_path: &str) -> String {
 ///   `<link rel="stylesheet" href="style.css">`
 pub fn render_html_site(model: &ProfileModel, profile_path: &str) -> HtmlSite {
     let source_filename = "source.html".to_owned();
+    // Single source for both `<link href>` and the on-disk stylesheet name.
     let style_filename = STYLE_CSS_FILENAME.to_owned();
     let style_css = SHARED_STYLE_CSS.to_owned();
     let title = html_report_title(profile_path);
@@ -352,12 +358,13 @@ pub fn render_html_site(model: &ProfileModel, profile_path: &str) -> HtmlSite {
         .file_name()
         .and_then(|s| s.to_str())
         .unwrap_or(profile_path);
+    let css = HtmlCssMode::LinkedStyleSheet(style_filename.as_str());
 
     // --- per-fid file pages ---
     let mut file_pages: Vec<(String, String)> = Vec::with_capacity(eligible.len());
     for fid in &eligible {
         let filename = file_page_filename(*fid);
-        let page = render_file_page(model, *fid, profile_base);
+        let page = render_file_page(model, *fid, profile_base, style_filename.as_str());
         file_pages.push((filename, page));
     }
     // Primary alias (`source.html`): copy of the primary workload file page.
@@ -367,11 +374,13 @@ pub fn render_html_site(model: &ProfileModel, profile_path: &str) -> HtmlSite {
         .iter()
         .find(|(name, _)| name == &primary_name)
         .map(|(_, html)| html.clone())
-        .unwrap_or_else(|| render_file_page(model, primary_fid, profile_base));
+        .unwrap_or_else(|| {
+            render_file_page(model, primary_fid, profile_base, style_filename.as_str())
+        });
 
     // --- index.html ---
     let mut index = String::with_capacity(4096);
-    push_html_doc_start(&mut index, &title, HtmlCssMode::LinkedStyleSheet);
+    push_html_doc_start(&mut index, &title, css);
     index.push_str(&format!("<h1>{}</h1>\n", escape_html(&title)));
     push_profile_path(&mut index, profile_path);
     push_event_counts(&mut index, model);
@@ -626,15 +635,27 @@ fn eligible_source_fids(model: &ProfileModel) -> Vec<u32> {
     fids
 }
 
-/// Render one per-fid HTML page body (full document; links shared `style.css`).
-fn render_file_page(model: &ProfileModel, fid: u32, profile_base: &str) -> String {
+/// Render one per-fid HTML page body (full document; links shared stylesheet).
+///
+/// `style_filename` is the same relative name written as
+/// [`HtmlSite::style_filename`] (normally [`STYLE_CSS_FILENAME`]).
+fn render_file_page(
+    model: &ProfileModel,
+    fid: u32,
+    profile_base: &str,
+    style_filename: &str,
+) -> String {
     let basename = model
         .fid_basename(fid)
         .map(|s| s.to_owned())
         .unwrap_or_else(|| source_file_label(model, fid));
     let src_title = format!("Source — {basename} (fid {fid}) — {profile_base}");
     let mut page = String::with_capacity(4096);
-    push_html_doc_start(&mut page, &src_title, HtmlCssMode::LinkedStyleSheet);
+    push_html_doc_start(
+        &mut page,
+        &src_title,
+        HtmlCssMode::LinkedStyleSheet(style_filename),
+    );
     page.push_str(&format!("<h1>{}</h1>\n", escape_html(&src_title)));
     page.push_str("<p><a href=\"index.html\">← Back to index</a></p>\n");
     push_source_heading(&mut page, model, fid);
@@ -693,7 +714,7 @@ fn source_file_label(model: &ProfileModel, primary_fid: u32) -> String {
         .unwrap_or_else(|| format!("fid {primary_fid}"))
 }
 
-fn push_html_doc_start(out: &mut String, title: &str, css: HtmlCssMode) {
+fn push_html_doc_start(out: &mut String, title: &str, css: HtmlCssMode<'_>) {
     out.push_str("<!DOCTYPE html>\n");
     out.push_str("<html lang=\"en\">\n<head>\n");
     out.push_str("<meta charset=\"utf-8\">\n");
@@ -704,11 +725,11 @@ fn push_html_doc_start(out: &mut String, title: &str, css: HtmlCssMode) {
             out.push_str(SHARED_STYLE_CSS);
             out.push_str("</style>\n");
         }
-        HtmlCssMode::LinkedStyleSheet => {
-            // Relative sibling asset written by write_html_site / render_html_site.
+        HtmlCssMode::LinkedStyleSheet(style_filename) => {
+            // Relative sibling asset: same name as HtmlSite::style_filename / disk write.
             out.push_str(&format!(
                 "<link rel=\"stylesheet\" href=\"{}\">\n",
-                escape_html(STYLE_CSS_FILENAME)
+                escape_html(style_filename)
             ));
         }
     }
@@ -1640,6 +1661,19 @@ mod tests {
             "file-1.html missing under {}",
             out.display()
         );
+        // Complete site set includes shared CSS on the atomic publish path.
+        let style_path = out.join(STYLE_CSS_FILENAME);
+        assert!(
+            style_path.is_file(),
+            "style.css missing under {}",
+            out.display()
+        );
+        let style = fs::read_to_string(&style_path).expect("read style.css");
+        assert_eq!(style, SHARED_STYLE_CSS);
+        assert!(
+            index.contains(&format!("href=\"{}\"", STYLE_CSS_FILENAME)),
+            "index must link style.css:\n{index}"
+        );
         assert!(
             index.contains("main::leaf") && index.contains(&format!(">{}<", leaf.returns)),
             "leaf returns {}:\n{index}",
@@ -1871,6 +1905,20 @@ mod tests {
             disk_index.contains("main::mid") && disk_index.contains(">3<"),
             "disk index mid 3"
         );
+        // Full 15/3/15 on published index (mirror in-memory call-edges check).
+        let disk_lower = disk_index.to_ascii_lowercase();
+        let disk_edges_idx = disk_lower
+            .find("call edges")
+            .or_else(|| disk_lower.find("call-edges"))
+            .expect("disk index call edges");
+        let disk_edges = &disk_index[disk_edges_idx..];
+        assert!(
+            disk_edges.contains("main::mid")
+                && disk_edges.contains("main::leaf")
+                && disk_edges.contains(&format!(">{}<", edge.count)),
+            "disk index mid→leaf {}:\n{disk_edges}",
+            edge.count
+        );
 
         // --- single-file: inline same CSS, self-contained ---
         let single = render_html_summary(&model, &path_str);
@@ -1933,7 +1981,22 @@ mod tests {
             !out.join("POISON.txt").exists(),
             "atomic replace must not leave files from previous out_dir"
         );
+        // Complete site after overwrite still includes shared CSS.
+        let style_path = out.join(STYLE_CSS_FILENAME);
+        assert!(
+            style_path.is_file(),
+            "style.css missing after overwrite under {}",
+            out.display()
+        );
+        assert_eq!(
+            fs::read_to_string(&style_path).expect("read style.css"),
+            SHARED_STYLE_CSS
+        );
         let index = fs::read_to_string(out.join("index.html")).expect("index");
+        assert!(
+            index.contains(&format!("href=\"{}\"", STYLE_CSS_FILENAME)),
+            "index must link style.css after overwrite:\n{index}"
+        );
         assert!(index.contains("main::leaf") && index.contains(">15<"));
         assert!(index.contains("main::mid") && index.contains(">3<"));
         let lower = index.to_ascii_lowercase();
