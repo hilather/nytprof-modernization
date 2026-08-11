@@ -134,8 +134,9 @@ pub use decoded_summary::{
 pub use event_body::{
     attribute_kv, decode_event_body, encode_event_body, encode_unknown_optional_skip_record,
     is_known_opcode, known_key_attr_option_sample_specs, option_kv, EventBodyError,
-    EventBodyResult, EventRecord, EventRecordSpec, FLAG_BODY_LENGTH, FLAG_OPCODE_REQUIRED,
-    MAX_EVENT_BODY_BYTES, MAX_SKIP_BODY_BYTES,
+    EventBodyResult, EventRecord, EventRecordSpec, FLAG_BODY_LENGTH, FLAG_HAS_SEQ,
+    FLAG_OPCODE_REQUIRED, FLAG_SITE_DELTA, MAX_EVENT_BODY_BYTES, MAX_SKIP_BODY_BYTES,
+    MAX_TIME_RUN_LEN,
 };
 pub use event_body::known_key;
 pub use file_prefix::{

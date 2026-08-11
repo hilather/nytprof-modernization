@@ -22,8 +22,28 @@ pub const FLAG_OPCODE_REQUIRED: u8 = 0x01;
 /// the flag space (future ADR may reassign bits).
 pub const FLAG_BODY_LENGTH: u8 = 0x02;
 
+/// Flag: TIME_LINE / TIME_BLOCK / SUB_ENTRY site fields are **signed deltas**
+/// (ZigZag+ULEB) relative to a running base, not absolute ULEB sites.
+///
+/// Provisional packing ID lockfile value (ADR-0001 intent). Full packing encode /
+/// decode is residual until packing preflight / COL-007; not a wire freeze.
+pub const FLAG_SITE_DELTA: u8 = 0x04;
+
+/// Flag: record carries a provisional **logical event sequence number** (ULEB128)
+/// immediately after the flags byte and before the typed body.
+///
+/// Provisional packing / OI-001-03 ID lockfile value (ADR-0001 intent). Not a
+/// permanent dual-output sequence policy freeze.
+pub const FLAG_HAS_SEQ: u8 = 0x08;
+
 /// Fail-closed upper bound on a single length-framed unknown body (same as event-body cap).
 pub const MAX_SKIP_BODY_BYTES: usize = MAX_EVENT_BODY_BYTES;
+
+/// Fail-closed upper bound on TIME_LINE_RUN / TIME_BLOCK_RUN packed length `N`.
+///
+/// Provisional packing cap (ADR-0001 / lockfile). Checked before expand when run
+/// codecs ship; value reserved for COL-007 implementers.
+pub const MAX_TIME_RUN_LEN: usize = 1_048_576;
 
 /// Provisional event opcodes.
 pub mod opcode {
@@ -63,6 +83,16 @@ pub mod opcode {
     pub const START_DEFLATE: u64 = 16;
     /// Profile format version: major + minor as two ULEB128 u64 fields.
     pub const VERSION: u64 = 17;
+    /// Packed run of consecutive same-site TIME_LINE events (ADR-0001 packing).
+    ///
+    /// Provisional ID lockfile value — encode/decode residual until packing
+    /// preflight / COL-007. Not a wire freeze.
+    pub const TIME_LINE_RUN: u64 = 18;
+    /// Packed run of consecutive same-site TIME_BLOCK events (ADR-0001 packing).
+    ///
+    /// Provisional ID lockfile value — encode/decode residual until packing
+    /// preflight / COL-007. Not a wire freeze.
+    pub const TIME_BLOCK_RUN: u64 = 19;
 }
 
 /// True if `opcode` is a known provisional type (excludes RESERVED).
@@ -2410,5 +2440,22 @@ mod tests {
             | Err(EventBodyError::Truncated { .. }) => {}
             other => panic!("expected truncated mid SUB_INFO, got {other:?}"),
         }
+    }
+
+    /// Provisional ID lockfile alignment (docs/contracts/V6_PROVISIONAL_ID_LOCKFILE_v0.md
+    /// + collector/include/nytprof_v6_ids.h). Not a wire freeze; packing encode residual.
+    #[test]
+    fn provisional_id_lockfile_packing_constants() {
+        assert_eq!(FLAG_OPCODE_REQUIRED, 0x01);
+        assert_eq!(FLAG_BODY_LENGTH, 0x02);
+        assert_eq!(FLAG_SITE_DELTA, 0x04);
+        assert_eq!(FLAG_HAS_SEQ, 0x08);
+        assert_eq!(opcode::VERSION, 17);
+        assert_eq!(opcode::TIME_LINE_RUN, 18);
+        assert_eq!(opcode::TIME_BLOCK_RUN, 19);
+        assert_eq!(MAX_TIME_RUN_LEN, 1_048_576);
+        // Run opcodes reserved in lockfile but not yet absolute-path known codecs.
+        assert!(!is_known_opcode(opcode::TIME_LINE_RUN));
+        assert!(!is_known_opcode(opcode::TIME_BLOCK_RUN));
     }
 }

@@ -588,7 +588,11 @@ Also on blocks-calls1 when asserted: leaf returns **15**, mid returns **3** (sam
 | `FMT-V6-ATTR-OPTION-KNOWN-KEY-MVP` | **done** | Known-key table + always-inflate EVENT/mixed tests (key+value asserts; NONE/ZLIB/ZSTD/LZ4; SOURCE co-kind). **Before full COL-007.** |
 | `FMT-V6-EVENT-BODY-UNKNOWN-OPTIONAL-SKIP-PROVISIONAL` | **done** | Unknown optional length-framed skip preflight (`FLAG_BODY_LENGTH`). Not permanent flag freeze. Default `parse_chunk_frame` stays non-inflating. **Before full COL-007.** |
 | `FMT-V6-EVENT-BODY-UNKNOWN-OPTIONAL-SKIP-MVP` | **done** | Length-framed unknown-optional skip + always-inflate EVENT/mixed tests (order+fields; SOURCE co-kind). **Before full COL-007.** |
-| `COL-007` | deferred | C v6 writer — unblocked for *start* after report-side evidence; not implemented by this runbook |
+| `ADR-0001-V6-PACKING-ACCEPTED` | **done** (accepted) | Packing intent ADR accepted as-is (OQ-1). Not wire freeze; not COL-007. **Before full COL-007.** |
+| `ADR-0002-V6-STRING-POOL-ACCEPTED` | **done** (accepted) | FOOTER string-pool ADR accepted as-is (OQ-1). Not global pool; not COL-007. **Before full COL-007.** |
+| `FMT-V6-PROVISIONAL-ID-LOCKFILE` | **done** | Provisional ID lockfile + C header stub; plan FMT-002..010 deviation (COL-007 vs lockfile; freeze after E3/E4). **Before full COL-007.** |
+| `DUAL-EQUALITY-READINESS-MVP` | **done** | Dual-equality readiness contract (E1–E5); not product freeze. **Before full COL-007.** |
+| `COL-007` | deferred | C v6 writer — against accepted ADR-0001/0002 + provisional ID lockfile; not implemented by this runbook |
 
 ## Revision rule
 

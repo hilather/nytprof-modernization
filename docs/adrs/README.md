@@ -8,18 +8,16 @@ Queue: [`docs/plan/18_OPEN_QUESTIONS_AND_ADR_QUEUE.md`](https://github.com/hilat
 
 | ADR | Title | Status |
 |-----|-------|--------|
-| [0004](https://github.com/hilather/nytprof-modernization/blob/main/docs/adrs/0004-collector-packaging-source-tree.md) | Collector packaging / source-tree layout (B0-A overlay) | **accepted** — required before COL-001 / PR-B02 merge; not COL-007 product |
+| [0001](https://github.com/hilather/nytprof-modernization/blob/main/docs/adrs/0001-v6-event-body-packing-candidate.md) | Format v6 event-body packing candidate design | **accepted** (OQ-1 as-is; intent freeze — not wire freeze; not COL-007) |
+| [0002](https://github.com/hilather/nytprof-modernization/blob/main/docs/adrs/0002-v6-string-pool-candidate.md) | Format v6 FOOTER string-pool / dictionary candidate | **accepted** (OQ-1 as-is; FOOTER-local; not global pool; not COL-007) |
 
-**Numbering map (coordinate across parallel PRs):**
+### Related (not ADRs)
 
-| Number | Topic | Track / PR |
-|--------|-------|------------|
-| **0001** | Format v6 event-body packing candidate | R2 format — PR-B01 |
-| **0002** | Format v6 FOOTER string-pool / dictionary candidate | R2 format — PR-B01 |
-| **0003** | Full R1 residual policy (CLOSE / WAIVE / OUT-OF-R1) | Track A — PR-A04 |
-| **0004** | Collector packaging / source-tree (B0-A) | Track B — PR-B00 (this index row) |
-
-**Merge handoff:** rebase or merge-resolve this file with PR-B01 and PR-A04 so **all** rows remain listed (do not replace a multi-row table with a single-row index). B01 collector stubs must match B0-A `collector/` layout from ADR-0004.
+| Doc | Role |
+|-----|------|
+| [`V6_PROVISIONAL_ID_LOCKFILE_v0`](https://github.com/hilather/nytprof-modernization/blob/main/docs/contracts/V6_PROVISIONAL_ID_LOCKFILE_v0.md) | Shared provisional numeric IDs for COL-007 (not wire freeze); plan FMT-002..010 deviation |
+| [`DUAL_EQUALITY_READINESS_v0`](https://github.com/hilather/nytprof-modernization/blob/main/docs/contracts/DUAL_EQUALITY_READINESS_v0.md) | Dual-equality readiness checklist (E1–E5) |
+| C header stub | [`collector/include/nytprof_v6_ids.h`](https://github.com/hilather/nytprof-modernization/blob/main/collector/include/nytprof_v6_ids.h) — mirrors lockfile constants |
 
 Governance ratifications (not format ADRs):
 

@@ -230,11 +230,12 @@ The state machine must cover:
 
 - **Status:** proposed
 - **Size:** XL
-- **Dependencies:** FMT-002 through FMT-010, COL-005
+- **Dependencies:** COL-005; **accepted ADR-0001** (packing intent); **accepted ADR-0002** (FOOTER-local string dict); **provisional ID lockfile** ([`docs/contracts/V6_PROVISIONAL_ID_LOCKFILE_v0.md`](https://github.com/hilather/nytprof-modernization/blob/main/docs/contracts/V6_PROVISIONAL_ID_LOCKFILE_v0.md) + [`collector/include/nytprof_v6_ids.h`](https://github.com/hilather/nytprof-modernization/blob/main/collector/include/nytprof_v6_ids.h)). Dual-equality readiness: [`docs/contracts/DUAL_EQUALITY_READINESS_v0.md`](https://github.com/hilather/nytprof-modernization/blob/main/docs/contracts/DUAL_EQUALITY_READINESS_v0.md).
+- **Plan FMT-002..010 deviation (explicit):** Plan historically listed hard deps **FMT-002 through FMT-010** (wire freeze class). This program **intentionally implements COL-007 against the provisional ID lockfile**, then **promotes** formal freeze after dual-equality **E3** (C bytes → Rust always-inflate) and **E4** (v5↔v6 semantic). Agents must **not** block COL-007 waiting for full FMT freeze. Freezing wire IDs from Rust-only preflight before E3/E4 is **rejected**.
 - **Agent:** C binary-format engineer
-- **Work:** implement dictionaries, deltas, chunks, checksums, codec adapter, and integer ticks.
+- **Work:** implement dictionaries (ADR-0002 FOOTER-local), deltas/packing (ADR-0001), chunks, checksums, codec adapter, and integer ticks using lockfile IDs.
 - **Deliverables:** C encoder and v6 vectors.
-- **Acceptance:** Rust v6 decoder accepts output; all format vectors pass; no per-event general allocation.
+- **Acceptance:** Rust v6 decoder accepts output; all format vectors pass; no per-event general allocation; E3 evidence with C bytes before product claim.
 - **Regression gate:** M5/M6.
 
 ### COL-008 - Prototype v6 writer candidate B with batched Rust FFI
