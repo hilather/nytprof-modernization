@@ -8,9 +8,18 @@ Queue: [`docs/plan/18_OPEN_QUESTIONS_AND_ADR_QUEUE.md`](https://github.com/hilat
 
 | ADR | Title | Status |
 |-----|-------|--------|
-| [0003](https://github.com/hilather/nytprof-modernization/blob/main/docs/adrs/0003-collector-packaging-source-tree.md) | Collector packaging / source-tree layout (B0-A overlay) | **accepted** (blocks COL-001 / PR-B02; not COL-007 product) |
+| [0004](https://github.com/hilather/nytprof-modernization/blob/main/docs/adrs/0004-collector-packaging-source-tree.md) | Collector packaging / source-tree layout (B0-A overlay) | **accepted** — required before COL-001 / PR-B02 merge; not COL-007 product |
 
-**Numbering note:** ADR-0001 / ADR-0002 are reserved for format v6 packing / FOOTER string-pool candidate ADRs on the R2 format track (land or accept via that track). Packaging layout is **0003** so numbers do not collide.
+**Numbering map (coordinate across parallel PRs):**
+
+| Number | Topic | Track / PR |
+|--------|-------|------------|
+| **0001** | Format v6 event-body packing candidate | R2 format — PR-B01 |
+| **0002** | Format v6 FOOTER string-pool / dictionary candidate | R2 format — PR-B01 |
+| **0003** | Full R1 residual policy (CLOSE / WAIVE / OUT-OF-R1) | Track A — PR-A04 |
+| **0004** | Collector packaging / source-tree (B0-A) | Track B — PR-B00 (this index row) |
+
+**Merge handoff:** rebase or merge-resolve this file with PR-B01 and PR-A04 so **all** rows remain listed (do not replace a multi-row table with a single-row index). B01 collector stubs must match B0-A `collector/` layout from ADR-0004.
 
 Governance ratifications (not format ADRs):
 

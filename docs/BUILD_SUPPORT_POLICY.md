@@ -4,7 +4,7 @@
 **Status:** landed as dual-path policy + runnable checks (not a full BUILD-001 ADR freeze)  
 **Related:** BUILD-001, BUILD-002, BUILD-003, BUILD-006, COMPAT-009, COMPAT-011, RSK-009  
 **Spike background:** [`docs/PACKAGING_SPIKE.md`](https://github.com/hilather/nytprof-modernization/blob/main/docs/PACKAGING_SPIKE.md)  
-**Collector source-tree (accepted):** [`docs/adrs/0003-collector-packaging-source-tree.md`](https://github.com/hilather/nytprof-modernization/blob/main/docs/adrs/0003-collector-packaging-source-tree.md) — **B0-A overlay** (`collector/`); blocks COL-001 until observed; not COL-007 product
+**Collector source-tree (accepted):** [`docs/adrs/0004-collector-packaging-source-tree.md`](https://github.com/hilather/nytprof-modernization/blob/main/docs/adrs/0004-collector-packaging-source-tree.md) — **B0-A overlay** (`collector/`); **accepted** — required before COL-001 / PR-B02 merge; not COL-007 product
 
 This document freezes the **support-tier dual-path contract** for the modernization repo: what must work without Cargo, what is optional when Cargo is present, and how operators verify each path.
 
@@ -25,32 +25,24 @@ This document freezes the **support-tier dual-path contract** for the modernizat
 | Legacy packaging smoke | legacy-only | Never required |
 | Native source build + prefix install | optional-native | Yes |
 | Optional workspace `cargo test` | optional-native | Yes (or honest skip if absent) |
-| Full CPAN MakeMaker dual-build | **BUILD-003 full** — open | Must still allow Cargo-absent legacy |
+| Full CPAN MakeMaker dual-build | *(future BUILD-003)* | Must still allow Cargo-absent legacy |
 | Candidate MakeMaker packaging entry | dual-path facade | Default legacy; native only when `NYTPROF_NATIVE=1` / `make native-install` |
-| BUILD-003 depth (partial) | dual-path facade + prefix installs | `install-facade` / `dual-install` / depth smoke; **not** full XS CPAN |
 
 ---
 
 ## MakeMaker dual-path packaging entry (BUILD-MAKEMAKER-OPT)
 
-**Status:** candidate facade landed — **not** a full CPAN tarball of Devel::NYTProf XS (that remains **BUILD-003 full**).
+**Status:** candidate facade landed — **not** a full CPAN tarball of Devel::NYTProf XS (that remains **BUILD-003**).
 
-Root [`Makefile.PL`](https://github.com/hilather/nytprof-modernization/blob/main/Makefile.PL) is a thin packaging entry that generates Makefile targets wrapping the existing `scripts/packaging/*` smokes. It does **not** build oracle XS under `baseline/6.15/src`, and it never puts `crates/` on oracle `PERL5LIB`.
+Root [`Makefile.PL`](https://github.com/hilather/nytprof-modernization/blob/main/Makefile.PL) is a thin packaging entry that generates Makefile targets wrapping the existing `scripts/packaging/*` smokes. It does **not** build oracle XS under `baseline/6.15/src`, and it never puts `crates/` or `collector/` install prefixes on oracle `PERL5LIB`.
 
 ### Control: `NYTPROF_NATIVE`
 
 | Value | Configure behavior | Default `make all` |
 |-------|--------------------|--------------------|
 | `0` (default) | Legacy-only; **Cargo not required** | Message + no cargo |
-| `1` | **Requires** `cargo` on `PATH` or configure dies | Runs `dual-install` (native CLI + pure-Perl facade) |
-| `auto` | Native targets enabled if cargo present; else legacy | Legacy message; `make dual-install` / `native-install` available when cargo present |
-
-### Reserved codec envs (not wired)
-
-| Env | Values | Behavior in this facade |
-|-----|--------|-------------------------|
-| `NYTPROF_CODEC_ZSTD` | `auto` / `0` / `1` | Recorded in stamp; `=1` prints configure NOTE only — **not** MakeMaker feature wiring (**BUILD-008** / BUILD-003 full) |
-| `NYTPROF_CODEC_LZ4` | `auto` / `0` / `1` | Same |
+| `1` | **Requires** `cargo` on `PATH` or configure dies | Runs `native-install` |
+| `auto` | Native targets enabled if cargo present; else legacy | Legacy message; `make native-install` still available when cargo present |
 
 ### Operator recipes
 
@@ -58,8 +50,7 @@ Root [`Makefile.PL`](https://github.com/hilather/nytprof-modernization/blob/main
 # Legacy-only (no Cargo on critical path)
 perl Makefile.PL                 # or: NYTPROF_NATIVE=0 perl Makefile.PL
 make legacy-smoke                # → scripts/packaging/legacy_only_smoke.sh
-make install-facade              # pure-Perl nytprof-engine → $NYTPROF_PREFIX (default $REPO/prefix)
-make test                        # same path as legacy-smoke (candidate entry; not full XS suite)
+make test                        # same path (candidate entry; not full XS suite)
 
 # Dual-path policy via Make targets
 make dual-path-smoke             # → scripts/packaging/dual_path_smoke.sh
@@ -68,24 +59,20 @@ make dual-path-smoke             # → scripts/packaging/dual_path_smoke.sh
 make offline-gate                # → scripts/ci/offline_gate.sh
 
 # Optional native (requires cargo)
-make cargo-build                 # cargo build -p nytprof-cli
 make native-install              # → scripts/packaging/install_native.sh
-make dual-install                # native-install + install-facade
 # or reconfigure require-native:
-NYTPROF_NATIVE=1 perl Makefile.PL && make dual-install
+NYTPROF_NATIVE=1 perl Makefile.PL && make native-install
 # alias:
-make native                      # → native-install only
+make native
 ```
 
-### Verification smokes
+### Verification smoke
 
 ```sh
 ./scripts/packaging/makemaker_dual_path_smoke.sh
-./scripts/packaging/makemaker_build003_depth_smoke.sh
-# or: make build003-depth-smoke
 ```
 
-`makemaker_dual_path_smoke.sh` behavior:
+Behavior:
 
 1. `NYTPROF_NATIVE=0 perl Makefile.PL` (must succeed without cargo).
 2. `make legacy-smoke` (required).
@@ -99,55 +86,8 @@ make native                      # → native-install only
 | This entry **is** | This entry **is not** |
 |-------------------|----------------------|
 | Candidate dual-path packaging facade | Complete CPAN dist of Devel::NYTProf |
-| Make targets → existing packaging scripts | Full MakeMaker ↔ Cargo XS dual-build (**BUILD-003 full**) |
+| Make targets → existing packaging scripts | Full MakeMaker ↔ Cargo XS dual-build (**BUILD-003**) |
 | Default legacy without Cargo | Multi-OS CI matrix (**BUILD-006**) / CPAN upload |
-
----
-
-## BUILD-003 depth (partial — toward full dual-build)
-
-**Board ID:** BUILD-003-DEPTH  
-**Status:** **partial depth landed** — closer dual-build for installable native CLI + pure-Perl facade under a shared `prefix/`; **does not** complete **BUILD-003 full** (no oracle XS in this Makefile, no CPAN tarball, no codec feature wiring).
-
-Absolute policy parent: [BUILD-003 task](https://github.com/hilather/nytprof-modernization/blob/main/docs/plan/12_BUILD_PACKAGING_CI_AND_RELEASE_TASKS.md) (Integrate optional Cargo build with MakeMaker).
-
-### What depth adds beyond BUILD-MAKEMAKER-OPT
-
-| Artifact | Role | Cargo? |
-|----------|------|--------|
-| `make cargo-build` | Direct `cargo build -p nytprof-cli` from Make | Required |
-| `make install-facade` / [`scripts/packaging/install_facade.sh`](https://github.com/hilather/nytprof-modernization/blob/main/scripts/packaging/install_facade.sh) | Install `$NYTPROF_PREFIX/bin/nytprof-engine` + `lib/Devel/NYTProf/*.pm` (default `$REPO/prefix`) | **Never** |
-| Shared prefix resolve | [`scripts/packaging/resolve_packaging_prefix.sh`](https://github.com/hilather/nytprof-modernization/blob/main/scripts/packaging/resolve_packaging_prefix.sh) | Used by both install scripts — no dual-install root split |
-| `make dual-install` | `native-install` + `install-facade` | Required |
-| `make packaging-status` | Print `nytprof-packaging.mode` honesty stamps | No |
-| `make build003-depth-smoke` / [`scripts/packaging/makemaker_build003_depth_smoke.sh`](https://github.com/hilather/nytprof-modernization/blob/main/scripts/packaging/makemaker_build003_depth_smoke.sh) | Regression: facade without cargo + dual-install when cargo present | Mixed |
-| Stamp fields | `packaging_depth=BUILD-003-depth-v0`, **`full_build003=0`**, `not_full_xs_cpan=1` | — |
-| Configure diagnostics | cargo/rustc versions when present; explicit legacy when absent | — |
-
-### Legacy-only unbroken (hard)
-
-| Must | Evidence |
-|------|----------|
-| `NYTPROF_NATIVE=0 perl Makefile.PL` without cargo | depth smoke step 1 |
-| `make install-facade` without cargo | depth smoke step 2 |
-| Pure-Perl `query --json --jsonl` via installed facade | depth smoke (leaf **15** / mid **3**) |
-| Never `crates/` on oracle `PERL5LIB` | child smokes; depth smoke uses private `PREFIX` |
-
-### Residual (still open for BUILD-003 full)
-
-- No `Devel::NYTProf` XS / collector sources in this Makefile
-- No CPAN-installable dual dist with optional Cargo subdir
-- No MakeMaker feature flags that enable/disable ZSTD/LZ4 at build time
-- No multi-OS CI (**BUILD-006**) or prebuilt native package policy (ADR-Q016)
-
-### Definition of done for BUILD-003-DEPTH
-
-- [x] `install-facade` + pure-Perl prefix layout (`bin` + `lib`)
-- [x] `dual-install` / `cargo-build` / `packaging-status` Make targets
-- [x] Configure stamps: `packaging_depth=BUILD-003-depth-v0`, **`full_build003=0`**
-- [x] Depth smoke: legacy facade without cargo; dual path when cargo present
-- [x] Docs: this section + residual matrix honesty + board row
-- [x] **Does not** claim BUILD-003 full complete
 
 ---
 
@@ -159,7 +99,7 @@ Absolute policy parent: [BUILD-003 task](https://github.com/hilather/nytprof-mod
 |------------|-----|
 | `scripts/baseline/*` calling `cargo` / `rustc` | Oracle pin is Perl/C only |
 | `tools/oracle/*` requiring Rust binaries | Fixture dump/compare is oracle-side |
-| Oracle / legacy smoke putting `crates/` on `PERL5LIB` | Contamination of the pin |
+| Oracle / legacy smoke putting `crates/`, `perl/`, or `collector/` installs on `PERL5LIB` | Contamination of the pin |
 | Failing legacy smoke because Cargo is missing | RSK-009 / COMPAT-011 |
 
 Presence of `crates/` or a Rust toolchain is **allowed** on developer machines; it must not become a **dependency** of the legacy path.
@@ -173,15 +113,16 @@ Presence of `crates/` or a Rust toolchain is **allowed** on developer machines; 
 | Oracle `PERL5LIB` | Built from `baseline/6.15/install` (+ optional `test-deps/`) only |
 | Forbidden | Any `PERL5LIB` entry under `crates/` |
 | Forbidden (oracle context) | Candidate `perl/` facade until explicitly under test outside BASE-001 |
+| Forbidden (oracle context) | Overlay `collector/` tree and candidate installs (`collector/install/`, `prefix/collector/`) — see [Collector overlay](#collector-overlay-source-tree-adr-0004--b0-a) |
 | Native tools | Use binaries (`prefix/bin`, `target/…`) or `cargo run`; not module path |
 
-Enforced by `tools/oracle/env.sh`, `scripts/baseline/build_oracle.sh`, and `scripts/packaging/legacy_only_smoke.sh`.
+Enforced by `tools/oracle/env.sh`, `scripts/baseline/build_oracle.sh`, and `scripts/packaging/legacy_only_smoke.sh` (today primarily `crates/` / non-install load paths; path-component asserts for `collector/` land with COL-001 smokes).
 
 ---
 
-## Collector overlay source tree (ADR-0003 / B0-A)
+## Collector overlay source tree (ADR-0004 / B0-A)
 
-**Accepted layout:** modernization collector C/XS sources live under repository-root **`collector/`** (B0-A overlay). The 6.15 oracle pin under `baseline/6.15/` remains archives + isolated install for differential tests. **Do not** implement COL-001..007 by patching `baseline/6.15/src` (B0-B rejected). Full decision: [`docs/adrs/0003-collector-packaging-source-tree.md`](https://github.com/hilather/nytprof-modernization/blob/main/docs/adrs/0003-collector-packaging-source-tree.md).
+**Accepted layout:** modernization collector C/XS sources live under repository-root **`collector/`** (B0-A overlay). The 6.15 oracle pin under `baseline/6.15/` remains archives + isolated install for differential tests. **Do not** implement COL-001..007 by patching `baseline/6.15/src` (B0-B rejected). Full decision: [`docs/adrs/0004-collector-packaging-source-tree.md`](https://github.com/hilather/nytprof-modernization/blob/main/docs/adrs/0004-collector-packaging-source-tree.md).
 
 | Path | Role | On oracle `PERL5LIB`? |
 |------|------|------------------------|
@@ -210,7 +151,7 @@ Enforced by `tools/oracle/env.sh`, `scripts/baseline/build_oracle.sh`, and `scri
 | **Isolation** | Parent offline gate still must not put `crates/` (or `collector/` install) on oracle `PERL5LIB`; child smokes own isolation |
 | **Fixtures** | C writer / dual harness writes under `fixtures/v6/from-c/**` only; never mutates `baseline/6.15/archives/` |
 
-**Merge rule:** PR-B02 (COL-001 semantic sink) **must not merge** without ADR-0003 accepted (this policy section + ADR). This ADR alone does **not** claim COL-007 product, wire freeze, or CLI v6 default.
+**Merge rule:** PR-B02 (COL-001 semantic sink) **must not merge** without ADR-0004 accepted (this policy section + ADR). This ADR alone does **not** claim COL-007 product, wire freeze, or CLI v6 default.
 
 ---
 
@@ -271,25 +212,22 @@ Behavior:
 
 | Script | Tier | Cargo |
 |--------|------|-------|
-| [`scripts/ci/offline_gate.sh`](../scripts/ci/offline_gate.sh) | offline R1 gate (CI-OFFLINE-GATE-EXPAND + CI-QUERY-JSON-GATE + CI-CAPABILITY-GATE) | Cargo tests skip if absent; harness + dual-path + engine_auto_fallback + JsonlData roll-up + query-JSON required; capability when cargo/prefix/target present |
-| [`scripts/packaging/engine_auto_fallback_smoke.sh`](../scripts/packaging/engine_auto_fallback_smoke.sh) | offline gate step 4 | Prefer-native / fall-back-legacy; never `crates/` on oracle PERL5LIB |
-| [`scripts/packaging/perl_jsonl_data_all_smoke.sh`](../scripts/packaging/perl_jsonl_data_all_smoke.sh) | offline gate step 5 | Thin fail-fast roll-up of pure-Perl JsonlData smokes |
-| [`scripts/packaging/perl_query_json_smoke.sh`](../scripts/packaging/perl_query_json_smoke.sh) | offline gate step 6 (CI-QUERY-JSON-GATE) | QUERY-JSON-MVP / QUERY-JSON-EXPAND: `query --json --jsonl` golden; pure-Perl; no cargo |
-| [`scripts/packaging/json_sub_entry_smoke.sh`](../scripts/packaging/json_sub_entry_smoke.sh) | offline gate step 6b | JSON-SUB-ENTRY-MVP: `sub_entry_events` **0**/**27** |
-| [`scripts/packaging/json_blocks_smoke.sh`](../scripts/packaging/json_blocks_smoke.sh) | offline gate step 6c | JSON-BLOCKS-MVP: blocks-calls1 **780**/**810** greppable A4/A4b ints |
-| [`scripts/packaging/native_agg_json_smoke.sh`](../scripts/packaging/native_agg_json_smoke.sh) | offline gate step 7 (optional when native) | NATIVE-AGG-JSON: `report --json` ×2 → **15/3/15** |
-| [`scripts/packaging/native_query_json_cross_smoke.sh`](../scripts/packaging/native_query_json_cross_smoke.sh) | offline gate step 8 (optional when native) | NATIVE-QUERY-JSON-CROSS: native `report --json` vs Perl `query --json` shared fields **15/3/15** + discount **818** |
-| [`scripts/packaging/capability_selftest_smoke.sh`](../scripts/packaging/capability_selftest_smoke.sh) | offline gate step 9 (CI-CAPABILITY-GATE); also packaging_gate | CAPABILITY-SELFTEST + CAPABILITY-JSON-MVP; fails closed without CLI/cargo when invoked directly; offline/packaging gates skip honestly when native unavailable |
-| [`scripts/packaging/legacy_only_smoke.sh`](../scripts/packaging/legacy_only_smoke.sh) | legacy-only | Must not invoke |
-| [`scripts/packaging/install_native.sh`](../scripts/packaging/install_native.sh) | optional-native | Required |
-| [`scripts/packaging/native_install_smoke.sh`](../scripts/packaging/native_install_smoke.sh) | optional-native | Required (expects prefix install) |
-| [`scripts/packaging/native_optional_smoke.sh`](../scripts/packaging/native_optional_smoke.sh) | optional-native | Skips cleanly if absent |
-| [`scripts/packaging/dual_path_smoke.sh`](../scripts/packaging/dual_path_smoke.sh) | both (policy entry / offline gate packaging primary) | Legacy always; native if present |
+| [`scripts/ci/offline_gate.sh`](https://github.com/hilather/nytprof-modernization/blob/main/scripts/ci/offline_gate.sh) | offline R1 gate (CI-OFFLINE-GATE-EXPAND + CI-QUERY-JSON-GATE + CI-CAPABILITY-GATE) | Cargo tests skip if absent; harness + dual-path + engine_auto_fallback + JsonlData roll-up + query-JSON required; capability when cargo/prefix/target present |
+| [`scripts/packaging/engine_auto_fallback_smoke.sh`](https://github.com/hilather/nytprof-modernization/blob/main/scripts/packaging/engine_auto_fallback_smoke.sh) | offline gate step 4 | Prefer-native / fall-back-legacy; never `crates/` on oracle PERL5LIB |
+| [`scripts/packaging/perl_jsonl_data_all_smoke.sh`](https://github.com/hilather/nytprof-modernization/blob/main/scripts/packaging/perl_jsonl_data_all_smoke.sh) | offline gate step 5 | Thin fail-fast roll-up of pure-Perl JsonlData smokes |
+| [`scripts/packaging/perl_query_json_smoke.sh`](https://github.com/hilather/nytprof-modernization/blob/main/scripts/packaging/perl_query_json_smoke.sh) | offline gate step 6 (CI-QUERY-JSON-GATE) | QUERY-JSON-MVP / QUERY-JSON-EXPAND: `query --json --jsonl` golden; pure-Perl; no cargo |
+| [`scripts/packaging/json_sub_entry_smoke.sh`](https://github.com/hilather/nytprof-modernization/blob/main/scripts/packaging/json_sub_entry_smoke.sh) | offline gate step 6b | JSON-SUB-ENTRY-MVP: `sub_entry_events` **0**/**27** |
+| [`scripts/packaging/json_blocks_smoke.sh`](https://github.com/hilather/nytprof-modernization/blob/main/scripts/packaging/json_blocks_smoke.sh) | offline gate step 6c | JSON-BLOCKS-MVP: blocks-calls1 **780**/**810** greppable A4/A4b ints |
+| [`scripts/packaging/native_agg_json_smoke.sh`](https://github.com/hilather/nytprof-modernization/blob/main/scripts/packaging/native_agg_json_smoke.sh) | offline gate step 7 (optional when native) | NATIVE-AGG-JSON: `report --json` ×2 → **15/3/15** |
+| [`scripts/packaging/native_query_json_cross_smoke.sh`](https://github.com/hilather/nytprof-modernization/blob/main/scripts/packaging/native_query_json_cross_smoke.sh) | offline gate step 8 (optional when native) | NATIVE-QUERY-JSON-CROSS: native `report --json` vs Perl `query --json` shared fields **15/3/15** + discount **818** |
+| [`scripts/packaging/capability_selftest_smoke.sh`](https://github.com/hilather/nytprof-modernization/blob/main/scripts/packaging/capability_selftest_smoke.sh) | offline gate step 9 (CI-CAPABILITY-GATE); also packaging_gate | CAPABILITY-SELFTEST + CAPABILITY-JSON-MVP; fails closed without CLI/cargo when invoked directly; offline/packaging gates skip honestly when native unavailable |
+| [`scripts/packaging/legacy_only_smoke.sh`](https://github.com/hilather/nytprof-modernization/blob/main/scripts/packaging/legacy_only_smoke.sh) | legacy-only | Must not invoke |
+| [`scripts/packaging/install_native.sh`](https://github.com/hilather/nytprof-modernization/blob/main/scripts/packaging/install_native.sh) | optional-native | Required |
+| [`scripts/packaging/native_install_smoke.sh`](https://github.com/hilather/nytprof-modernization/blob/main/scripts/packaging/native_install_smoke.sh) | optional-native | Required (expects prefix install) |
+| [`scripts/packaging/native_optional_smoke.sh`](https://github.com/hilather/nytprof-modernization/blob/main/scripts/packaging/native_optional_smoke.sh) | optional-native | Skips cleanly if absent |
+| [`scripts/packaging/dual_path_smoke.sh`](https://github.com/hilather/nytprof-modernization/blob/main/scripts/packaging/dual_path_smoke.sh) | both (policy entry / offline gate packaging primary) | Legacy always; native if present |
 | [`scripts/packaging/makemaker_dual_path_smoke.sh`](https://github.com/hilather/nytprof-modernization/blob/main/scripts/packaging/makemaker_dual_path_smoke.sh) | both (MakeMaker entry) | `Makefile.PL` + `make legacy-smoke`; native via make when cargo present |
-| [`scripts/packaging/install_facade.sh`](https://github.com/hilather/nytprof-modernization/blob/main/scripts/packaging/install_facade.sh) | BUILD-003-DEPTH (facade half) | Pure-Perl engine + modules → `$NYTPROF_PREFIX` (default `$REPO/prefix`); **no cargo**; shared root resolve with native |
-| [`scripts/packaging/resolve_packaging_prefix.sh`](https://github.com/hilather/nytprof-modernization/blob/main/scripts/packaging/resolve_packaging_prefix.sh) | BUILD-003-DEPTH (shared) | Identical `NYTPROF_PREFIX` / bare-`PREFIX` denylist (`$HOME/perl5`, `*/perl5`, trailing `/`) for dual-install |
-| [`scripts/packaging/makemaker_build003_depth_smoke.sh`](https://github.com/hilather/nytprof-modernization/blob/main/scripts/packaging/makemaker_build003_depth_smoke.sh) | BUILD-003-DEPTH | Facade without cargo + dual-install when cargo; honesty stamps |
-| Root [`Makefile.PL`](https://github.com/hilather/nytprof-modernization/blob/main/Makefile.PL) | packaging facade + depth | Default legacy; `NYTPROF_NATIVE=0\|1\|auto`; `install-facade` / `dual-install`; not full XS CPAN; `make offline-gate` |
+| Root [`Makefile.PL`](https://github.com/hilather/nytprof-modernization/blob/main/Makefile.PL) | packaging facade | Default legacy; `NYTPROF_NATIVE=0\|1\|auto`; not full XS CPAN; `make offline-gate` |
 | [`scripts/packaging/packaging_gate.sh`](https://github.com/hilather/nytprof-modernization/blob/main/scripts/packaging/packaging_gate.sh) | broader packaging gate | Mixed fail-fast (legacy + engine select + Perl dispatch + native when present) |
 
 Broader operator gate (includes engine-selection and Perl facade smokes beyond dual-path tiers):
@@ -304,7 +242,7 @@ Oracle rebuild (Cargo-free forever):
 ./scripts/baseline/run_all.sh
 ```
 
-Native install MVP contract: [`docs/schemas/native-install-mvp-v0.md`](schemas/native-install-mvp-v0.md).
+Native install MVP contract: [`docs/schemas/native-install-mvp-v0.md`](https://github.com/hilather/nytprof-modernization/blob/main/docs/schemas/native-install-mvp-v0.md).
 
 ---
 
@@ -314,24 +252,24 @@ Native install MVP contract: [`docs/schemas/native-install-mvp-v0.md`](schemas/n
 |------|--------|-------|
 | Full CI matrix | **BUILD-006** — open | Multi-OS / multi-Perl / multi-rustc jobs not required by dual-path policy or CI-OFFLINE-GATE |
 | Multi-OS prebuilt binaries | open (ADR-Q016) | Distribution model undecided |
-| Full MakeMaker ↔ Cargo CPAN dual-build | **BUILD-003** full — open | **BUILD-003-DEPTH** partial (facade + prefix dual-install) landed; still not a complete XS CPAN tarball |
+| Full MakeMaker ↔ Cargo CPAN dual-build | **BUILD-003** full — open | Candidate entry is **BUILD-MAKEMAKER-OPT** only; not a complete XS CPAN tarball |
 | Multi-OS CI / CPAN upload | **BUILD-006** / release — open | Not required by the candidate packaging entry; offline gate is single-host only |
 | COMPAT-009 final tier freeze / full BUILD-001 ADR | open | This doc is the runnable dual-path draft feeding that freeze |
 | MSRV freeze | open (ADR-Q017) | Optional-native uses whatever `rustc` is installed until frozen |
 | Default engine/format flips to native | out of first slice | Native remains opt-in |
-| Collector overlay sources / COL-001 sink | open (blocked only on layout — **ADR-0003 accepted**) | Tree lands in sink PRs under `collector/`; not shipped by dual-path policy alone |
-| COL-007 C v6 writer / wire freeze / CLI v6 default | deferred / open | ADR-0003 does **not** complete these |
+| Collector overlay sources / COL-001 sink | open (layout unblocked — **ADR-0004 accepted**; sources land in PR-B02+) | Tree lands in sink PRs under `collector/`; not shipped by dual-path policy alone |
+| COL-007 C v6 writer / wire freeze / CLI v6 default | deferred / open | ADR-0004 does **not** complete these |
 
 ---
 
 ## Relationship to packaging spike
 
 - Spike charter and layout notes: [`docs/PACKAGING_SPIKE.md`](https://github.com/hilather/nytprof-modernization/blob/main/docs/PACKAGING_SPIKE.md)
-- Collector overlay layout (B0-A): [`docs/adrs/0003-collector-packaging-source-tree.md`](https://github.com/hilather/nytprof-modernization/blob/main/docs/adrs/0003-collector-packaging-source-tree.md)
+- Collector overlay layout (B0-A): [`docs/adrs/0004-collector-packaging-source-tree.md`](https://github.com/hilather/nytprof-modernization/blob/main/docs/adrs/0004-collector-packaging-source-tree.md)
 - This policy **lands** the dual-path contract with a dedicated smoke; the spike remains historical/background detail.
 - **CI-OFFLINE-GATE** / **CI-OFFLINE-GATE-EXPAND** / **CI-QUERY-JSON-GATE** / **CI-CAPABILITY-GATE** (`scripts/ci/offline_gate.sh`) is the single offline R1 fail-fast entry (cargo tests? + harness + dual-path packaging primary + engine_auto_fallback + pure-Perl JsonlData roll-up + required query-JSON smoke + capability_selftest when native available).
 - Unified packaging gate remains the broader packaging fail-fast suite; dual-path smoke is the support-tier-focused packaging half.
-- Candidate MakeMaker entry (`Makefile.PL` + `makemaker_dual_path_smoke.sh`) is the dual-path **packaging facade**; **BUILD-003-DEPTH** adds `install-facade` / `dual-install` / depth smoke toward full BUILD-003 without completing XS CPAN dual-build.
+- Candidate MakeMaker entry (`Makefile.PL` + `makemaker_dual_path_smoke.sh`) is the dual-path **packaging facade** before full BUILD-003.
 
 ---
 

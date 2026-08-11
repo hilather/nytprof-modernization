@@ -260,6 +260,15 @@ Record decisions that affect stable semantics, wire bytes, platform support, pac
 - **Recommended direction:** no automatic retirement; separate decisions per component after deprecation.
 - **Decision must specify:** warning period, alternatives, support end, file-format longevity.
 
+### BUILD-LAYOUT - Collector packaging / source-tree overlay (design-program OQ-8)
+
+- **Status:** accepted
+- **Blocks:** COL-001 / PR-B02 (was blocking until accepted)
+- **Question:** Where do modernization collector C/XS sources live relative to the BASE-001 oracle pin (`B0-A` overlay vs `B0-B` patch-in-pin)?
+- **Decision:** **B0-A overlay** under repository-root `collector/`; oracle pin under `baseline/6.15/` remains archives + isolated install. See [`docs/adrs/0004-collector-packaging-source-tree.md`](https://github.com/hilather/nytprof-modernization/blob/main/docs/adrs/0004-collector-packaging-source-tree.md).
+- **Not ADR-Q008:** plan **ADR-Q008** is chunk size/boundary policy (format/collector flush) — unrelated; do not close ADR-Q008 from this layout decision.
+- **Design-program OQ-8:** external completion-architecture label for the same layout question; in-repo SoT is this entry + ADR-0004.
+
 ## ADR document template
 
 ```markdown

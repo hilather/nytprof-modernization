@@ -1,9 +1,9 @@
-# ADR-0003 - Collector packaging / source-tree layout (B0-A overlay)
+# ADR-0004 - Collector packaging / source-tree layout (B0-A overlay)
 
 - **Status:** accepted
 - **Date:** 2026-08-11
 - **Owners/approvers:** build/release lead; collector (C/XS) lead
-- **Related ADR-Q:** program OQ-8 (collector source-tree layout — resolved by this ADR); packaging dual-path in [`docs/BUILD_SUPPORT_POLICY.md`](https://github.com/hilather/nytprof-modernization/blob/main/docs/BUILD_SUPPORT_POLICY.md); BASE-001 pin under [`baseline/6.15/`](https://github.com/hilather/nytprof-modernization/blob/main/baseline/6.15/README.md)
+- **Related ADR-Q:** design-program **OQ-8** (collector source-tree layout — **not** plan [`ADR-Q008`](https://github.com/hilather/nytprof-modernization/blob/main/docs/plan/18_OPEN_QUESTIONS_AND_ADR_QUEUE.md) chunk-size policy); in-repo SoT: resolved entry **BUILD-LAYOUT** in that same queue file; packaging dual-path in [`docs/BUILD_SUPPORT_POLICY.md`](https://github.com/hilather/nytprof-modernization/blob/main/docs/BUILD_SUPPORT_POLICY.md); BASE-001 pin under [`baseline/6.15/`](https://github.com/hilather/nytprof-modernization/blob/main/baseline/6.15/README.md)
 - **Related tasks/risks/gates:** COL-001..006 (sink), COL-007 (C v6 writer — still deferred product), BUILD-001/003 dual-path, BUILD-006 (not required here), RSK-009 / COMPAT-011 (legacy without Rust), oracle contamination (CR-05), `./scripts/ci/offline_gate.sh`
 - **Decision scope/version:** repository layout and isolation rules for modernization collector C/XS work through R2 runway; **not** a v6 wire freeze, COL-007 product claim, or full CPAN XS dual-build (BUILD-003)
 
@@ -12,18 +12,18 @@
 R2 critical path requires a **v5-neutral semantic sink** (COL-001..) and later a **C v6 writer** (COL-007). Collector sources must live somewhere the build and CI can compile and test them without:
 
 1. contaminating the **pinned 6.15 oracle** under `baseline/6.15/` (archives + install used for differential fixtures);
-2. putting `crates/` or candidate `perl/` on oracle `PERL5LIB`;
+2. putting `crates/`, candidate `perl/`, or overlay collector install prefixes on oracle `PERL5LIB`;
 3. making legacy-only / offline packaging require a C writer or Cargo;
 4. rewriting immutable oracle archives when regenerating install trees or producing v6 fixtures.
 
-Two layouts were considered (program completion design, Phase B.0):
+Two layouts were considered for the R2 collector runway (B0 options restated normatively in Decision below; external design notes are non-normative background only):
 
 | Option | Description |
 |--------|-------------|
 | **B0-A Overlay** | Modernization collector sources live in a **parallel tree** (e.g. `collector/`); oracle pin remains archives + isolated install for differential tests |
 | **B0-B Patch-in-pin** | Edit sources under `baseline/6.15/src` with “no archive rewrite” discipline; regenerate install only via scripts |
 
-**PR-B02 (COL-001 sink) must not merge without this ADR.** Sink and writer PRs implement against the layout frozen here.
+**PR-B02 (COL-001 sink) must not merge without this ADR accepted.** Sink and writer PRs implement against the layout frozen here.
 
 ## Evidence
 
@@ -36,7 +36,7 @@ Two layouts were considered (program completion design, Phase B.0):
 | [`docs/PACKAGING_SPIKE.md`](https://github.com/hilather/nytprof-modernization/blob/main/docs/PACKAGING_SPIKE.md) | Layout: `crates/` optional; oracle-first |
 | [`scripts/ci/offline_gate.sh`](https://github.com/hilather/nytprof-modernization/blob/main/scripts/ci/offline_gate.sh) | Fail-fast offline R1 gate; never puts `crates/` on oracle `PERL5LIB` |
 | [`scripts/packaging/legacy_only_smoke.sh`](https://github.com/hilather/nytprof-modernization/blob/main/scripts/packaging/legacy_only_smoke.sh) | Cargo-free legacy packaging proof |
-| Program design Phase B.0 / OQ-8 | Prefer overlay B0-A; packaging ADR blocks sink PRs |
+| This ADR Decision §§1–6 | Normative B0-A vs B0-B choice, isolation, fixtures, offline_gate neutrality, dual-path (external design Phase B.0 / design-program OQ-8 is background only) |
 
 No collector overlay sources are required to exist **in this ADR commit** — the decision freezes layout and isolation so COL-001 can land sources under the agreed tree.
 
@@ -83,13 +83,15 @@ Editing `baseline/6.15/src` for modernization sink/writer work is **rejected** a
 | Rule | Detail |
 |------|--------|
 | Oracle `PERL5LIB` | Built only from `baseline/6.15/install` (+ optional `baseline/6.15/test-deps/`) |
-| Forbidden on oracle `PERL5LIB` | Any path under `crates/`, candidate `perl/`, or `collector/` module install trees |
+| Forbidden on oracle `PERL5LIB` | Any path under `crates/`, candidate `perl/`, or `collector/` (including `collector/install/` / `prefix/collector/` candidate installs) |
 | Oracle rebuild | `./scripts/baseline/run_all.sh` (or step scripts) — **Perl/C only**; never requires Cargo or `collector/` build |
 | Pin archives | Committed under `baseline/6.15/archives/`; **never rewritten** by collector or fixture jobs |
 | Install regeneration | Only via `scripts/baseline/build_oracle.sh` from the **unmodified** pin extract |
 | Contamination fail-closed | Load of `Devel::NYTProf` from outside install tree fails oracle/env smokes |
 
 Collector overlay builds that produce a **candidate** install for sink tests **MUST** use a separate prefix (e.g. `collector/install/` or `prefix/collector/`), never `baseline/6.15/install`.
+
+Path-component asserts for `collector/` on oracle `PERL5LIB` land with COL-001 packaging smokes; today `legacy_only_smoke` / oracle env primarily scan for `crates/` and non-install load paths.
 
 ### 4. Fixture production path (C writer / dual later)
 
@@ -100,7 +102,7 @@ When C-produced v6 (or dual) profiles are checked in or regenerated:
 | `fixtures/v6/from-c/**` | Canonical location for profiles / dumps produced by the **overlay collector** C path |
 | `fixtures/v5/**` | Existing golden v5 fixtures from **oracle** capture tools — remain oracle-driven |
 | Production harness | Scripts under `tools/` or `scripts/` that build/run the **overlay** collector binary/module; write under `fixtures/v6/from-c/` (or a temp dir then promote) |
-| Forbidden | Mutating `baseline/6.15/archives/*`; writing C fixtures into the oracle install tree; putting `crates/` on oracle `PERL5LIB` during capture |
+| Forbidden | Mutating `baseline/6.15/archives/*`; writing C fixtures into the oracle install tree; putting `crates/` or overlay install on oracle `PERL5LIB` during capture |
 
 Stand-in / Rust preflight encoders may continue to produce **non-product** vectors under crate tests or provisional schema docs; product dual-equality **C** evidence uses `fixtures/v6/from-c/**` once COL-007 bytes exist.
 
@@ -126,9 +128,18 @@ Wiring may live in `offline_gate.sh` and/or packaging smokes; exact script names
 
 Root `Makefile.PL` dual-path facade remains **default legacy**. Full MakeMaker ↔ XS CPAN dual-build that ships the overlay as product is **BUILD-003** / later packaging work — out of scope for this ADR.
 
-### 7. Numbering note (ADR-0001 / ADR-0002)
+### 7. Numbering note (ADR-0001 .. ADR-0004)
 
-Format packing / FOOTER string-pool candidate ADRs are tracked as **ADR-0001** and **ADR-0002** on the R2 format track. This packaging decision is **ADR-0003** so numbering does not collide when those land or are accepted.
+| Number | Topic | Track |
+|--------|-------|-------|
+| **ADR-0001** | Format v6 event-body packing candidate | R2 format (PR-B01) |
+| **ADR-0002** | Format v6 FOOTER string-pool / dictionary candidate | R2 format (PR-B01) |
+| **ADR-0003** | Full R1 residual policy (CLOSE / WAIVE / OUT-OF-R1) | Track A residual (PR-A04) |
+| **ADR-0004** | Collector packaging / source-tree (this ADR) | Track B packaging (PR-B00) |
+
+This packaging decision is **ADR-0004** so it does not collide with packing ADRs (0001/0002) or the residual-policy ADR (0003).
+
+**Merge handoff:** when rebasing or merging with PR-B01 / PR-A04, treat [`docs/adrs/README.md`](https://github.com/hilather/nytprof-modernization/blob/main/docs/adrs/README.md) as a **multi-row index** — preserve all accepted/proposed rows (0001–0004) rather than replacing the whole table.
 
 ## Exactness and compatibility consequences
 
@@ -151,7 +162,7 @@ Format packing / FOOTER string-pool candidate ADRs are tracked as **ADR-0001** a
 
 | Requirement | Owner slice |
 |-------------|-------------|
-| Land `collector/` tree + sink headers/sources | PR-B02 (COL-001) and follow-ons — **blocked until this ADR is accepted** (done here) |
+| Land `collector/` tree + sink headers/sources | PR-B02 (COL-001) and follow-ons — layout unblocked by this **accepted** ADR |
 | Separate candidate install prefix; never `baseline/6.15/install` | All collector build scripts |
 | Preserve `scripts/baseline/*` Cargo-free and archive-immutable | BUILD / BASE-001 |
 | Fixture harness → `fixtures/v6/from-c/**` without pin mutation | COL-007 / dual-equality when C bytes exist |
