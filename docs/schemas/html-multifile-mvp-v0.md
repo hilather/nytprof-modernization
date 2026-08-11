@@ -76,8 +76,8 @@ Reuse `escape_html` and primary-workload-fid selection from single-file HTML.
 - Real `ProfileModel::from_path` on default-calls1
 - Site render contains leaf/mid 15/3 and source hot loop
 - Index contains `href` to source file
-- Shared CSS: disk `style.css` == `SHARED_STYLE_CSS`; pages use `<link rel="stylesheet" href="style.css">` (`html_shared_css_structure_contract_default_calls1`, `write_html_site_default_calls1_tempdir`)
-- Real CLI: `html ... --out-dir tmp` produces index + file pages + `style.css`
+- Shared CSS: disk `style.css` == `SHARED_STYLE_CSS`; pages use `<link rel="stylesheet" href="style.css">` (`html_shared_css_structure_contract_default_calls1`, `write_html_site_default_calls1_tempdir`, atomic publish tests)
+- Real CLI: `html ... --out-dir DIR` produces index + file pages + `style.css`; stderr lists `style.css` (`crates/nytprof-cli/tests/html_shared_css.rs`)
 - blocks-calls1: source page has positive calls on a workload line matching model
-- Atomic publish: `write_html_site_atomic_default_calls1` (disk index leaf 15 / mid 3 / mid→leaf 15); `write_html_site_atomic_overwrite_same_outdir` (second write drops prior files); fail-closed when `out_dir` or its parent is a file
+- Atomic publish: `write_html_site_atomic_default_calls1` (disk index leaf 15 / mid 3 / mid→leaf 15 + `style.css`); `write_html_site_atomic_overwrite_same_outdir` (second write drops prior files, still has `style.css`); fail-closed when `out_dir` or its parent is a file
 - Out-dir safety: `write_html_site_rejects_dotdot_component`, `write_html_site_rejects_null_byte`, `write_html_site_rejects_empty_path`

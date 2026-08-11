@@ -102,11 +102,13 @@ Tests must load the real profile via `ProfileModel::from_path` (or shipped CLI) 
 
 | Test | Asserts |
 |------|---------|
-| `html_shared_css_structure_contract_default_calls1` | Real fixture; multi-file `style.css` + link policy; single-file inline policy; structure classes; **15/3/15** |
+| `html_shared_css_structure_contract_default_calls1` | Real fixture; multi-file `style.css` + link policy; single-file inline policy; structure classes; **15/3/15** (incl. published disk index mid→leaf) |
 | `html_site_default_calls1_render_html_site` | Index links `style.css`; no multi-file inline `<style>` |
 | `write_html_site_default_calls1_tempdir` | Disk `style.css` equals `SHARED_STYLE_CSS` |
+| `write_html_site_atomic_default_calls1` / `write_html_site_atomic_overwrite_same_outdir` | Atomic publish/overwrite keep `style.css` + content equality |
 | `html_summary_default_calls1_real_render_path` | Inline shared CSS; no external `style.css` dependency |
 | `report_semantic_parity_default_calls1` | Leaf/mid/edge counts on HTML paths |
+| CLI `html_out_dir_writes_style_css_and_lists_on_stderr` | Real binary: `--out-dir` writes `style.css`, stderr lists it, index links + **15/3** |
 
 ## Residual honesty
 
