@@ -143,8 +143,9 @@ else
     -p nytprof-format-v6 \
     -p nytprof-model \
     -p nytprof-report \
-    -p nytprof-cli
-  ok "step: cargo test (nytprof-format-v5 format-v6 model report cli)"
+    -p nytprof-cli \
+    -p nytprof-ffi
+  ok "step: cargo test (nytprof-format-v5 format-v6 model report cli ffi)"
 fi
 
 # ---------------------------------------------------------------------------

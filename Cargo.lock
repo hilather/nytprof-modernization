@@ -130,6 +130,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "nytprof-ffi"
+version = "0.1.0"
+dependencies = [
+ "nytprof-model",
+]
+
+[[package]]
 name = "nytprof-format-v5"
 version = "0.1.0"
 dependencies = [
