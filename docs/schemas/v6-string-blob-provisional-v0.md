@@ -15,7 +15,7 @@ It is **not**:
 
 - a permanent wire freeze or ADR-ratified string table;
 - permission to mark **COL-007** done;
-- interned dictionary resolution / global string pools;
+- permanent global string pools (local dictionary intern preflight is a sibling `FMT-V6-STRING-DICTIONARY-*`);
 - a claim that every `string_id` is globally unique across files yet.
 
 ---
@@ -101,7 +101,8 @@ Evidence: `cargo test -p nytprof-format-v6`.
 | Header / chunk / ULEB128 / ZigZag signed preflight | done |
 | Length-prefixed string/blob contract + API | **done** (`FMT-V6-STRING-*`) |
 | C v6 writer (COL-007) | **still deferred** |
-| Interned dictionaries / event opcodes | residual |
+| Local string-dictionary intern preflight | **done** (`FMT-V6-STRING-DICTIONARY-*`; not permanent global pool) |
+| Permanent global pool / event-opcode catalog freezes | residual |
 | COL-008 / FFI / multi-OS CI / perf claims | residual |
 
 ---
@@ -110,5 +111,5 @@ Evidence: `cargo test -p nytprof-format-v6`.
 
 1. ADR freeze of flag bits and max length.
 2. UTF-8 validation policy when `FLAG_UTF8` is set.
-3. Dictionary tables that map `string_id` → blob (not this MVP).
+3. Permanent global / cross-file string-pool ADR freeze (local dictionary intern preflight is shipped separately as `FMT-V6-STRING-DICTIONARY-*`).
 4. Immutable golden vectors (FMT-012).

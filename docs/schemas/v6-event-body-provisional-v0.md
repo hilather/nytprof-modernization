@@ -21,7 +21,7 @@ It is **not**:
 - a permanent wire freeze or full logical-event catalog matching all v5 tags;
 - permission to mark **COL-007** (C v6 writer) or **COL-008** done;
 - payload inflate (zlib / zstd / LZ4);
-- string dictionaries, location deltas, or CRC verification freeze;
+- permanent global string pools / permanent location-delta or run packing freeze, or CRC verification freeze (local dictionary + site-delta + TIME_LINE_RUN + TIME_BLOCK_RUN preflights are siblings);
 - default CLI report/dump of v6 profiles.
 
 Opcodes and field layouts may change under future ADR + golden vectors.
@@ -33,20 +33,9 @@ Opcodes and field layouts may change under future ADR + golden vectors.
 | Field | Encoding | Notes |
 |-------|----------|-------|
 | opcode | strict ULEB128 | Provisional table below |
-| flags | `u8` | See flag bits below |
-| seq (optional) | ULEB128 | Present when `FLAG_HAS_SEQ` (packing residual; ADR-0001) |
+| flags | `u8` | `FLAG_OPCODE_REQUIRED = 0x01`; `FLAG_BODY_LENGTH = 0x02`; `FLAG_SITE_DELTA = 0x04`; `FLAG_HAS_SEQ = 0x08` (provisional seq-number preflight) |
+| seq (optional) | ULEB128 | Present when `FLAG_HAS_SEQ`; see [`v6-event-body-seq-number-provisional-v0.md`](https://github.com/hilather/nytprof-modernization/blob/main/docs/schemas/v6-event-body-seq-number-provisional-v0.md) |
 | typed-body | per opcode | Composed from existing primitives |
-
-### Provisional flags (`u8`)
-
-| Bit | Name | Role |
-|----:|------|------|
-| `0x01` | `FLAG_OPCODE_REQUIRED` | Unknown opcode → **Err** |
-| `0x02` | `FLAG_BODY_LENGTH` | Length-framed unknown optional skip (preflight) |
-| `0x04` | `FLAG_SITE_DELTA` | **Reserved** packing (ADR-0001); site field ZigZag deltas — encode/decode residual |
-| `0x08` | `FLAG_HAS_SEQ` | **Reserved** packing / OI-001-03 runway (ADR-0001); ULEB seq after flags — encode residual |
-
-Numeric IDs are shared with the provisional ID lockfile: [`docs/contracts/V6_PROVISIONAL_ID_LOCKFILE_v0.md`](https://github.com/hilather/nytprof-modernization/blob/main/docs/contracts/V6_PROVISIONAL_ID_LOCKFILE_v0.md) (Rust `event_body` + C `collector/include/nytprof_v6_ids.h`). **Not** a permanent flag-bit freeze.
 
 ### Provisional opcodes
 
@@ -70,11 +59,11 @@ Numeric IDs are shared with the provisional ID lockfile: [`docs/contracts/V6_PRO
 | 15 | `COMMENT` | string-blob `text` |
 | 16 | `START_DEFLATE` | empty typed body (opcode + flags only; marker presence) |
 | 17 | `VERSION` | two ULEB128 `u64`: `major`, `minor` |
-| 18 | `TIME_LINE_RUN` | **Reserved** packing (ADR-0001): `fid`, `line`, `N`, then `N` × `ticks` (all ULEB128); expands to N logical `TIME_LINE`. **Encode/decode residual** — not in `is_known_opcode` until packing preflight / COL-007. Do **not** treat as free unknown-optional-skip space. |
-| 19 | `TIME_BLOCK_RUN` | **Reserved** packing (ADR-0001): `fid`, `line`, `block_line`, `N`, then `N` × `ticks` (all ULEB128); expands to N logical `TIME_BLOCK`. **Encode/decode residual** — same residual rules as `TIME_LINE_RUN`. |
-| other | unknown | Required flag → `UnknownRequiredOpcode`; optional + `FLAG_BODY_LENGTH` → **skip** length-framed body (preflight); else `UnknownOpcode`. Opcodes **18/19 are reserved** (lockfile) even while encode residual — do not invent alternate IDs. |
+| 18 | `TIME_LINE_RUN` | `fid`, `line`, `N`, then `N` × `ticks` (all ULEB128); expands to N logical `TIME_LINE` (see [`v6-event-body-time-line-run-provisional-v0.md`](https://github.com/hilather/nytprof-modernization/blob/main/docs/schemas/v6-event-body-time-line-run-provisional-v0.md)) |
+| 19 | `TIME_BLOCK_RUN` | `fid`, `line`, `block_line`, `N`, then `N` × `ticks` (all ULEB128); expands to N logical `TIME_BLOCK` (see [`v6-event-body-time-block-run-provisional-v0.md`](https://github.com/hilather/nytprof-modernization/blob/main/docs/schemas/v6-event-body-time-block-run-provisional-v0.md)) |
+| other | unknown | Required flag → `UnknownRequiredOpcode`; optional + `FLAG_BODY_LENGTH` → **skip** length-framed body (preflight); else `UnknownOpcode` |
 
-Expanded opcodes (TIME_BLOCK through VERSION) are **provisional preflight** layouts (v5-ish shapes; integer ULEB ticks/times; string projection for ATTRIBUTE/OPTION/COMMENT; START_DEFLATE is a marker only; VERSION is dump-aligned major/minor). Opcodes 18/19 + packing flags are **ID-reserved** for ADR-0001 packing (see lockfile) — **not** a full logical-event catalog freeze, dual-equality, packing encode claim, or wire freeze.
+Expanded opcodes (TIME_BLOCK through TIME_BLOCK_RUN) are **provisional preflight** layouts (v5-ish shapes; integer ULEB ticks/times; string projection for ATTRIBUTE/OPTION/COMMENT; START_DEFLATE is a marker only; VERSION is dump-aligned major/minor; TIME_LINE_RUN / TIME_BLOCK_RUN are packed same-site expansions) — **not** a full logical-event catalog freeze, dual-equality, or wire freeze.
 
 ### Fail-closed rules
 
@@ -170,6 +159,8 @@ Evidence: `cargo test -p nytprof-format-v6`.
 | Auto-emit VERSION from fixed-header preflight | **done** (`FMT-V6-AUTO-EMIT-VERSION-*`; not OI-001-03 freeze) |
 | ATTRIBUTE/OPTION known-key vocabulary preflight | **done** (`FMT-V6-ATTR-OPTION-KNOWN-KEY-*`; not complete OI-002-03/04 freeze) |
 | Unknown optional length-framed skip preflight | **done** (`FMT-V6-EVENT-BODY-UNKNOWN-OPTIONAL-SKIP-*`; not flag-bit freeze) |
+| String-dictionary intern preflight | **done** (`FMT-V6-STRING-DICTIONARY-*`; not permanent global pool freeze) |
+| Location / site-delta preflight (TIME_LINE/TIME_BLOCK/SUB_ENTRY) | **done** (`FMT-V6-EVENT-BODY-SITE-DELTA-*`; not permanent packing freeze) |
 | Mini-profile composition using event-body | **done** separately (`FMT-V6-MINI-PROFILE-*`) |
 | Always-inflate EVENT/mixed recovery of expanded opcodes | **done** (consumer paths) |
 | Full v5-equivalent opcode catalog / deltas / dictionaries | residual |
@@ -181,6 +172,6 @@ Evidence: `cargo test -p nytprof-format-v6`.
 ## Open items (honest residual)
 
 1. ADR freeze of opcode space and permanent flag bits (length-framed optional skip is preflight only).
-2. Remaining stream-control / catalog items: full dual-output **sequence-number** freeze (OI-001-03 / COL-003 — dump-aligned **order recovery**, chunk-framed mid-stream codec-switch, auto-emit VERSION, and unknown-optional skip preflights are done) + complete ATTRIBUTE/OPTION key vocabularies (OI-002-03/04 full inventory — known-key preflight is done) + location deltas + dictionaries; fork re-init / COL-015; exact DISCOUNT accounting vs BASE-003; COMPAT-002 comment volatile normalize.
+2. Remaining stream-control / catalog items: full dual-output **sequence-number** freeze (OI-001-03 / COL-003 — dump-aligned **order recovery**, chunk-framed mid-stream codec-switch, auto-emit VERSION, and unknown-optional skip preflights are done) + complete ATTRIBUTE/OPTION key vocabularies (OI-002-03/04 full inventory — known-key preflight is done) + **permanent** location-delta packing ADR (site-delta preflight is done) + **permanent** global string-pool freeze (local string-dictionary intern preflight is done); fork re-init / COL-015; exact DISCOUNT accounting vs BASE-003; COMPAT-002 comment volatile normalize.
 3. Dual-equality vs C encoder + golden full-file corpus; float/NV exactness for times/ticks.
 4. Default CLI v6 read path / wire freeze.

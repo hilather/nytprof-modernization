@@ -43,10 +43,11 @@
 //! - `docs/schemas/v6-decoded-mixed-provisional-v0.md`
 //!
 //! This is **not** a wire freeze and does **not** implement the C v6 writer
-//! (COL-007), full event catalogs, or dictionaries. Default chunk parse does not
-//! inflate; use `payload_codec` / `decoded_chunk` / `decoded_stream` /
-//! `decoded_event` / `decoded_source` / `decoded_index` / `decoded_summary` /
-//! `decoded_mixed` helpers explicitly. Layout may change under ADR.
+//! (COL-007) or full event catalogs. Provisional string-dictionary intern
+//! preflight is available via `string_dict` (not a permanent global pool freeze).
+//! Default chunk parse does not inflate; use `payload_codec` / `decoded_chunk` /
+//! `decoded_stream` / `decoded_event` / `decoded_source` / `decoded_index` /
+//! `decoded_summary` / `decoded_mixed` helpers explicitly. Layout may change under ADR.
 
 pub mod chunk;
 pub mod compressed_mixed;
@@ -59,6 +60,7 @@ pub mod decoded_mixed;
 pub mod decoded_source;
 pub mod decoded_stream;
 pub mod decoded_summary;
+pub mod dual_equality;
 pub mod event_body;
 pub mod file_prefix;
 pub mod footer_body;
@@ -71,6 +73,7 @@ pub mod payload_codec;
 pub mod source_body;
 pub mod stream;
 pub mod string;
+pub mod string_dict;
 pub mod summary_body;
 pub mod tlv;
 pub mod varint;
@@ -102,8 +105,19 @@ pub use decoded_chunk::{
 };
 pub use decoded_event::{
     align_event_records_version_with_header, decode_decoded_event_profile,
-    decode_decoded_event_profile_auto_version, encode_decoded_event_mid_stream_codec_switch_profile,
-    encode_decoded_event_profile, encode_decoded_event_profile_auto_version,
+    decode_decoded_event_profile_auto_version,
+    decode_decoded_event_profile_auto_version_with_string_dict,
+    decode_decoded_event_profile_with_string_dict,
+    encode_decoded_event_mid_stream_codec_switch_profile,
+    encode_decoded_event_mid_stream_codec_switch_auto_version_with_site_deltas_and_seq,
+    encode_decoded_event_mid_stream_codec_switch_with_site_deltas_and_seq,
+    encode_decoded_event_mid_stream_codec_switch_with_string_dict_and_site_deltas_and_seq,
+    encode_decoded_event_profile,
+    encode_decoded_event_profile_auto_version,
+    encode_decoded_event_profile_auto_version_with_site_deltas_and_seq,
+    encode_decoded_event_profile_with_string_dict,
+    encode_decoded_event_profile_with_site_deltas_and_seq,
+    encode_decoded_event_profile_with_string_dict_and_site_deltas_and_seq,
     version_record_from_header, DecodedEventError, DecodedEventProfile, DecodedEventResult,
 };
 pub use decoded_index::{
@@ -112,12 +126,23 @@ pub use decoded_index::{
 };
 pub use decoded_mixed::{
     decode_decoded_mixed_profile, decode_decoded_mixed_profile_auto_version,
-    encode_decoded_mixed_mid_record_concurrent_profile, encode_decoded_mixed_mid_record_event_profile,
-    encode_decoded_mixed_mid_record_index_profile, encode_decoded_mixed_mid_record_source_profile,
-    encode_decoded_mixed_mid_record_summary_profile,
-    encode_decoded_mixed_mid_stream_codec_switch_profile, encode_decoded_mixed_multi_chunk_profile,
-    encode_decoded_mixed_profile, encode_decoded_mixed_profile_auto_version, DecodedMixedError,
-    DecodedMixedProfile, DecodedMixedResult, MidRecordKindSplits,
+    decode_decoded_mixed_profile_with_string_dict,
+    decode_decoded_mixed_profile_auto_version_with_string_dict,
+    encode_decoded_mixed_mid_record_concurrent_profile,
+    encode_decoded_mixed_mid_record_event_profile, encode_decoded_mixed_mid_record_index_profile,
+    encode_decoded_mixed_mid_record_source_profile, encode_decoded_mixed_mid_record_summary_profile,
+    encode_decoded_mixed_mid_stream_codec_switch_profile,
+    encode_decoded_mixed_mid_stream_codec_switch_auto_version_with_site_deltas_and_seq,
+    encode_decoded_mixed_mid_stream_codec_switch_with_site_deltas_and_seq,
+    encode_decoded_mixed_mid_stream_codec_switch_with_string_dict_and_site_deltas_and_seq,
+    encode_decoded_mixed_multi_chunk_profile,
+    encode_decoded_mixed_profile, encode_decoded_mixed_profile_auto_version,
+    encode_decoded_mixed_profile_auto_version_with_site_deltas_and_seq,
+    encode_decoded_mixed_profile_auto_version_with_string_dict_and_site_deltas_and_seq,
+    encode_decoded_mixed_profile_with_string_dict,
+    encode_decoded_mixed_profile_with_string_dict_and_site_deltas_and_seq, DecodedMixedError,
+    DecodedMixedProfile,
+    DecodedMixedResult, MidRecordKindSplits,
 };
 pub use decoded_source::{
     decode_decoded_source_profile, encode_decoded_source_profile, DecodedSourceError,
@@ -127,16 +152,27 @@ pub use decoded_stream::{
     decode_prefix_chunk_stream_plain, encode_prefix_sealed_chunks, DecodedStream,
     DecodedStreamError, DecodedStreamResult,
 };
+pub use dual_equality::{
+    e3_assert_logical_equal, e3_decode_writer_bytes, e3_standin_write_absolute,
+    e3_standin_write_mid_stream_packing, e3_standin_write_mid_stream_string_dict_packing,
+    e3_standin_write_packing, e3_standin_write_string_dict, e3_standin_write_string_dict_packing,
+    E3Decoded,
+};
 pub use decoded_summary::{
     decode_decoded_summary_profile, encode_decoded_summary_profile, DecodedSummaryError,
     DecodedSummaryProfile, DecodedSummaryResult,
 };
 pub use event_body::{
-    attribute_kv, decode_event_body, encode_event_body, encode_unknown_optional_skip_record,
-    is_known_opcode, known_key_attr_option_sample_specs, option_kv, EventBodyError,
-    EventBodyResult, EventRecord, EventRecordSpec, FLAG_BODY_LENGTH, FLAG_HAS_SEQ,
-    FLAG_OPCODE_REQUIRED, FLAG_SITE_DELTA, MAX_EVENT_BODY_BYTES, MAX_SKIP_BODY_BYTES,
-    MAX_TIME_RUN_LEN,
+    attribute_kv, decode_event_body, decode_event_body_full, encode_event_body,
+    encode_event_body_with_seq, encode_event_body_with_site_deltas,
+    encode_event_body_with_site_deltas_and_seq,
+    encode_event_body_with_site_deltas_and_seq_continuing, encode_unknown_optional_skip_record,
+    is_known_opcode,
+    known_key_attr_option_expanded_sample_specs, known_key_attr_option_sample_specs, option_kv,
+    EventBodyDecoded, EventBodyError, EventBodyResult, EventRecord, EventRecordSpec,
+    PackingEncodeState,
+    FLAG_BODY_LENGTH, FLAG_HAS_SEQ, FLAG_OPCODE_REQUIRED, FLAG_SITE_DELTA, MAX_EVENT_BODY_BYTES,
+    MAX_SKIP_BODY_BYTES, MAX_TIME_BLOCK_RUN_LEN, MAX_TIME_LINE_RUN_LEN,
 };
 pub use event_body::known_key;
 pub use file_prefix::{
@@ -193,6 +229,11 @@ pub use summary_body::{
 pub use string::{
     decode_string_blob, encode_string_blob, StringBlob, StringError, StringResult, FLAG_UTF8,
     MAX_STRING_BYTES,
+};
+pub use string_dict::{
+    decode_string_dictionary, encode_string_dictionary, owned_event_from_borrowed_resolved,
+    resolve_event_records, DictEntry, StringDictError, StringDictResult, StringDictionary,
+    MAX_DICT_ENTRIES, MAX_DICT_TOTAL_BYTES,
 };
 pub use tlv::{
     decode_tlv, decode_tlv_region, encode_tlv, encode_tlv_region, is_known_type, Tlv, TlvError,
