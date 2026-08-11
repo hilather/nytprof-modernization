@@ -5,7 +5,7 @@ edition.workspace = true
 description = "Stable C ABI (cdylib) for NYTProf profile open/query/close — RUST-010 MVP"
 license.workspace = true
 # Ship a C header next to the crate for embedders (not auto-installed).
-include = ["src/**", "include/**", "Cargo.toml", "README.md"]
+include = ["src/**", "include/**", "Cargo.toml"]
 
 [lib]
 name = "nytprof_ffi"

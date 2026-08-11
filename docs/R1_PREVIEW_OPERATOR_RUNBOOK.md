@@ -49,7 +49,7 @@ Policy: [BUILD_SUPPORT_POLICY.md](https://github.com/hilather/nytprof-modernizat
 
 | Step | What | Cargo / native |
 |------|------|----------------|
-| 1 | `cargo test -p nytprof-format-v5 -p nytprof-model -p nytprof-report -p nytprof-cli` | **Honest skip** if `cargo` / `crates/` absent |
+| 1 | `cargo test -p nytprof-format-v5 -p nytprof-format-v6 -p nytprof-model -p nytprof-report -p nytprof-cli -p nytprof-ffi` | **Honest skip** if `cargo` / `crates/` absent |
 | 2 | `./tools/oracle/selftest_harness.sh` | **Required** (dump parity, fail-closed, incomplete-stream, decode-fuzz, normalize, …) |
 | 3 | `./scripts/packaging/dual_path_smoke.sh` | **Primary packaging** — legacy always; native install when cargo present |
 | 4 | `./scripts/packaging/engine_auto_fallback_smoke.sh` | **Required** (Perl `engine=auto` prefer-native / fall-back-legacy) |
