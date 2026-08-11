@@ -180,8 +180,8 @@ Behavior:
 | Script | Tier | Cargo |
 |--------|------|-------|
 | [`scripts/ci/offline_gate.sh`](../scripts/ci/offline_gate.sh) | offline R1 gate (CI-OFFLINE-GATE-EXPAND + CI-QUERY-JSON-GATE + CI-CAPABILITY-GATE) | Cargo tests skip if absent; harness + dual-path + engine_auto_fallback + JsonlData roll-up + query-JSON required; capability when cargo/prefix/target present |
-| [`scripts/ci/matrix_gate.sh`](../scripts/ci/matrix_gate.sh) | multi-OS matrix entry (**BUILD-006-MVP**) | Host identity banner; rebuild host-local oracle when pin paths do not resolve; then `offline_gate.sh` (honest skips preserved). Not full BUILD-006 |
-| [`.github/workflows/ci-matrix.yml`](../.github/workflows/ci-matrix.yml) | GHA multi-OS matrix (**BUILD-006-MVP**) | `ubuntu-latest` (linux-x86_64) + `macos-latest`; each row runs `matrix_gate.sh`. Not multi-Perl / multi-rustc / Windows / coverage dashboard |
+| [`scripts/ci/matrix_gate.sh`](https://github.com/hilather/nytprof-modernization/blob/main/scripts/ci/matrix_gate.sh) | multi-OS matrix entry (**BUILD-006-MVP**) | Host identity banner; rebuild host-local oracle when pin paths do not resolve; then `offline_gate.sh` (honest skips preserved). Not full BUILD-006 |
+| [`.github/workflows/ci-matrix.yml`](https://github.com/hilather/nytprof-modernization/blob/main/.github/workflows/ci-matrix.yml) | GHA multi-OS matrix (**BUILD-006-MVP**) | `ubuntu-latest` (`linux-x86_64`) + `macos-latest` (`macos-arm64`); each row runs `matrix_gate.sh`. Not multi-Perl / multi-rustc / Windows / coverage dashboard |
 | [`scripts/packaging/engine_auto_fallback_smoke.sh`](../scripts/packaging/engine_auto_fallback_smoke.sh) | offline gate step 4 | Prefer-native / fall-back-legacy; never `crates/` on oracle PERL5LIB |
 | [`scripts/packaging/perl_jsonl_data_all_smoke.sh`](../scripts/packaging/perl_jsonl_data_all_smoke.sh) | offline gate step 5 | Thin fail-fast roll-up of pure-Perl JsonlData smokes |
 | [`scripts/packaging/perl_query_json_smoke.sh`](../scripts/packaging/perl_query_json_smoke.sh) | offline gate step 6 (CI-QUERY-JSON-GATE) | QUERY-JSON-MVP / QUERY-JSON-EXPAND: `query --json --jsonl` golden; pure-Perl; no cargo |
@@ -221,9 +221,9 @@ Native install MVP contract: [`docs/schemas/native-install-mvp-v0.md`](schemas/n
 
 | Piece | Path | Role |
 |-------|------|------|
-| Matrix entry script | [`scripts/ci/matrix_gate.sh`](../scripts/ci/matrix_gate.sh) | Platform banner; host-local oracle ensure; run `offline_gate.sh` |
-| GitHub Actions workflow | [`.github/workflows/ci-matrix.yml`](../.github/workflows/ci-matrix.yml) | Matrix: **ubuntu-latest** (`linux-x86_64`) + **macos-latest** (`macos`) — ≥1 additional OS beyond single-host |
-| Offline gate (unchanged) | [`scripts/ci/offline_gate.sh`](../scripts/ci/offline_gate.sh) | Fail-fast R1 checks; **honest skips** when cargo/native absent |
+| Matrix entry script | [`scripts/ci/matrix_gate.sh`](https://github.com/hilather/nytprof-modernization/blob/main/scripts/ci/matrix_gate.sh) | Platform banner; host-local oracle ensure; run `offline_gate.sh` |
+| GitHub Actions workflow | [`.github/workflows/ci-matrix.yml`](https://github.com/hilather/nytprof-modernization/blob/main/.github/workflows/ci-matrix.yml) | Matrix: **ubuntu-latest** (`linux-x86_64`) + **macos-latest** (`macos-arm64`) — ≥1 additional OS/arch beyond single-host |
+| Offline gate (unchanged) | [`scripts/ci/offline_gate.sh`](https://github.com/hilather/nytprof-modernization/blob/main/scripts/ci/offline_gate.sh) | Fail-fast R1 checks; **honest skips** when cargo/native absent |
 
 ### Honesty rules
 
@@ -240,8 +240,9 @@ Native install MVP contract: [`docs/schemas/native-install-mvp-v0.md`](schemas/n
 - [x] Runnable `scripts/ci/matrix_gate.sh` (oracle ensure + offline_gate)
 - [x] GHA workflow `.github/workflows/ci-matrix.yml` with `fail-fast: false` matrix
 - [x] Honest skips inside offline_gate preserved (no reimplementation of gate steps)
-- [x] Docs: this section + residual matrix + operator runbook + board row; absolute HTTPS links where cross-file
+- [x] Docs: this section + residual matrix + operator runbook + board row; absolute HTTPS cross-file links for BUILD-006-MVP paths
 - [x] Explicit non-claim: full BUILD-006 (multi-Perl, multi-rustc, Windows, dashboard) remains open
+- [x] Portable oracle archive hash (`sha256_file` in baseline `common.sh`) so macOS runners need no brew coreutils
 
 ---
 

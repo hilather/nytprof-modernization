@@ -45,8 +45,9 @@ jobs:
           - os: ubuntu-latest
             label: linux-x86_64
           # ≥1 additional OS/arch (BUILD-006 MVP requirement).
+          # GitHub macos-latest is currently Apple Silicon (arm64).
           - os: macos-latest
-            label: macos
+            label: macos-arm64
 
     steps:
       - name: Checkout

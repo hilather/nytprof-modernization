@@ -11,7 +11,7 @@
 #   - not a coverage dashboard or release compatibility matrix (TEST-020)
 #   - not multi-OS prebuilt binary distribution
 #
-# Typical matrix (GitHub Actions): ubuntu-latest (linux x86_64) + macos-latest.
+# Typical matrix (GitHub Actions): ubuntu-latest (linux-x86_64) + macos-latest (macos-arm64).
 # Local:
 #   ./scripts/ci/matrix_gate.sh
 # Optional env:
