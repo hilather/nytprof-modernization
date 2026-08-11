@@ -20,7 +20,7 @@ CPAN installability without Rust (RSK-009) can kill the program even if the Rust
 ## Non-goals for the spike
 
 - Full MakeMaker ↔ Cargo integration (BUILD-003) — **not** implemented in this spike.
-- Full CI matrix (BUILD-006 full). **MVP:** GHA Linux+macOS offline_gate rows (**BUILD-006-MVP**).
+- Full CI matrix (BUILD-006).
 - Prebuilt binary distribution policy finalization.
 - Shipping native reports as default.
 
@@ -105,7 +105,7 @@ command -v cargo >/dev/null && echo "cargo present (ok; must still not be requir
 | [`scripts/packaging/perl_query_json_smoke.sh`](../scripts/packaging/perl_query_json_smoke.sh) | No (pure-Perl) | QUERY-JSON-MVP / QUERY-JSON-EXPAND: `query --json --jsonl` ×2 + parse; leaf/mid/edge **15/3/15**; `discount_events` **818**; `is_stream_complete` true; human default unchanged |
 
 ```sh
-# Offline R1 gate (single operator entry; multi-OS MVP = matrix_gate / GHA)
+# Offline R1 gate (single operator entry; not multi-OS CI)
 ./scripts/ci/offline_gate.sh
 # make offline-gate   # after perl Makefile.PL
 
@@ -255,9 +255,13 @@ A thin root [`Makefile.PL`](../Makefile.PL) now exists as a **candidate packagin
 | `make legacy-smoke` | `scripts/packaging/legacy_only_smoke.sh` |
 | `make dual-path-smoke` | `scripts/packaging/dual_path_smoke.sh` |
 | `make native-install` / `make native` | `scripts/packaging/install_native.sh` (needs cargo) |
+| `make install-facade` | `scripts/packaging/install_facade.sh` (pure-Perl engine → prefix; **no cargo**) |
+| `make dual-install` | `native-install` + `install-facade` (needs cargo) |
+| `make cargo-build` | `cargo build -p nytprof-cli` (needs cargo) |
+| `make build003-depth-smoke` | `scripts/packaging/makemaker_build003_depth_smoke.sh` |
 | `make test` | `legacy-smoke` only (honest: not full XS suite) |
 
-Policy detail: [`docs/BUILD_SUPPORT_POLICY.md`](BUILD_SUPPORT_POLICY.md) (MakeMaker dual-path section). Full MakeMaker↔Cargo XS dual-build remains **BUILD-003**.
+Policy detail: [`docs/BUILD_SUPPORT_POLICY.md`](https://github.com/hilather/nytprof-modernization/blob/main/docs/BUILD_SUPPORT_POLICY.md) (MakeMaker dual-path + **BUILD-003-DEPTH** sections). Full MakeMaker↔Cargo XS dual-build remains **BUILD-003 full** (depth is partial only).
 
 ---
 
@@ -297,7 +301,7 @@ Support tiers and dual-path verification are landed beyond this spike’s prose:
 ./scripts/packaging/packaging_gate.sh
 ```
 
-Full MakeMaker↔Cargo XS CPAN dual-build (**BUILD-003** full), full multi-OS CI matrix (**BUILD-006** full: multi-Perl/rustc/Windows/dashboard), and prebuilt policy remain open. Multi-OS **MVP** is **BUILD-006-MVP** (GHA ubuntu+macos + `matrix_gate.sh`). The candidate MakeMaker facade (**BUILD-MAKEMAKER-OPT**) is intentionally thinner than BUILD-003.
+Full MakeMaker↔Cargo XS CPAN dual-build (**BUILD-003** full), multi-OS CI matrix (BUILD-006), and prebuilt policy remain open. The candidate MakeMaker facade (**BUILD-MAKEMAKER-OPT**) plus **BUILD-003-DEPTH** (facade + prefix dual-install) is intentionally thinner than BUILD-003 full.
 
 ---
 
@@ -308,6 +312,7 @@ Full MakeMaker↔Cargo XS CPAN dual-build (**BUILD-003** full), full multi-OS CI
 - `./scripts/packaging/legacy_only_smoke.sh` proves that isolation without Cargo (operator packaging gate).
 - `./scripts/packaging/dual_path_smoke.sh` is the dual-path policy entry (legacy + optional native).
 - Root `Makefile.PL` + `./scripts/packaging/makemaker_dual_path_smoke.sh` — candidate dual-path packaging entry (BUILD-MAKEMAKER-OPT).
+- `./scripts/packaging/install_facade.sh` + `./scripts/packaging/makemaker_build003_depth_smoke.sh` — **BUILD-003-DEPTH** (partial dual-build; not full XS CPAN).
 - `./scripts/packaging/native_optional_smoke.sh` exercises optional crates when a toolchain is present.
 - Future candidate code under `crates/` / `perl/` must not be required for `scripts/baseline/build_oracle.sh` or any oracle tool.
 - Engine env / CLI names for optional native tools: [`docs/schemas/engine-selection-mvp-v0.md`](schemas/engine-selection-mvp-v0.md).
@@ -318,4 +323,4 @@ Full MakeMaker↔Cargo XS CPAN dual-build (**BUILD-003** full), full multi-OS CI
 - ADR-Q016 native distribution model (source-only vs prebuilt vs both)
 - ADR-Q017 MSRV and dependency pinning
 - COMPAT-009 support-tier freeze
-- BUILD-003 full MakeMaker optional Cargo + XS dual-build (beyond the BUILD-MAKEMAKER-OPT candidate facade)
+- BUILD-003 full MakeMaker optional Cargo + XS dual-build (beyond BUILD-MAKEMAKER-OPT + BUILD-003-DEPTH partial facade/prefix dual-install)

@@ -5,8 +5,12 @@
 #
 # Usage (from repo root or any cwd):
 #   ./scripts/packaging/install_native.sh
-#   PREFIX=/path/to/prefix ./scripts/packaging/install_native.sh
+#   NYTPROF_PREFIX=/path/to/prefix ./scripts/packaging/install_native.sh
+#   PREFIX=/path/to/prefix ./scripts/packaging/install_native.sh   # also accepted
 #   NATIVE_RELEASE=1 ./scripts/packaging/install_native.sh
+#
+# Prefer NYTPROF_PREFIX over bare PREFIX when invoking via `make` (MakeMaker
+# defines PREFIX and rewrites exported PREFIX in recipe environments).
 #
 # Never mutates oracle PERL5LIB or puts crates/ on the module path.
 set -euo pipefail
@@ -21,7 +25,13 @@ fail() { printf 'ERROR: %s\n' "$*" >&2; exit 1; }
 [[ -d "$ROOT/crates/nytprof-cli" ]] || fail "missing crates/nytprof-cli"
 command -v cargo >/dev/null 2>&1 || fail "cargo required for install_native.sh"
 
-PREFIX="${PREFIX:-$ROOT/prefix}"
+if [[ -n "${NYTPROF_PREFIX:-}" ]]; then
+  PREFIX="$NYTPROF_PREFIX"
+elif [[ -n "${PREFIX:-}" && "${PREFIX}" != "${HOME}/perl5" ]]; then
+  PREFIX="$PREFIX"
+else
+  PREFIX="$ROOT/prefix"
+fi
 BIN_DIR="$PREFIX/bin"
 
 if [[ "${NATIVE_RELEASE:-0}" == "1" ]]; then

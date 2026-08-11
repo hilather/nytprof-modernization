@@ -24,24 +24,32 @@ This document freezes the **support-tier dual-path contract** for the modernizat
 | Legacy packaging smoke | legacy-only | Never required |
 | Native source build + prefix install | optional-native | Yes |
 | Optional workspace `cargo test` | optional-native | Yes (or honest skip if absent) |
-| Full CPAN MakeMaker dual-build | *(future BUILD-003)* | Must still allow Cargo-absent legacy |
+| Full CPAN MakeMaker dual-build | **BUILD-003 full** — open | Must still allow Cargo-absent legacy |
 | Candidate MakeMaker packaging entry | dual-path facade | Default legacy; native only when `NYTPROF_NATIVE=1` / `make native-install` |
+| BUILD-003 depth (partial) | dual-path facade + prefix installs | `install-facade` / `dual-install` / depth smoke; **not** full XS CPAN |
 
 ---
 
 ## MakeMaker dual-path packaging entry (BUILD-MAKEMAKER-OPT)
 
-**Status:** candidate facade landed — **not** a full CPAN tarball of Devel::NYTProf XS (that remains **BUILD-003**).
+**Status:** candidate facade landed — **not** a full CPAN tarball of Devel::NYTProf XS (that remains **BUILD-003 full**).
 
-Root [`Makefile.PL`](../Makefile.PL) is a thin packaging entry that generates Makefile targets wrapping the existing `scripts/packaging/*` smokes. It does **not** build oracle XS under `baseline/6.15/src`, and it never puts `crates/` on oracle `PERL5LIB`.
+Root [`Makefile.PL`](https://github.com/hilather/nytprof-modernization/blob/main/Makefile.PL) is a thin packaging entry that generates Makefile targets wrapping the existing `scripts/packaging/*` smokes. It does **not** build oracle XS under `baseline/6.15/src`, and it never puts `crates/` on oracle `PERL5LIB`.
 
 ### Control: `NYTPROF_NATIVE`
 
 | Value | Configure behavior | Default `make all` |
 |-------|--------------------|--------------------|
 | `0` (default) | Legacy-only; **Cargo not required** | Message + no cargo |
-| `1` | **Requires** `cargo` on `PATH` or configure dies | Runs `native-install` |
-| `auto` | Native targets enabled if cargo present; else legacy | Legacy message; `make native-install` still available when cargo present |
+| `1` | **Requires** `cargo` on `PATH` or configure dies | Runs `dual-install` (native CLI + pure-Perl facade) |
+| `auto` | Native targets enabled if cargo present; else legacy | Legacy message; `make dual-install` / `native-install` available when cargo present |
+
+### Reserved codec envs (not wired)
+
+| Env | Values | Behavior in this facade |
+|-----|--------|-------------------------|
+| `NYTPROF_CODEC_ZSTD` | `auto` / `0` / `1` | Recorded in stamp; `=1` prints configure NOTE only — **not** MakeMaker feature wiring (**BUILD-008** / BUILD-003 full) |
+| `NYTPROF_CODEC_LZ4` | `auto` / `0` / `1` | Same |
 
 ### Operator recipes
 
@@ -49,7 +57,8 @@ Root [`Makefile.PL`](../Makefile.PL) is a thin packaging entry that generates Ma
 # Legacy-only (no Cargo on critical path)
 perl Makefile.PL                 # or: NYTPROF_NATIVE=0 perl Makefile.PL
 make legacy-smoke                # → scripts/packaging/legacy_only_smoke.sh
-make test                        # same path (candidate entry; not full XS suite)
+make install-facade              # pure-Perl nytprof-engine → $PREFIX (default prefix/)
+make test                        # same path as legacy-smoke (candidate entry; not full XS suite)
 
 # Dual-path policy via Make targets
 make dual-path-smoke             # → scripts/packaging/dual_path_smoke.sh
@@ -58,20 +67,24 @@ make dual-path-smoke             # → scripts/packaging/dual_path_smoke.sh
 make offline-gate                # → scripts/ci/offline_gate.sh
 
 # Optional native (requires cargo)
+make cargo-build                 # cargo build -p nytprof-cli
 make native-install              # → scripts/packaging/install_native.sh
+make dual-install                # native-install + install-facade
 # or reconfigure require-native:
-NYTPROF_NATIVE=1 perl Makefile.PL && make native-install
+NYTPROF_NATIVE=1 perl Makefile.PL && make dual-install
 # alias:
-make native
+make native                      # → native-install only
 ```
 
-### Verification smoke
+### Verification smokes
 
 ```sh
 ./scripts/packaging/makemaker_dual_path_smoke.sh
+./scripts/packaging/makemaker_build003_depth_smoke.sh
+# or: make build003-depth-smoke
 ```
 
-Behavior:
+`makemaker_dual_path_smoke.sh` behavior:
 
 1. `NYTPROF_NATIVE=0 perl Makefile.PL` (must succeed without cargo).
 2. `make legacy-smoke` (required).
@@ -85,8 +98,54 @@ Behavior:
 | This entry **is** | This entry **is not** |
 |-------------------|----------------------|
 | Candidate dual-path packaging facade | Complete CPAN dist of Devel::NYTProf |
-| Make targets → existing packaging scripts | Full MakeMaker ↔ Cargo XS dual-build (**BUILD-003**) |
-| Default legacy without Cargo | Full multi-OS CI certification (**BUILD-006** full) / CPAN upload — **MVP** lands GHA Linux+macOS only (**BUILD-006-MVP**) |
+| Make targets → existing packaging scripts | Full MakeMaker ↔ Cargo XS dual-build (**BUILD-003 full**) |
+| Default legacy without Cargo | Multi-OS CI matrix (**BUILD-006**) / CPAN upload |
+
+---
+
+## BUILD-003 depth (partial — toward full dual-build)
+
+**Board ID:** BUILD-003-DEPTH  
+**Status:** **partial depth landed** — closer dual-build for installable native CLI + pure-Perl facade under a shared `prefix/`; **does not** complete **BUILD-003 full** (no oracle XS in this Makefile, no CPAN tarball, no codec feature wiring).
+
+Absolute policy parent: [BUILD-003 task](https://github.com/hilather/nytprof-modernization/blob/main/docs/plan/12_BUILD_PACKAGING_CI_AND_RELEASE_TASKS.md) (Integrate optional Cargo build with MakeMaker).
+
+### What depth adds beyond BUILD-MAKEMAKER-OPT
+
+| Artifact | Role | Cargo? |
+|----------|------|--------|
+| `make cargo-build` | Direct `cargo build -p nytprof-cli` from Make | Required |
+| `make install-facade` / [`scripts/packaging/install_facade.sh`](https://github.com/hilather/nytprof-modernization/blob/main/scripts/packaging/install_facade.sh) | Install `prefix/bin/nytprof-engine` + `prefix/lib/Devel/NYTProf/*.pm` | **Never** |
+| `make dual-install` | `native-install` + `install-facade` | Required |
+| `make packaging-status` | Print `nytprof-packaging.mode` honesty stamps | No |
+| `make build003-depth-smoke` / [`scripts/packaging/makemaker_build003_depth_smoke.sh`](https://github.com/hilather/nytprof-modernization/blob/main/scripts/packaging/makemaker_build003_depth_smoke.sh) | Regression: facade without cargo + dual-install when cargo present | Mixed |
+| Stamp fields | `packaging_depth=BUILD-003-depth-v0`, **`full_build003=0`**, `not_full_xs_cpan=1` | — |
+| Configure diagnostics | cargo/rustc versions when present; explicit legacy when absent | — |
+
+### Legacy-only unbroken (hard)
+
+| Must | Evidence |
+|------|----------|
+| `NYTPROF_NATIVE=0 perl Makefile.PL` without cargo | depth smoke step 1 |
+| `make install-facade` without cargo | depth smoke step 2 |
+| Pure-Perl `query --json --jsonl` via installed facade | depth smoke (leaf **15** / mid **3**) |
+| Never `crates/` on oracle `PERL5LIB` | child smokes; depth smoke uses private `PREFIX` |
+
+### Residual (still open for BUILD-003 full)
+
+- No `Devel::NYTProf` XS / collector sources in this Makefile
+- No CPAN-installable dual dist with optional Cargo subdir
+- No MakeMaker feature flags that enable/disable ZSTD/LZ4 at build time
+- No multi-OS CI (**BUILD-006**) or prebuilt native package policy (ADR-Q016)
+
+### Definition of done for BUILD-003-DEPTH
+
+- [x] `install-facade` + pure-Perl prefix layout (`bin` + `lib`)
+- [x] `dual-install` / `cargo-build` / `packaging-status` Make targets
+- [x] Configure stamps: `packaging_depth=BUILD-003-depth-v0`, **`full_build003=0`**
+- [x] Depth smoke: legacy facade without cargo; dual path when cargo present
+- [x] Docs: this section + residual matrix honesty + board row
+- [x] **Does not** claim BUILD-003 full complete
 
 ---
 
@@ -122,16 +181,12 @@ Enforced by `tools/oracle/env.sh`, `scripts/baseline/build_oracle.sh`, and `scri
 
 ### Offline R1 gate (CI-OFFLINE-GATE / CI-OFFLINE-GATE-EXPAND / CI-QUERY-JSON-GATE / CI-CAPABILITY-GATE — recommended single operator entry)
 
-Single **fail-fast** gate for critical offline R1 checks on the **current host**. Multi-OS expansion is **BUILD-006-MVP** (GHA matrix + `matrix_gate.sh`); full multi-Perl / multi-rustc / Windows matrix remains **BUILD-006** residual.
+Single **fail-fast** gate for critical offline R1 checks. Not a multi-OS CI matrix (**BUILD-006**).
 
 ```sh
 ./scripts/ci/offline_gate.sh
 # after perl Makefile.PL:
 make offline-gate
-
-# Multi-OS matrix entry (BUILD-006 MVP): host banner + host-local oracle ensure + offline_gate
-./scripts/ci/matrix_gate.sh
-# GitHub Actions: .github/workflows/ci-matrix.yml (ubuntu-latest + macos-latest)
 ```
 
 | Step | What | Cargo |
@@ -180,8 +235,6 @@ Behavior:
 | Script | Tier | Cargo |
 |--------|------|-------|
 | [`scripts/ci/offline_gate.sh`](../scripts/ci/offline_gate.sh) | offline R1 gate (CI-OFFLINE-GATE-EXPAND + CI-QUERY-JSON-GATE + CI-CAPABILITY-GATE) | Cargo tests skip if absent; harness + dual-path + engine_auto_fallback + JsonlData roll-up + query-JSON required; capability when cargo/prefix/target present |
-| [`scripts/ci/matrix_gate.sh`](https://github.com/hilather/nytprof-modernization/blob/main/scripts/ci/matrix_gate.sh) | multi-OS matrix entry (**BUILD-006-MVP**) | Host identity banner; rebuild host-local oracle when pin paths do not resolve; then `offline_gate.sh` (honest skips preserved). Not full BUILD-006 |
-| [`.github/workflows/ci-matrix.yml`](https://github.com/hilather/nytprof-modernization/blob/main/.github/workflows/ci-matrix.yml) | GHA multi-OS matrix (**BUILD-006-MVP**) | `ubuntu-latest` (`linux-x86_64`) + `macos-latest` (`macos-arm64`); each row runs `matrix_gate.sh`. Not multi-Perl / multi-rustc / Windows / coverage dashboard |
 | [`scripts/packaging/engine_auto_fallback_smoke.sh`](../scripts/packaging/engine_auto_fallback_smoke.sh) | offline gate step 4 | Prefer-native / fall-back-legacy; never `crates/` on oracle PERL5LIB |
 | [`scripts/packaging/perl_jsonl_data_all_smoke.sh`](../scripts/packaging/perl_jsonl_data_all_smoke.sh) | offline gate step 5 | Thin fail-fast roll-up of pure-Perl JsonlData smokes |
 | [`scripts/packaging/perl_query_json_smoke.sh`](../scripts/packaging/perl_query_json_smoke.sh) | offline gate step 6 (CI-QUERY-JSON-GATE) | QUERY-JSON-MVP / QUERY-JSON-EXPAND: `query --json --jsonl` golden; pure-Perl; no cargo |
@@ -195,9 +248,11 @@ Behavior:
 | [`scripts/packaging/native_install_smoke.sh`](../scripts/packaging/native_install_smoke.sh) | optional-native | Required (expects prefix install) |
 | [`scripts/packaging/native_optional_smoke.sh`](../scripts/packaging/native_optional_smoke.sh) | optional-native | Skips cleanly if absent |
 | [`scripts/packaging/dual_path_smoke.sh`](../scripts/packaging/dual_path_smoke.sh) | both (policy entry / offline gate packaging primary) | Legacy always; native if present |
-| [`scripts/packaging/makemaker_dual_path_smoke.sh`](../scripts/packaging/makemaker_dual_path_smoke.sh) | both (MakeMaker entry) | `Makefile.PL` + `make legacy-smoke`; native via make when cargo present |
-| Root [`Makefile.PL`](../Makefile.PL) | packaging facade | Default legacy; `NYTPROF_NATIVE=0\|1\|auto`; not full XS CPAN; `make offline-gate` |
-| [`scripts/packaging/packaging_gate.sh`](../scripts/packaging/packaging_gate.sh) | broader packaging gate | Mixed fail-fast (legacy + engine select + Perl dispatch + native when present) |
+| [`scripts/packaging/makemaker_dual_path_smoke.sh`](https://github.com/hilather/nytprof-modernization/blob/main/scripts/packaging/makemaker_dual_path_smoke.sh) | both (MakeMaker entry) | `Makefile.PL` + `make legacy-smoke`; native via make when cargo present |
+| [`scripts/packaging/install_facade.sh`](https://github.com/hilather/nytprof-modernization/blob/main/scripts/packaging/install_facade.sh) | BUILD-003-DEPTH (facade half) | Pure-Perl engine + modules → `$PREFIX`; **no cargo** |
+| [`scripts/packaging/makemaker_build003_depth_smoke.sh`](https://github.com/hilather/nytprof-modernization/blob/main/scripts/packaging/makemaker_build003_depth_smoke.sh) | BUILD-003-DEPTH | Facade without cargo + dual-install when cargo; honesty stamps |
+| Root [`Makefile.PL`](https://github.com/hilather/nytprof-modernization/blob/main/Makefile.PL) | packaging facade + depth | Default legacy; `NYTPROF_NATIVE=0\|1\|auto`; `install-facade` / `dual-install`; not full XS CPAN; `make offline-gate` |
+| [`scripts/packaging/packaging_gate.sh`](https://github.com/hilather/nytprof-modernization/blob/main/scripts/packaging/packaging_gate.sh) | broader packaging gate | Mixed fail-fast (legacy + engine select + Perl dispatch + native when present) |
 
 Broader operator gate (includes engine-selection and Perl facade smokes beyond dual-path tiers):
 
@@ -215,45 +270,14 @@ Native install MVP contract: [`docs/schemas/native-install-mvp-v0.md`](schemas/n
 
 ---
 
-## Multi-OS CI matrix MVP (BUILD-006-MVP)
-
-**Status:** landed as MVP — **not** full BUILD-006 platform certification.
-
-| Piece | Path | Role |
-|-------|------|------|
-| Matrix entry script | [`scripts/ci/matrix_gate.sh`](https://github.com/hilather/nytprof-modernization/blob/main/scripts/ci/matrix_gate.sh) | Platform banner; host-local oracle ensure; run `offline_gate.sh` |
-| GitHub Actions workflow | [`.github/workflows/ci-matrix.yml`](https://github.com/hilather/nytprof-modernization/blob/main/.github/workflows/ci-matrix.yml) | Matrix: **ubuntu-latest** (`linux-x86_64`) + **macos-latest** (`macos-arm64`) — ≥1 additional OS/arch beyond single-host |
-| Offline gate (unchanged) | [`scripts/ci/offline_gate.sh`](https://github.com/hilather/nytprof-modernization/blob/main/scripts/ci/offline_gate.sh) | Fail-fast R1 checks; **honest skips** when cargo/native absent |
-
-### Honesty rules
-
-| This MVP **is** | This MVP **is not** |
-|-----------------|---------------------|
-| GHA jobs on Linux x86_64 + macOS running the same offline gate | Multi-Perl / multi-rustc version matrix |
-| Host-local oracle rebuild when tracked pin paths do not resolve | Windows / full platform tier freeze |
-| Preservation of offline_gate / dual_path honest skips | Coverage dashboard or TEST-020 release matrix |
-| Documented BUILD-006 partial close | Product “multi-OS certified” claim or multi-OS prebuilts |
-
-### Definition of done for BUILD-006-MVP
-
-- [x] ≥1 additional OS/arch beyond single-host developer offline_gate path
-- [x] Runnable `scripts/ci/matrix_gate.sh` (oracle ensure + offline_gate)
-- [x] GHA workflow `.github/workflows/ci-matrix.yml` with `fail-fast: false` matrix
-- [x] Honest skips inside offline_gate preserved (no reimplementation of gate steps)
-- [x] Docs: this section + residual matrix + operator runbook + board row; absolute HTTPS cross-file links for BUILD-006-MVP paths
-- [x] Explicit non-claim: full BUILD-006 (multi-Perl, multi-rustc, Windows, dashboard) remains open
-- [x] Portable oracle archive hash (`sha256_file` in baseline `common.sh`) so macOS runners need no brew coreutils
-
----
-
 ## Explicit non-goals (open / future)
 
 | Item | Status | Notes |
 |------|--------|-------|
-| Full CI matrix | **BUILD-006** full — open | Multi-Perl / multi-rustc / Windows / coverage dashboard; **MVP** is **BUILD-006-MVP** only (Linux + macOS offline_gate rows) |
+| Full CI matrix | **BUILD-006** — open | Multi-OS / multi-Perl / multi-rustc jobs not required by dual-path policy or CI-OFFLINE-GATE |
 | Multi-OS prebuilt binaries | open (ADR-Q016) | Distribution model undecided |
-| Full MakeMaker ↔ Cargo CPAN dual-build | **BUILD-003** full — open | Candidate entry is **BUILD-MAKEMAKER-OPT** only; not a complete XS CPAN tarball |
-| Full multi-OS certification / CPAN upload | **BUILD-006** full / release — open | MVP GHA matrix does **not** complete product multi-OS certification |
+| Full MakeMaker ↔ Cargo CPAN dual-build | **BUILD-003** full — open | **BUILD-003-DEPTH** partial (facade + prefix dual-install) landed; still not a complete XS CPAN tarball |
+| Multi-OS CI / CPAN upload | **BUILD-006** / release — open | Not required by the candidate packaging entry; offline gate is single-host only |
 | COMPAT-009 final tier freeze / full BUILD-001 ADR | open | This doc is the runnable dual-path draft feeding that freeze |
 | MSRV freeze | open (ADR-Q017) | Optional-native uses whatever `rustc` is installed until frozen |
 | Default engine/format flips to native | out of first slice | Native remains opt-in |
@@ -266,7 +290,7 @@ Native install MVP contract: [`docs/schemas/native-install-mvp-v0.md`](schemas/n
 - This policy **lands** the dual-path contract with a dedicated smoke; the spike remains historical/background detail.
 - **CI-OFFLINE-GATE** / **CI-OFFLINE-GATE-EXPAND** / **CI-QUERY-JSON-GATE** / **CI-CAPABILITY-GATE** (`scripts/ci/offline_gate.sh`) is the single offline R1 fail-fast entry (cargo tests? + harness + dual-path packaging primary + engine_auto_fallback + pure-Perl JsonlData roll-up + required query-JSON smoke + capability_selftest when native available).
 - Unified packaging gate remains the broader packaging fail-fast suite; dual-path smoke is the support-tier-focused packaging half.
-- Candidate MakeMaker entry (`Makefile.PL` + `makemaker_dual_path_smoke.sh`) is the dual-path **packaging facade** before full BUILD-003.
+- Candidate MakeMaker entry (`Makefile.PL` + `makemaker_dual_path_smoke.sh`) is the dual-path **packaging facade**; **BUILD-003-DEPTH** adds `install-facade` / `dual-install` / depth smoke toward full BUILD-003 without completing XS CPAN dual-build.
 
 ---
 
@@ -276,7 +300,7 @@ Native install MVP contract: [`docs/schemas/native-install-mvp-v0.md`](schemas/n
 - [x] Critical path: legacy never requires Cargo
 - [x] `crates/` never on oracle `PERL5LIB`
 - [x] Runnable `dual_path_smoke.sh` (legacy required; native if cargo present; honest skip otherwise)
-- [x] Non-goals called out (BUILD-003 full, BUILD-006 full vs BUILD-006-MVP, multi-OS prebuilts)
+- [x] Non-goals called out (BUILD-003 full, BUILD-006, multi-OS prebuilts)
 - [x] Board row + packaging spike pointer
 
 ## Definition of done for BUILD-MAKEMAKER-OPT
@@ -297,7 +321,7 @@ Native install MVP contract: [`docs/schemas/native-install-mvp-v0.md`](schemas/n
 - [x] Never puts `crates/` on oracle `PERL5LIB`
 - [x] Optional `make offline-gate` via root `Makefile.PL`
 - [x] Docs: this section + README; board row **before COL-007**
-- [x] Non-goal: full multi-OS CI (**BUILD-006** full); multi-OS entry is separate **BUILD-006-MVP**
+- [x] Non-goal: full multi-OS CI (**BUILD-006**)
 
 ## Definition of done for CI-OFFLINE-GATE-EXPAND
 
@@ -306,7 +330,7 @@ Native install MVP contract: [`docs/schemas/native-install-mvp-v0.md`](schemas/n
 - [x] Roll-up covers: `perl_jsonl_data` + `perl_line_totals` + `perl_subdefs` + `perl_source` + `perl_a4b` + `perl_meta` + `perl_pid` + `perl_stream_complete` + `perl_discount` + `perl_sub_entry`
 - [x] Fail-fast banners for new steps; never puts `crates/` on oracle `PERL5LIB`
 - [x] Docs: this section + README offline gate table; board row **before COL-007**
-- [x] Non-goal: still not full multi-OS CI (**BUILD-006** full); multi-OS MVP is **BUILD-006-MVP**; still not full `packaging_gate` breadth
+- [x] Non-goal: still not multi-OS CI (**BUILD-006**); still not full `packaging_gate` breadth
 
 ## Definition of done for CI-CAPABILITY-GATE
 
@@ -316,7 +340,7 @@ Native install MVP contract: [`docs/schemas/native-install-mvp-v0.md`](schemas/n
 - [x] Document that dual_path with cargo typically installs `prefix/bin` before native steps, so capability usually runs on cargo hosts
 - [x] Fail-fast banner; never puts `crates/` on oracle `PERL5LIB`
 - [x] Docs: this section + README offline gate table + residual matrix offline gate row; board row **before COL-007**
-- [x] Non-goal: still not full multi-OS CI (**BUILD-006** full); multi-OS MVP is **BUILD-006-MVP**; still not full `packaging_gate` breadth
+- [x] Non-goal: still not multi-OS CI (**BUILD-006**); still not full `packaging_gate` breadth
 
 ## Definition of done for CI-QUERY-JSON-GATE
 
@@ -325,7 +349,7 @@ Native install MVP contract: [`docs/schemas/native-install-mvp-v0.md`](schemas/n
 - [x] Golden `--jsonl` path only; does not require cargo
 - [x] Never puts `crates/` on oracle `PERL5LIB`
 - [x] Docs: this section + README offline gate table + residual matrix offline gate row + R1_PREVIEW_OPERATOR_RUNBOOK; board row **before COL-007**
-- [x] Non-goal: still not full multi-OS CI (**BUILD-006** full); multi-OS MVP is **BUILD-006-MVP**; still not full `packaging_gate` breadth
+- [x] Non-goal: still not multi-OS CI (**BUILD-006**); still not full `packaging_gate` breadth
 
 ## Definition of done for NATIVE-QUERY-JSON-CROSS
 

@@ -143,11 +143,14 @@ Prove legacy-only isolation (no Cargo), optional native workspace tests, engine 
 # Dual-path support tiers (legacy always; native if cargo present)
 ./scripts/packaging/dual_path_smoke.sh
 
-# Candidate MakeMaker packaging entry (BUILD-MAKEMAKER-OPT; not full XS CPAN)
+# Candidate MakeMaker packaging entry (BUILD-MAKEMAKER-OPT + BUILD-003-DEPTH; not full XS CPAN)
 perl Makefile.PL && make legacy-smoke          # no cargo required
+perl Makefile.PL && make install-facade        # pure-Perl engine → prefix/ (no cargo)
 perl Makefile.PL && make offline-gate          # CI-OFFLINE-GATE wrapper
 ./scripts/packaging/makemaker_dual_path_smoke.sh
+./scripts/packaging/makemaker_build003_depth_smoke.sh  # closer dual-build; legacy unbroken
 # optional native via Make (requires cargo):
+#   make dual-install          # native CLI + facade under prefix/
 #   make native-install
 #   NYTPROF_NATIVE=1 perl Makefile.PL && make
 
@@ -197,7 +200,7 @@ perl -Iperl/lib perl/bin/nytprof-engine --engine=native callgrind fixtures/v5/de
 
 - `scripts/ci/offline_gate.sh` is the **CI-OFFLINE-GATE** / **CI-OFFLINE-GATE-EXPAND** / **CI-QUERY-JSON-GATE** / **CI-CAPABILITY-GATE** single entry: optional focused cargo tests → required oracle harness → primary packaging `dual_path_smoke.sh` → `engine_auto_fallback_smoke.sh` → `perl_jsonl_data_all_smoke.sh` → required `perl_query_json_smoke.sh` (QUERY-JSON-MVP / QUERY-JSON-EXPAND golden `--jsonl`) → required `json_sub_entry_smoke` + `json_blocks_smoke` (JSON-BLOCKS-MVP **780**/**810**) → optional `native_agg_json_smoke` + `native_query_json_cross_smoke` when native available → `capability_selftest_smoke.sh` when cargo or prefix/target CLI present (honest skip otherwise); fails fast.
 - `packaging_gate.sh` runs the packaging smokes in order (legacy → engine_select → perl dispatch → native install if present → optional cargo tests) and fails fast.
-- Root `Makefile.PL` is a **candidate packaging facade** (`NYTPROF_NATIVE=0|1|auto`): `make legacy-smoke` / `dual-path-smoke` / `offline-gate` / `native-install` wrap existing scripts; not a full Devel::NYTProf XS CPAN dist (see [`docs/BUILD_SUPPORT_POLICY.md`](docs/BUILD_SUPPORT_POLICY.md)).
+- Root `Makefile.PL` is a **candidate packaging facade** + **BUILD-003-DEPTH** (`NYTPROF_NATIVE=0|1|auto`): `make legacy-smoke` / `dual-path-smoke` / `offline-gate` / `install-facade` / `dual-install` / `native-install` / `build003-depth-smoke` wrap existing scripts; not a full Devel::NYTProf XS CPAN dist (see [`docs/BUILD_SUPPORT_POLICY.md`](https://github.com/hilather/nytprof-modernization/blob/main/docs/BUILD_SUPPORT_POLICY.md)).
 - `legacy_only_smoke.sh` sources oracle env isolation, refuses `/crates/` on `PERL5LIB`, and loads `Devel::NYTProf` from `baseline/6.15/install` only.
 - `engine_select_smoke.sh` exercises Rust CLI `--engine=native` report/verify, rejects bogus engines, and fails closed on `--engine=legacy` (oracle path message; not a fake Rust legacy backend).
 - `perl_engine_dispatch_smoke.sh` exercises the Perl facade (`perl/bin/nytprof-engine`): native report (`main::leaf` / `returns=15`), invalid engine non-zero, legacy stream-dump when oracle is present; also runs `legacy_only_smoke.sh` and `engine_select_smoke.sh` when present.
