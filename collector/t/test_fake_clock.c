@@ -88,14 +88,77 @@ static void test_stmt_driver_attribution(void)
     nytp_sink_destroy(s);
 }
 
+/*
+ * Issue 2 regression: failed emit must not consume the clock tick.
+ * seed@100, stop sink, enter L2 peeks 150 and fails, re-activate, enter L2
+ * attributes 50 (150-100), not 80 (180-100).
+ */
+static void test_stmt_driver_no_clock_consume_on_emit_fail(void)
+{
+    static const nytp_ticks script[] = {100, 150, 180};
+    nytp_fake_clock fc;
+    nytp_stmt_driver drv;
+    nytp_sink *s = nytp_counting_sink_create();
+    nytp_ticks attributed = 0;
+    EXPECT(s != NULL, "create");
+    if (!s) {
+        return;
+    }
+    nytp_fake_clock_init(&fc, script, 3);
+    nytp_stmt_driver_init(&drv, &fc, 1);
+
+    EXPECT(nytp_stmt_driver_on_line(&drv, s, 1, &attributed) == NYTP_OK,
+           "seed");
+    EXPECT(nytp_fake_clock_remaining(&fc) == 2, "rem 2 after seed");
+
+    EXPECT(nytp_sink_activate(s) == NYTP_OK, "activate");
+    EXPECT(nytp_sink_stop(s) == NYTP_OK, "stop");
+    /* STOPPED rejects emit with ERR_STATE (does not sticky-fail the sink). */
+    EXPECT(nytp_stmt_driver_on_line(&drv, s, 2, &attributed) == NYTP_ERR_STATE,
+           "emit fails stopped");
+    EXPECT(nytp_fake_clock_remaining(&fc) == 2, "tick not consumed");
+
+    EXPECT(nytp_sink_activate(s) == NYTP_OK, "restart");
+    EXPECT(nytp_stmt_driver_on_line(&drv, s, 2, &attributed) == NYTP_OK,
+           "retry");
+    EXPECT(attributed == 50, "delta 50 not 80");
+    EXPECT(nytp_fake_clock_remaining(&fc) == 1, "consumed after success");
+    nytp_sink_destroy(s);
+}
+
+static void test_stmt_driver_backwards_tick(void)
+{
+    static const nytp_ticks script[] = {100, 50};
+    nytp_fake_clock fc;
+    nytp_stmt_driver drv;
+    nytp_sink *s = nytp_counting_sink_create();
+    nytp_ticks attributed = 0;
+    EXPECT(s != NULL, "create");
+    if (!s) {
+        return;
+    }
+    nytp_fake_clock_init(&fc, script, 2);
+    nytp_stmt_driver_init(&drv, &fc, 1);
+    EXPECT(nytp_stmt_driver_on_line(&drv, s, 1, &attributed) == NYTP_OK,
+           "seed");
+    EXPECT(nytp_stmt_driver_on_line(&drv, s, 2, &attributed) ==
+               NYTP_ERR_OVERFLOW,
+           "backwards fail-closed");
+    EXPECT(nytp_fake_clock_remaining(&fc) == 1, "no consume on overflow");
+    nytp_sink_destroy(s);
+}
+
 static void test_m4_mini_sample_counting(void)
 {
     nytp_sink *s = nytp_counting_sink_create();
     nytp_m4_harness_result res;
     const nytp_counting_stats *st;
     nytp_seq seqs[32];
+    nytp_event_kind kinds[32];
     size_t n = 32;
+    size_t nk = 32;
     size_t n_exp = 0;
+    size_t i;
     const nytp_m4_step *exp;
     nytp_seq_mismatch mm;
     EXPECT(s != NULL, "create");
@@ -108,10 +171,11 @@ static void test_m4_mini_sample_counting(void)
 
     EXPECT(nytp_m4_mini_sample_run(s, &res) == NYTP_OK, "m4 run counting");
     EXPECT(res.gapless_ok, "gapless");
-    EXPECT(res.kinds_match, "kinds count");
+    EXPECT(res.kinds_match, "kinds order");
     EXPECT(res.ticks_match, "ticks");
     EXPECT(res.logical_events == n_exp, "logical n");
     EXPECT(res.last_seq == (nytp_seq)(n_exp - 1), "last seq");
+    EXPECT(res.run_status == NYTP_OK, "run_status");
 
     st = nytp_counting_sink_stats(s);
     EXPECT(st != NULL, "stats");
@@ -129,6 +193,11 @@ static void test_m4_mini_sample_counting(void)
     EXPECT(nytp_counting_sink_copy_seqs(s, seqs, &n) == NYTP_OK, "copy");
     EXPECT(n == n_exp, "seq n");
     EXPECT(nytp_seq_check_gapless(seqs, n, 0, &mm), "ring gapless");
+    EXPECT(nytp_counting_sink_copy_kinds(s, kinds, &nk) == NYTP_OK, "kinds");
+    EXPECT(nk == n_exp, "kind n");
+    for (i = 0; i < n_exp; i++) {
+        EXPECT(kinds[i] == exp[i].kind, "kind order match");
+    }
 
     EXPECT(nytp_sink_get_state(s) == NYTP_SINK_CLOSED, "closed");
     nytp_sink_destroy(s);
@@ -158,6 +227,8 @@ int main(void)
 {
     test_fake_clock_script_and_exhaust();
     test_stmt_driver_attribution();
+    test_stmt_driver_no_clock_consume_on_emit_fail();
+    test_stmt_driver_backwards_tick();
     test_m4_mini_sample_counting();
     test_m4_mini_sample_v5_stub();
 

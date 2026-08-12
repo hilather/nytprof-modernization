@@ -85,6 +85,21 @@ static void test_stop_restart(void)
 static void test_finalize_gates(void)
 {
     nytp_sink *s = nytp_counting_sink_create();
+    /* FINALIZING allow/deny matrix (COL-002 freeze). */
+    static const struct {
+        nytp_event_kind kind;
+        int allow;
+    } matrix[] = {
+        {NYTP_EVT_SRC_LINE, 1},     {NYTP_EVT_SUB_INFO, 1},
+        {NYTP_EVT_SUB_CALLERS, 1},  {NYTP_EVT_PID_END, 1},
+        {NYTP_EVT_ATTRIBUTE, 1},    {NYTP_EVT_OPTION, 1},
+        {NYTP_EVT_COMMENT, 1},      {NYTP_EVT_DISCOUNT, 1},
+        {NYTP_EVT_TIME_LINE, 0},    {NYTP_EVT_TIME_BLOCK, 0},
+        {NYTP_EVT_SUB_ENTRY, 0},    {NYTP_EVT_SUB_RETURN, 0},
+        {NYTP_EVT_PID_START, 0},    {NYTP_EVT_NEW_FID, 0},
+        {NYTP_EVT_START_DEFLATE, 0},
+    };
+    size_t i;
     EXPECT(s != NULL, "create");
     if (!s) {
         return;
@@ -93,14 +108,29 @@ static void test_finalize_gates(void)
     EXPECT(nytp_sink_begin_finalize(s) == NYTP_OK, "finalize");
     EXPECT(nytp_sink_get_state(s) == NYTP_SINK_FINALIZING, "finalizing");
 
+    for (i = 0; i < sizeof(matrix) / sizeof(matrix[0]); i++) {
+        int can = nytp_sink_can_emit(s, matrix[i].kind);
+        EXPECT(can == matrix[i].allow, nytp_event_kind_name(matrix[i].kind));
+    }
+
     EXPECT(nytp_emit_time_line(s, 1, 1, 1) == NYTP_ERR_STATE,
            "no time_line in finalize");
     EXPECT(nytp_emit_sub_entry(s, 1, 1) == NYTP_ERR_STATE,
            "no sub_entry in finalize");
+    EXPECT(nytp_emit_start_deflate(s) == NYTP_ERR_STATE,
+           "no deflate in finalize");
     EXPECT(nytp_emit_src_line(s, 1, 1, nytp_sv_cstr("x")) == NYTP_OK,
            "src_line ok");
     EXPECT(nytp_emit_sub_info(s, 1, 1, 2, nytp_sv_cstr("main::x")) == NYTP_OK,
            "sub_info ok");
+    EXPECT(nytp_emit_sub_callers(s, 1, 1, 1, 0.1, 0.1, 0.0, 0,
+                                 nytp_sv_cstr("main::x"),
+                                 nytp_sv_cstr("main::y")) == NYTP_OK,
+           "sub_callers ok");
+    EXPECT(nytp_emit_discount(s) == NYTP_OK, "discount ok");
+    EXPECT(nytp_emit_attribute(s, nytp_sv_cstr("k"), nytp_sv_cstr("v")) ==
+               NYTP_OK,
+           "attr ok");
     EXPECT(nytp_emit_pid_end(s, 1, 1.0) == NYTP_OK, "pid_end ok");
 
     EXPECT(nytp_sink_begin_finalize(s) == NYTP_ERR_STATE, "no double finalize");
@@ -248,6 +278,44 @@ static void test_v5_stub_seq_not_wire_claim(void)
     st = nytp_v5_sink_stats(s);
     EXPECT(st && st->logical_emits == 2, "v5 stats logical");
     EXPECT(st && st->by_kind[NYTP_EVT_START_DEFLATE] == 1, "v5 control");
+    EXPECT(st && st->seq_ring_len == 2, "v5 ring len");
+    EXPECT(st && st->kind_ring[0] == NYTP_EVT_TIME_LINE, "v5 kind0");
+    EXPECT(st && st->kind_ring[1] == NYTP_EVT_DISCOUNT, "v5 kind1");
+    nytp_sink_destroy(s);
+}
+
+/*
+ * Regression: failed emit must not leave a phantom seq in the ring
+ * (Issue 3 — backends record only post emit_commit).
+ */
+static void test_failed_emit_no_phantom_seq(void)
+{
+    nytp_sink *s = nytp_counting_sink_create();
+    const nytp_counting_stats *st;
+    nytp_seq seqs[8];
+    size_t n = 8;
+    nytp_seq last = 0;
+    EXPECT(s != NULL, "create");
+    if (!s) {
+        return;
+    }
+    EXPECT(nytp_emit_time_line(s, 1, 1, 1) == NYTP_OK, "tl ok");
+    EXPECT(nytp_sink_logical_count(s) == 1, "count 1");
+
+    EXPECT(nytp_counting_sink_fail_next(s, NYTP_ERR_IO) == NYTP_OK, "arm fail");
+    EXPECT(nytp_emit_discount(s) == NYTP_ERR_IO, "fail io");
+    /* Wrapper marks FAILED on IO. */
+    EXPECT(nytp_sink_get_state(s) == NYTP_SINK_FAILED, "failed state");
+    EXPECT(nytp_sink_logical_count(s) == 1, "seq not advanced");
+    EXPECT(nytp_sink_last_seq(s, &last) == NYTP_OK && last == 0, "last still 0");
+
+    st = nytp_counting_sink_stats(s);
+    EXPECT(st && st->seq_ring_len == 1, "ring only success");
+    EXPECT(st && st->logical_emits == 1, "logical only success");
+    EXPECT(st && st->by_kind[NYTP_EVT_DISCOUNT] == 0, "failed not counted");
+    EXPECT(nytp_counting_sink_copy_seqs(s, seqs, &n) == NYTP_OK && n == 1 &&
+               seqs[0] == 0,
+           "ring gapless single");
     nytp_sink_destroy(s);
 }
 
@@ -260,6 +328,7 @@ int main(void)
     test_mark_failed();
     test_sequence_gapless_and_control();
     test_v5_stub_seq_not_wire_claim();
+    test_failed_emit_no_phantom_seq();
 
     if (failures != 0) {
         fprintf(stderr, "test_lifecycle_seq: %d failure(s)\n", failures);

@@ -37,10 +37,22 @@ void nytp_fake_clock_init(nytp_fake_clock *fc, const nytp_ticks *script,
 void nytp_fake_clock_reset(nytp_fake_clock *fc);
 
 /*
- * Read next absolute tick. Returns NYTP_ERR_EXHAUSTED when script is spent
- * (does not wrap). *out written only on NYTP_OK.
+ * Read next absolute tick and advance. Returns NYTP_ERR_EXHAUSTED when script
+ * is spent (does not wrap). *out written only on NYTP_OK.
  */
 nytp_status nytp_fake_clock_read(nytp_fake_clock *fc, nytp_ticks *out);
+
+/*
+ * Peek next absolute tick without advancing. Exhausted does not set
+ * fc->exhausted (only a failed consume/read does).
+ */
+nytp_status nytp_fake_clock_peek(const nytp_fake_clock *fc, nytp_ticks *out);
+
+/*
+ * Consume one tick after a successful peek+use. Returns NYTP_ERR_EXHAUSTED
+ * if already spent; otherwise advances pos and updates last_read.
+ */
+nytp_status nytp_fake_clock_consume(nytp_fake_clock *fc);
 
 size_t nytp_fake_clock_remaining(const nytp_fake_clock *fc);
 
@@ -60,8 +72,10 @@ void nytp_stmt_driver_init(nytp_stmt_driver *d, nytp_fake_clock *clock,
 
 /*
  * On breakable statement entry at `line` (BASE-003):
- *   read clock; if a previous site exists, emit TIME_LINE(delta, fid, prev_line);
- *   then last=now and prev_line=line. First entry only seeds (no emit).
+ *   peek clock; if a previous site exists, emit TIME_LINE(delta, fid, prev_line);
+ *   on emit success (or seed path), consume clock and update last/prev_line.
+ *   Failed emit does **not** consume the clock tick (retry-safe).
+ *   Backwards ticks (now < last) fail closed with NYTP_ERR_OVERFLOW.
  *
  * Returns status from clock or emit. *attributed_ticks (optional) receives
  * the emitted delta, or 0 on seed-only first call.
@@ -98,7 +112,13 @@ typedef struct nytp_m4_step {
  * order for the *logical* stream (control START_DEFLATE may appear without seq).
  *
  * This is **not** full fixture/v5/default-calls1 oracle equality (COL-006).
- * Returns NYTP_OK on match; NYTP_ERR_STATE on mismatch (details via *mm).
+ * Returns NYTP_OK on match; NYTP_ERR_STATE on mismatch (details via *out).
+ * When `out` is non-NULL it is always written (partial progress on early fail).
+ *
+ * Verification (counting / stub-v5 with stats):
+ *   - observed seq ring is gapless 0..n-1
+ *   - observed kind ring matches m4_expected[] order
+ *   - TIME_LINE ticks match expected steps (via attributed + kind ring)
  */
 typedef struct nytp_m4_harness_result {
     size_t logical_events;
@@ -109,6 +129,7 @@ typedef struct nytp_m4_harness_result {
     int kinds_match;
     int ticks_match;
     size_t first_kind_mismatch; /* index into expected steps, or SIZE_MAX */
+    nytp_status run_status;     /* last non-OK step status, or NYTP_OK */
 } nytp_m4_harness_result;
 
 nytp_status nytp_m4_mini_sample_run(nytp_sink *sink,

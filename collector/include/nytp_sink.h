@@ -109,6 +109,14 @@ typedef struct nytp_sink_ops {
 
     /* Stream control (not a logical profile event — no COL-003 seq). */
     nytp_status (*emit_start_deflate)(nytp_sink *sink);
+
+    /*
+     * Optional: invoked by public wrappers *after* a successful logical
+     * emit_commit (seq already assigned). Backends must record seq rings
+     * here — never during emit_* — so failed emits leave no phantom seq.
+     */
+    void (*on_logical_committed)(nytp_sink *sink, nytp_seq seq,
+                                 nytp_event_kind kind);
 } nytp_sink_ops;
 
 struct nytp_sink {

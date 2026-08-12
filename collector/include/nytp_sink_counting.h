@@ -33,9 +33,17 @@ typedef struct nytp_counting_stats {
     nytp_depth last_depth;
     char last_subname[128];
     size_t last_subname_len;
-    /* Seq ring (logical emits only), oldest→newest for first min(n, RING). */
+    /* Seq + kind rings (logical emits only; filled post-commit). */
     nytp_seq seq_ring[NYTP_COUNTING_SEQ_RING];
+    nytp_event_kind kind_ring[NYTP_COUNTING_SEQ_RING];
     size_t seq_ring_len; /* number of valid entries (≤ RING; drops oldest) */
+
+    /*
+     * Test hook (counting sink only): if fail_next_emit != 0, the next emit_*
+     * returns that status without counting, and does not commit seq. Used to
+     * prove no phantom seq on failed emit (COL-003 / dual-compare safety).
+     */
+    nytp_status fail_next_emit;
 } nytp_counting_stats;
 
 /* Heap-allocate a counting sink (OPEN). Destroy with nytp_sink_destroy. */
@@ -45,12 +53,24 @@ nytp_sink *nytp_counting_sink_create(void);
 const nytp_counting_stats *nytp_counting_sink_stats(const nytp_sink *sink);
 
 /*
+ * Arm next emit to fail with `err` (must be non-OK). Counting sink only.
+ * Returns NYTP_ERR_NULL if not a counting sink.
+ */
+nytp_status nytp_counting_sink_fail_next(nytp_sink *sink, nytp_status err);
+
+/*
  * Copy logical seq ring into out[0..*out_n). *out_n in/out capacity/count.
  * Returns NYTP_ERR_NULL if not a counting sink; NYTP_ERR_OVERFLOW if buffer
  * too small (still fills what fits and sets *out_n to needed size).
  */
 nytp_status nytp_counting_sink_copy_seqs(const nytp_sink *sink, nytp_seq *out,
                                          size_t *out_n);
+
+/*
+ * Copy logical kind ring (parallel to seq ring). Same contract as copy_seqs.
+ */
+nytp_status nytp_counting_sink_copy_kinds(const nytp_sink *sink,
+                                          nytp_event_kind *out, size_t *out_n);
 
 #ifdef __cplusplus
 }

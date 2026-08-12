@@ -14,25 +14,38 @@ typedef struct v5_impl {
     char *path; /* sink-owned copy; may be NULL */
 } v5_impl;
 
-static void note_kind(nytp_sink *sink, v5_impl *vi, nytp_event_kind kind)
+static void note_kind(v5_impl *vi, nytp_event_kind kind)
 {
     if ((unsigned)kind < (unsigned)NYTP_EVT_KIND_COUNT) {
         vi->stats.by_kind[kind]++;
     }
     vi->stats.total_emits++;
     vi->stats.last_kind = kind;
-    if (nytp_event_kind_is_logical(kind)) {
-        nytp_seq s = nytp_sink_peek_seq(sink);
-        vi->stats.logical_emits++;
-        vi->stats.last_seq = s;
-        vi->stats.has_last_seq = 1;
-        if (vi->stats.seq_ring_len < NYTP_COUNTING_SEQ_RING) {
-            vi->stats.seq_ring[vi->stats.seq_ring_len++] = s;
-        } else {
-            memmove(vi->stats.seq_ring, vi->stats.seq_ring + 1,
-                    (NYTP_COUNTING_SEQ_RING - 1) * sizeof(nytp_seq));
-            vi->stats.seq_ring[NYTP_COUNTING_SEQ_RING - 1] = s;
-        }
+}
+
+/* Post-commit only — no phantom seq if emit fails after note_kind. */
+static void v5_on_logical_committed(nytp_sink *sink, nytp_seq seq,
+                                    nytp_event_kind kind)
+{
+    v5_impl *vi;
+    if (!sink || !sink->impl) {
+        return;
+    }
+    vi = (v5_impl *)sink->impl;
+    vi->stats.logical_emits++;
+    vi->stats.last_seq = seq;
+    vi->stats.has_last_seq = 1;
+    if (vi->stats.seq_ring_len < NYTP_COUNTING_SEQ_RING) {
+        vi->stats.seq_ring[vi->stats.seq_ring_len] = seq;
+        vi->stats.kind_ring[vi->stats.seq_ring_len] = kind;
+        vi->stats.seq_ring_len++;
+    } else {
+        memmove(vi->stats.seq_ring, vi->stats.seq_ring + 1,
+                (NYTP_COUNTING_SEQ_RING - 1) * sizeof(nytp_seq));
+        memmove(vi->stats.kind_ring, vi->stats.kind_ring + 1,
+                (NYTP_COUNTING_SEQ_RING - 1) * sizeof(nytp_event_kind));
+        vi->stats.seq_ring[NYTP_COUNTING_SEQ_RING - 1] = seq;
+        vi->stats.kind_ring[NYTP_COUNTING_SEQ_RING - 1] = kind;
     }
 }
 
@@ -98,7 +111,7 @@ static nytp_status v5_emit_attribute(nytp_sink *sink, nytp_string_view key,
 {
     (void)key;
     (void)value;
-    note_kind(sink, vi_of(sink), NYTP_EVT_ATTRIBUTE);
+    note_kind(vi_of(sink), NYTP_EVT_ATTRIBUTE);
     return NYTP_OK;
 }
 
@@ -107,14 +120,14 @@ static nytp_status v5_emit_option(nytp_sink *sink, nytp_string_view key,
 {
     (void)key;
     (void)value;
-    note_kind(sink, vi_of(sink), NYTP_EVT_OPTION);
+    note_kind(vi_of(sink), NYTP_EVT_OPTION);
     return NYTP_OK;
 }
 
 static nytp_status v5_emit_comment(nytp_sink *sink, nytp_string_view text)
 {
     (void)text;
-    note_kind(sink, vi_of(sink), NYTP_EVT_COMMENT);
+    note_kind(vi_of(sink), NYTP_EVT_COMMENT);
     return NYTP_OK;
 }
 
@@ -122,7 +135,7 @@ static nytp_status v5_emit_time_line(nytp_sink *sink, nytp_ticks ticks,
                                      nytp_fid fid, nytp_line line)
 {
     v5_impl *vi = vi_of(sink);
-    note_kind(sink, vi, NYTP_EVT_TIME_LINE);
+    note_kind(vi, NYTP_EVT_TIME_LINE);
     vi->stats.last_ticks = ticks;
     vi->stats.last_fid = fid;
     vi->stats.last_line = line;
@@ -136,7 +149,7 @@ static nytp_status v5_emit_time_block(nytp_sink *sink, nytp_ticks ticks,
                                       nytp_line block_line, nytp_line sub_line)
 {
     v5_impl *vi = vi_of(sink);
-    note_kind(sink, vi, NYTP_EVT_TIME_BLOCK);
+    note_kind(vi, NYTP_EVT_TIME_BLOCK);
     vi->stats.last_ticks = ticks;
     vi->stats.last_fid = fid;
     vi->stats.last_line = line;
@@ -147,7 +160,7 @@ static nytp_status v5_emit_time_block(nytp_sink *sink, nytp_ticks ticks,
 
 static nytp_status v5_emit_discount(nytp_sink *sink)
 {
-    note_kind(sink, vi_of(sink), NYTP_EVT_DISCOUNT);
+    note_kind(vi_of(sink), NYTP_EVT_DISCOUNT);
     return NYTP_OK;
 }
 
@@ -163,7 +176,7 @@ static nytp_status v5_emit_new_fid(nytp_sink *sink, nytp_fid fid,
     (void)mtime;
     (void)name;
     v5_impl *vi = vi_of(sink);
-    note_kind(sink, vi, NYTP_EVT_NEW_FID);
+    note_kind(vi, NYTP_EVT_NEW_FID);
     vi->stats.last_fid = fid;
     return NYTP_OK;
 }
@@ -173,7 +186,7 @@ static nytp_status v5_emit_src_line(nytp_sink *sink, nytp_fid fid,
 {
     (void)text;
     v5_impl *vi = vi_of(sink);
-    note_kind(sink, vi, NYTP_EVT_SRC_LINE);
+    note_kind(vi, NYTP_EVT_SRC_LINE);
     vi->stats.last_fid = fid;
     vi->stats.last_line = line;
     return NYTP_OK;
@@ -184,7 +197,7 @@ static nytp_status v5_emit_sub_info(nytp_sink *sink, nytp_fid fid,
                                     nytp_string_view name)
 {
     v5_impl *vi = vi_of(sink);
-    note_kind(sink, vi, NYTP_EVT_SUB_INFO);
+    note_kind(vi, NYTP_EVT_SUB_INFO);
     vi->stats.last_fid = fid;
     vi->stats.last_line = first_line;
     vi->stats.last_block_line = last_line;
@@ -206,7 +219,7 @@ static nytp_status v5_emit_sub_callers(nytp_sink *sink, nytp_fid fid,
     (void)rec_depth;
     (void)caller;
     v5_impl *vi = vi_of(sink);
-    note_kind(sink, vi, NYTP_EVT_SUB_CALLERS);
+    note_kind(vi, NYTP_EVT_SUB_CALLERS);
     vi->stats.last_fid = fid;
     vi->stats.last_line = line;
     copy_subname(vi, called);
@@ -219,7 +232,7 @@ static nytp_status v5_emit_pid_start(nytp_sink *sink, nytp_pid pid,
     (void)ppid;
     (void)start_time;
     v5_impl *vi = vi_of(sink);
-    note_kind(sink, vi, NYTP_EVT_PID_START);
+    note_kind(vi, NYTP_EVT_PID_START);
     vi->stats.last_fid = (nytp_fid)pid;
     return NYTP_OK;
 }
@@ -229,7 +242,7 @@ static nytp_status v5_emit_pid_end(nytp_sink *sink, nytp_pid pid,
 {
     (void)end_time;
     v5_impl *vi = vi_of(sink);
-    note_kind(sink, vi, NYTP_EVT_PID_END);
+    note_kind(vi, NYTP_EVT_PID_END);
     vi->stats.last_fid = (nytp_fid)pid;
     return NYTP_OK;
 }
@@ -238,7 +251,7 @@ static nytp_status v5_emit_sub_entry(nytp_sink *sink, nytp_fid caller_fid,
                                      nytp_line caller_line)
 {
     v5_impl *vi = vi_of(sink);
-    note_kind(sink, vi, NYTP_EVT_SUB_ENTRY);
+    note_kind(vi, NYTP_EVT_SUB_ENTRY);
     vi->stats.last_fid = caller_fid;
     vi->stats.last_line = caller_line;
     return NYTP_OK;
@@ -251,7 +264,7 @@ static nytp_status v5_emit_sub_return(nytp_sink *sink, nytp_depth depth,
     (void)incl_time;
     (void)excl_time;
     v5_impl *vi = vi_of(sink);
-    note_kind(sink, vi, NYTP_EVT_SUB_RETURN);
+    note_kind(vi, NYTP_EVT_SUB_RETURN);
     vi->stats.last_depth = depth;
     copy_subname(vi, subname);
     return NYTP_OK;
@@ -259,7 +272,7 @@ static nytp_status v5_emit_sub_return(nytp_sink *sink, nytp_depth depth,
 
 static nytp_status v5_emit_start_deflate(nytp_sink *sink)
 {
-    note_kind(sink, vi_of(sink), NYTP_EVT_START_DEFLATE);
+    note_kind(vi_of(sink), NYTP_EVT_START_DEFLATE);
     return NYTP_OK;
 }
 
@@ -284,6 +297,7 @@ static const nytp_sink_ops v5_ops = {
     .emit_sub_entry = v5_emit_sub_entry,
     .emit_sub_return = v5_emit_sub_return,
     .emit_start_deflate = v5_emit_start_deflate,
+    .on_logical_committed = v5_on_logical_committed,
 };
 
 nytp_sink *nytp_v5_sink_create(const char *path)

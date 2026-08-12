@@ -367,13 +367,23 @@ static nytp_status emit_precheck(nytp_sink *sink, nytp_event_kind kind,
     return NYTP_OK;
 }
 
-static nytp_status emit_commit(nytp_sink *sink, nytp_status st, int logical)
+/*
+ * Commit seq only after successful backend return. Optional
+ * on_logical_committed lets backends append seq/kind rings without
+ * recording during a failed emit (no phantom seq).
+ */
+static nytp_status emit_commit(nytp_sink *sink, nytp_status st, int logical,
+                               nytp_event_kind kind)
 {
     if (st == NYTP_OK) {
         if (logical) {
-            sink->last_seq = sink->next_seq;
-            sink->next_seq++;
+            nytp_seq seq = sink->next_seq;
+            sink->last_seq = seq;
+            sink->next_seq = seq + 1;
             sink->has_last_seq = 1;
+            if (sink->ops->on_logical_committed) {
+                sink->ops->on_logical_committed(sink, seq, kind);
+            }
         }
         return NYTP_OK;
     }
@@ -393,7 +403,8 @@ nytp_status nytp_emit_attribute(nytp_sink *sink, nytp_string_view key,
     if (st != NYTP_OK) {
         return st;
     }
-    return emit_commit(sink, sink->ops->emit_attribute(sink, key, value), 1);
+    return emit_commit(sink, sink->ops->emit_attribute(sink, key, value), 1,
+                       NYTP_EVT_ATTRIBUTE);
 }
 
 nytp_status nytp_emit_option(nytp_sink *sink, nytp_string_view key,
@@ -404,7 +415,8 @@ nytp_status nytp_emit_option(nytp_sink *sink, nytp_string_view key,
     if (st != NYTP_OK) {
         return st;
     }
-    return emit_commit(sink, sink->ops->emit_option(sink, key, value), 1);
+    return emit_commit(sink, sink->ops->emit_option(sink, key, value), 1,
+                       NYTP_EVT_OPTION);
 }
 
 nytp_status nytp_emit_comment(nytp_sink *sink, nytp_string_view text)
@@ -415,7 +427,8 @@ nytp_status nytp_emit_comment(nytp_sink *sink, nytp_string_view text)
     if (st != NYTP_OK) {
         return st;
     }
-    return emit_commit(sink, sink->ops->emit_comment(sink, text), 1);
+    return emit_commit(sink, sink->ops->emit_comment(sink, text), 1,
+                       NYTP_EVT_COMMENT);
 }
 
 nytp_status nytp_emit_time_line(nytp_sink *sink, nytp_ticks ticks, nytp_fid fid,
@@ -428,7 +441,7 @@ nytp_status nytp_emit_time_line(nytp_sink *sink, nytp_ticks ticks, nytp_fid fid,
         return st;
     }
     return emit_commit(sink, sink->ops->emit_time_line(sink, ticks, fid, line),
-                       1);
+                       1, NYTP_EVT_TIME_LINE);
 }
 
 nytp_status nytp_emit_time_block(nytp_sink *sink, nytp_ticks ticks, nytp_fid fid,
@@ -444,7 +457,7 @@ nytp_status nytp_emit_time_block(nytp_sink *sink, nytp_ticks ticks, nytp_fid fid
     return emit_commit(sink,
                        sink->ops->emit_time_block(sink, ticks, fid, line,
                                                   block_line, sub_line),
-                       1);
+                       1, NYTP_EVT_TIME_BLOCK);
 }
 
 nytp_status nytp_emit_discount(nytp_sink *sink)
@@ -455,7 +468,8 @@ nytp_status nytp_emit_discount(nytp_sink *sink)
     if (st != NYTP_OK) {
         return st;
     }
-    return emit_commit(sink, sink->ops->emit_discount(sink), 1);
+    return emit_commit(sink, sink->ops->emit_discount(sink), 1,
+                       NYTP_EVT_DISCOUNT);
 }
 
 nytp_status nytp_emit_new_fid(nytp_sink *sink, nytp_fid fid, nytp_fid eval_fid,
@@ -472,7 +486,7 @@ nytp_status nytp_emit_new_fid(nytp_sink *sink, nytp_fid fid, nytp_fid eval_fid,
     return emit_commit(sink,
                        sink->ops->emit_new_fid(sink, fid, eval_fid, eval_line,
                                                flags, size, mtime, name),
-                       1);
+                       1, NYTP_EVT_NEW_FID);
 }
 
 nytp_status nytp_emit_src_line(nytp_sink *sink, nytp_fid fid, nytp_line line,
@@ -485,7 +499,7 @@ nytp_status nytp_emit_src_line(nytp_sink *sink, nytp_fid fid, nytp_line line,
         return st;
     }
     return emit_commit(sink, sink->ops->emit_src_line(sink, fid, line, text),
-                       1);
+                       1, NYTP_EVT_SRC_LINE);
 }
 
 nytp_status nytp_emit_sub_info(nytp_sink *sink, nytp_fid fid,
@@ -500,7 +514,7 @@ nytp_status nytp_emit_sub_info(nytp_sink *sink, nytp_fid fid,
     }
     return emit_commit(
         sink, sink->ops->emit_sub_info(sink, fid, first_line, last_line, name),
-        1);
+        1, NYTP_EVT_SUB_INFO);
 }
 
 nytp_status nytp_emit_sub_callers(nytp_sink *sink, nytp_fid fid, nytp_line line,
@@ -519,7 +533,7 @@ nytp_status nytp_emit_sub_callers(nytp_sink *sink, nytp_fid fid, nytp_line line,
                        sink->ops->emit_sub_callers(sink, fid, line, count, incl,
                                                    excl, reci, rec_depth, called,
                                                    caller),
-                       1);
+                       1, NYTP_EVT_SUB_CALLERS);
 }
 
 nytp_status nytp_emit_pid_start(nytp_sink *sink, nytp_pid pid, nytp_pid ppid,
@@ -532,7 +546,8 @@ nytp_status nytp_emit_pid_start(nytp_sink *sink, nytp_pid pid, nytp_pid ppid,
         return st;
     }
     return emit_commit(
-        sink, sink->ops->emit_pid_start(sink, pid, ppid, start_time), 1);
+        sink, sink->ops->emit_pid_start(sink, pid, ppid, start_time), 1,
+        NYTP_EVT_PID_START);
 }
 
 nytp_status nytp_emit_pid_end(nytp_sink *sink, nytp_pid pid, double end_time)
@@ -543,7 +558,8 @@ nytp_status nytp_emit_pid_end(nytp_sink *sink, nytp_pid pid, double end_time)
     if (st != NYTP_OK) {
         return st;
     }
-    return emit_commit(sink, sink->ops->emit_pid_end(sink, pid, end_time), 1);
+    return emit_commit(sink, sink->ops->emit_pid_end(sink, pid, end_time), 1,
+                       NYTP_EVT_PID_END);
 }
 
 nytp_status nytp_emit_sub_entry(nytp_sink *sink, nytp_fid caller_fid,
@@ -556,7 +572,8 @@ nytp_status nytp_emit_sub_entry(nytp_sink *sink, nytp_fid caller_fid,
         return st;
     }
     return emit_commit(
-        sink, sink->ops->emit_sub_entry(sink, caller_fid, caller_line), 1);
+        sink, sink->ops->emit_sub_entry(sink, caller_fid, caller_line), 1,
+        NYTP_EVT_SUB_ENTRY);
 }
 
 nytp_status nytp_emit_sub_return(nytp_sink *sink, nytp_depth depth,
@@ -572,19 +589,20 @@ nytp_status nytp_emit_sub_return(nytp_sink *sink, nytp_depth depth,
     return emit_commit(sink,
                        sink->ops->emit_sub_return(sink, depth, incl_time,
                                                   excl_time, subname),
-                       1);
+                       1, NYTP_EVT_SUB_RETURN);
 }
 
 nytp_status nytp_emit_start_deflate(nytp_sink *sink)
 {
-    /* Control: no COL-003 sequence. */
+    /* Control: no COL-003 sequence / no on_logical_committed. */
     nytp_status st =
         emit_precheck(sink, NYTP_EVT_START_DEFLATE,
                       sink && sink->ops && sink->ops->emit_start_deflate);
     if (st != NYTP_OK) {
         return st;
     }
-    return emit_commit(sink, sink->ops->emit_start_deflate(sink), 0);
+    return emit_commit(sink, sink->ops->emit_start_deflate(sink), 0,
+                       NYTP_EVT_START_DEFLATE);
 }
 
 const char *nytp_event_kind_name(nytp_event_kind kind)

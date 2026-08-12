@@ -28,7 +28,7 @@ collector/
 | `nytp_sink` + `nytp_sink_ops` | Canonical vtable sink interface |
 | `nytp_emit_*` | Semantic emit surface (COMPAT-001 + `start_deflate` control) |
 | **COL-002 lifecycle** | `OPEN/ACTIVE/STOPPED/FINALIZING/CLOSED/FAILED/FORK_SPLIT` + legal transitions + emit gates |
-| **COL-003 sequence** | Gapless logical `nytp_seq` on successful emits (not for `START_DEFLATE`) |
+| **COL-003 sequence** | Gapless logical `nytp_seq` on successful emits (not for `START_DEFLATE`); backends record via post-commit `on_logical_committed` |
 | Counting sink | Test dual companion — multiplicities, seq ring, no I/O |
 | Stub v5 adapter | Conceptual route for legacy v5 writes (**no wire encode yet**) |
 | **Fake-clock harness** | Scripted ticks + BASE-003 stmt driver + M4 **mini** sample |

@@ -107,8 +107,14 @@ Clock script: absolute ticks `1000, 1042, 1100, 1150`.
 | Full M4 oracle corpus under fake-clock | COL-006 + complete TEST-003 |
 | C v6 writer | COL-007 |
 | Full fork buffer ownership / signal-safe finalize | COL-015 |
+| File-switch / multi-file naming / enable-disable restart (OI-003-05) | COL-015 or named follow-on — **not** covered by COL-002-LIFECYCLE-MVP (stop→activate restart only) |
+| Dump dual-index / ReadStream equality for control tags (OI-001-03) | Still open: COL-003 **internal logical** seq excludes `START_DEFLATE`; dump-order indices may still include control. COL-003 does **not** close OI-001-03 |
 | Live XS / opcode hooks | later COL / packaging |
 | Production accidental fake-clock enable | keep test-only; no release default |
+
+### Seq commit contract (COL-003)
+
+Logical sequence is assigned only in public `emit_commit` after a **successful** backend return. Optional `on_logical_committed` is the only place backends may append seq/kind rings — never during a failing `emit_*`.
 
 ## Sources
 
