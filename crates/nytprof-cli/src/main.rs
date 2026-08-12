@@ -202,8 +202,9 @@ fn print_usage() {
          Report / aggregates options:\n  \
          --json / --format=json        Structured aggregates JSON (NATIVE-AGG-JSON)\n\n\
          Capability options:\n  \
-         --json / --format=json        Machine-readable JSON (CAPABILITY-JSON-MVP)\n  \
-         --profile PATH / -p PATH      Force golden profile probe\n\n\
+         --json / --format=json        Machine-readable JSON (CAPABILITY-JSON-MVP + E5 honesty)\n  \
+         --profile PATH / -p PATH      Force golden profile probe\n  \
+         E5 fields: v6_decode/v6_report=yes; convert/merge=no; collection_default=v5\n\n\
          Engines:\n  \
          native   Rust decode/model/report path (default)\n  \
          auto     Same as native until a Perl facade exists\n  \
@@ -211,10 +212,13 @@ fn print_usage() {
     );
 }
 
-/// Default golden probe relative to repo root / CWD.
+/// Default golden probe relative to repo root / CWD (v5).
 const DEFAULT_CAPABILITY_FIXTURE: &str = "fixtures/v5/default-calls1/nytprof.out";
 
-/// Native offline capability self-test (CAPABILITY-SELFTEST / CAPABILITY-JSON-MVP).
+/// Optional E5 v6 probe (dual-sink scaled default-calls1 shape).
+const DEFAULT_CAPABILITY_V6_FIXTURE: &str = "fixtures/e4/dual-sink/default_calls1_v6.nytprof";
+
+/// Native offline capability self-test (CAPABILITY-SELFTEST / CAPABILITY-JSON-MVP + E5 honesty).
 ///
 /// Default (human) output — greppable lines:
 /// ```text
@@ -222,14 +226,28 @@ const DEFAULT_CAPABILITY_FIXTURE: &str = "fixtures/v5/default-calls1/nytprof.out
 /// decode: yes
 /// report: yes
 /// verify: yes
-/// profile_ok: <path>   # when a golden fixture is found and verify succeeds
-/// profile_ok: skip     # when no probe path is available
+/// v6_decode: yes
+/// v6_report: yes
+/// convert: no
+/// merge: no
+/// collection_default: v5
+/// profile_ok: <path>      # when a golden v5 fixture is found and verify succeeds
+/// profile_ok: skip        # when no v5 probe path is available
+/// v6_profile_ok: <path>   # when a golden v6 fixture is found and verify succeeds
+/// v6_profile_ok: skip     # when no v6 probe path is available
 /// ```
 ///
 /// JSON mode (`--json` / `--format=json` / `--format json`) — single object on stdout:
 /// ```json
-/// {"ok":true,"decode":true,"report":true,"verify":true,"profile_ok":"<path>|null"}
+/// {"ok":true,"decode":true,"report":true,"verify":true,
+///  "v6_decode":true,"v6_report":true,"convert":false,"merge":false,
+///  "collection_default":"v5","profile_ok":"<path>|null","v6_profile_ok":"<path>|null"}
 /// ```
+///
+/// Honesty (PR-B12 / E5):
+/// - `v6_decode` / `v6_report` advertise product CLI surfaces on v6 (magic auto-detect).
+/// - `convert` / `merge` stay **false** until PR-C01/C02 (must not claim residual tools).
+/// - `collection_default` is always `"v5"` until R4 ADR (no default format flip).
 ///
 /// Exit 0 when claimed tools work. Non-zero if a found probe fails verify
 /// (fail closed — never claim present tools that cannot load a real profile).
@@ -243,53 +261,77 @@ fn cmd_capability(args: &[String]) -> Result<(), Box<dyn std::error::Error>> {
     let opts = parse_capability_args(args)?;
 
     // This binary *is* the native offline CLI: decode / report / verify are linked.
+    // E5: v6 decode + report/html/csv/… share ProfileModel::from_path dual dispatch.
     let profile_ok: Option<String> = match resolve_capability_probe(opts.profile.as_deref()) {
-        Some(path) => {
-            // Real exercise of decode+model+verify when a fixture is present.
-            match verify_profile(&path) {
-                Ok(summary) => {
-                    if !summary.lines().any(|l| l.starts_with("OK:")) {
-                        return Err(format!(
-                            "capability self-test: verify of {} did not produce OK: summary",
-                            path.display()
-                        )
-                        .into());
-                    }
-                    Some(path.display().to_string())
-                }
-                Err(e) => {
-                    return Err(format!(
-                        "capability self-test: verify failed for {}: {e}",
-                        path.display()
-                    )
-                    .into());
-                }
-            }
-        }
+        Some(path) => Some(run_capability_verify_probe(&path, "capability self-test")?),
+        None => None,
+    };
+
+    // Optional v6 probe (always attempted when fixture resolves; fail closed if present+broken).
+    // Forced `--profile` still only drives the primary probe (may be v5 or v6).
+    let v6_profile_ok: Option<String> = match resolve_capability_v6_probe() {
+        Some(path) => Some(run_capability_verify_probe(&path, "capability v6 self-test")?),
         None => None,
     };
 
     if opts.json {
-        let obj = json!({
-            "ok": true,
-            "decode": true,
-            "report": true,
-            "verify": true,
-            "profile_ok": profile_ok,
-        });
-        write_stdout_text(&serde_json::to_string(&obj)?)
+        // Stable field order for compact single-line JSON.
+        let mut obj = serde_json::Map::new();
+        obj.insert("ok".into(), json!(true));
+        obj.insert("decode".into(), json!(true));
+        obj.insert("report".into(), json!(true));
+        obj.insert("verify".into(), json!(true));
+        obj.insert("v6_decode".into(), json!(true));
+        obj.insert("v6_report".into(), json!(true));
+        // Residual tooling — do not claim until PR-C01 (convert) / merge path lands.
+        obj.insert("convert".into(), json!(false));
+        obj.insert("merge".into(), json!(false));
+        // R4 residual: collection format default remains v5 (opt-in format=v6 only).
+        obj.insert("collection_default".into(), json!("v5"));
+        obj.insert("profile_ok".into(), json!(profile_ok));
+        obj.insert("v6_profile_ok".into(), json!(v6_profile_ok));
+        write_stdout_text(&serde_json::to_string(&Value::Object(obj))?)
     } else {
         let mut lines: Vec<String> = vec![
             "OK: native capability self-test".to_string(),
             "decode: yes".to_string(),
             "report: yes".to_string(),
             "verify: yes".to_string(),
+            "v6_decode: yes".to_string(),
+            "v6_report: yes".to_string(),
+            "convert: no".to_string(),
+            "merge: no".to_string(),
+            "collection_default: v5".to_string(),
         ];
         match profile_ok {
             Some(p) => lines.push(format!("profile_ok: {p}")),
             None => lines.push("profile_ok: skip".to_string()),
         }
+        match v6_profile_ok {
+            Some(p) => lines.push(format!("v6_profile_ok: {p}")),
+            None => lines.push("v6_profile_ok: skip".to_string()),
+        }
         write_stdout_text(&lines.join("\n"))
+    }
+}
+
+/// Run `verify_profile` on a probe path; return display path on success.
+fn run_capability_verify_probe(
+    path: &Path,
+    label: &str,
+) -> Result<String, Box<dyn std::error::Error>> {
+    match verify_profile(path) {
+        Ok(summary) => {
+            if !summary.lines().any(|l| l.starts_with("OK:")) {
+                return Err(format!(
+                    "{label}: verify of {} did not produce OK: summary",
+                    path.display()
+                )
+                .into());
+            }
+            Ok(path.display().to_string())
+        }
+        Err(e) => Err(format!("{label}: verify failed for {}: {e}", path.display()).into()),
     }
 }
 
@@ -376,15 +418,34 @@ fn resolve_capability_probe(forced: Option<&str>) -> Option<PathBuf> {
             return Some(PathBuf::from(p));
         }
     }
-    let cwd_rel = PathBuf::from(DEFAULT_CAPABILITY_FIXTURE);
+    resolve_repo_fixture(DEFAULT_CAPABILITY_FIXTURE)
+}
+
+/// Resolve optional E5 v6 golden probe (independent of primary `--profile`).
+///
+/// Order:
+/// 1. `NYTPROF_CAPABILITY_V6_FIXTURE` env
+/// 2. CWD-relative dual-sink v6 fixture
+/// 3. Repo-relative via `CARGO_MANIFEST_DIR`
+fn resolve_capability_v6_probe() -> Option<PathBuf> {
+    if let Ok(p) = env::var("NYTPROF_CAPABILITY_V6_FIXTURE") {
+        if !p.is_empty() {
+            return Some(PathBuf::from(p));
+        }
+    }
+    resolve_repo_fixture(DEFAULT_CAPABILITY_V6_FIXTURE)
+}
+
+/// Resolve a repo-relative fixture path (CWD first, then CARGO_MANIFEST_DIR).
+fn resolve_repo_fixture(rel: &str) -> Option<PathBuf> {
+    let cwd_rel = PathBuf::from(rel);
     if cwd_rel.is_file() {
         // Prefer stable relative display when run from repo root.
         return Some(cwd_rel);
     }
-    // crates/nytprof-cli → repo root (normalize `../..` for clean profile_ok: paths)
     let from_manifest = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
         .join("../..")
-        .join(DEFAULT_CAPABILITY_FIXTURE);
+        .join(rel);
     if from_manifest.is_file() {
         return Some(from_manifest.canonicalize().unwrap_or(from_manifest));
     }

@@ -2,7 +2,8 @@
 
 **Board ID:** CAPABILITY-SELFTEST (+ CAPABILITY-JSON-MVP)  
 **Status:** implemented (BUILD-005 first-slice MVP — offline native tools only; JSON structured form)  
-**Not:** full capability manifest (codecs / ABI / target triple matrix), Perl integration negotiation, or release provenance (REL-003)
+**E5 extension (PR-B12):** `v6_decode` / `v6_report` / `convert` / `merge` / `collection_default` / `v6_profile_ok` — see also [`cli-e5-v6-opt-in-mvp-v0.md`](https://github.com/hilather/nytprof-modernization/blob/main/docs/schemas/cli-e5-v6-opt-in-mvp-v0.md)  
+**Not:** full capability manifest (codecs / ABI / target triple matrix), Perl integration negotiation, or release provenance (REL-003); **not** convert/merge claims (false until PR-C01/C02)
 
 ## Goal
 
@@ -36,7 +37,13 @@ OK: native capability self-test
 decode: yes
 report: yes
 verify: yes
+v6_decode: yes
+v6_report: yes
+convert: no
+merge: no
+collection_default: v5
 profile_ok: fixtures/v5/default-calls1/nytprof.out
+v6_profile_ok: fixtures/e4/dual-sink/default_calls1_v6.nytprof
 ```
 
 or, when no probe path is available:
@@ -46,7 +53,13 @@ OK: native capability self-test
 decode: yes
 report: yes
 verify: yes
+v6_decode: yes
+v6_report: yes
+convert: no
+merge: no
+collection_default: v5
 profile_ok: skip
+v6_profile_ok: skip
 ```
 
 | Line | Meaning |
@@ -55,8 +68,15 @@ profile_ok: skip
 | `decode: yes` | Native v5 decode is linked in this binary |
 | `report: yes` | Native report path is linked |
 | `verify: yes` | Native verify/inspect path is linked |
+| `v6_decode: yes` | Product v6 always-inflate decode is linked (E5) |
+| `v6_report: yes` | Product report/html/csv/… accept v6 via dual-dispatch (E5) |
+| `convert: no` | Convert tooling residual (PR-C01) — must stay `no` until shipped |
+| `merge: no` | Merge tooling residual — must stay `no` until shipped |
+| `collection_default: v5` | Collection format default; no R4 flip |
 | `profile_ok: <path>` | Optional probe: `verify` succeeded on that profile |
-| `profile_ok: skip` | No probe path resolved (still exit 0) |
+| `profile_ok: skip` | No v5 probe path resolved (still exit 0) |
+| `v6_profile_ok: <path>` | Optional v6 golden `verify` succeeded |
+| `v6_profile_ok: skip` | No v6 probe path resolved (still exit 0) |
 
 ## Success output — JSON (exit 0)
 
@@ -74,30 +94,44 @@ Stdout is a single JSON object (one line, no leading greppable `OK:` block). Req
 | `decode` | boolean `true` | Native v5 decode is linked |
 | `report` | boolean `true` | Native report path is linked |
 | `verify` | boolean `true` | Native verify/inspect path is linked |
+| `v6_decode` | boolean `true` | Product v6 decode linked (E5) |
+| `v6_report` | boolean `true` | Product report surfaces accept v6 (E5) |
+| `convert` | boolean `false` | Residual until PR-C01 — **must** be false here |
+| `merge` | boolean `false` | Residual until merge tooling — **must** be false here |
+| `collection_default` | string `"v5"` | Collection default; no R4 flip |
 | `profile_ok` | string path **or** `null` | Probe path that verified; `null` when no probe (human `skip`) |
+| `v6_profile_ok` | string path **or** `null` | Optional v6 golden probe; `null` when skip |
 
-Example (fixture present):
+Example (fixtures present):
 
 ```json
-{"ok":true,"decode":true,"report":true,"verify":true,"profile_ok":"fixtures/v5/default-calls1/nytprof.out"}
+{"ok":true,"decode":true,"report":true,"verify":true,"v6_decode":true,"v6_report":true,"convert":false,"merge":false,"collection_default":"v5","profile_ok":"fixtures/v5/default-calls1/nytprof.out","v6_profile_ok":"fixtures/e4/dual-sink/default_calls1_v6.nytprof"}
 ```
 
-Example (no probe):
+Example (no probes):
 
 ```json
-{"ok":true,"decode":true,"report":true,"verify":true,"profile_ok":null}
+{"ok":true,"decode":true,"report":true,"verify":true,"v6_decode":true,"v6_report":true,"convert":false,"merge":false,"collection_default":"v5","profile_ok":null,"v6_profile_ok":null}
 ```
 
 JSON mode does **not** print the human `OK: native capability self-test` / `decode: yes` lines. Human default remains greppable for operators and existing smokes.
 
 ### Probe resolution order
 
+**Primary (`profile_ok`):**
+
 1. Explicit `--profile PATH` / `-p PATH` / bare `PATH` argument  
 2. Env `NYTPROF_CAPABILITY_FIXTURE`  
 3. CWD-relative `fixtures/v5/default-calls1/nytprof.out`  
 4. Repo-relative via compile-time `CARGO_MANIFEST_DIR` → workspace root + same fixture path  
 
-If a probe path is resolved (including forced), **verify must succeed** or the self-test exits non-zero. Missing optional probe → human `profile_ok: skip` / JSON `profile_ok: null`, exit 0.
+**Optional v6 (`v6_profile_ok`, E5):**
+
+1. Env `NYTPROF_CAPABILITY_V6_FIXTURE`  
+2. CWD-relative `fixtures/e4/dual-sink/default_calls1_v6.nytprof`  
+3. Repo-relative via `CARGO_MANIFEST_DIR`  
+
+If a probe path is resolved (including forced primary or optional v6), **verify must succeed** or the self-test exits non-zero. Missing optional probe → human `profile_ok: skip` / `v6_profile_ok: skip` / JSON `null`, exit 0.
 
 ## Failure (non-zero exit)
 
@@ -129,9 +163,9 @@ Behavior:
 
 1. Resolve native CLI (`NYTPROF_NATIVE_CLI` → `cargo run -p nytprof-cli` when cargo present → `prefix/bin` → `target/{debug,release}`).  
 2. Run `capability` **twice**; both must exit 0.  
-3. Assert both outputs contain the stable markers (`OK: native capability self-test`, `decode: yes`, `report: yes`, `verify: yes`) and that the two runs are **consistent** on those markers.  
+3. Assert both outputs contain the stable markers (`OK: native capability self-test`, `decode: yes`, `report: yes`, `verify: yes`, E5 `v6_decode: yes` / `v6_report: yes` / `convert: no` / `merge: no` / `collection_default: v5`) and that the two runs are **consistent** on those markers.  
 4. In a repo checkout with the default golden fixture, assert `profile_ok:` is not `skip` (verify probe ran).  
-5. Run `capability --json` **twice**; both exit 0; parse JSON (`python3 -m json.tool` or `JSON::PP`); assert `ok`/`decode`/`report`/`verify` are true; `profile_ok` consistent across runs and non-null when the golden fixture is present.  
+5. Run `capability --json` **twice**; both exit 0; parse JSON (`python3 -m json.tool` or `JSON::PP`); assert `ok`/`decode`/`report`/`verify`/`v6_decode`/`v6_report` are true; `convert`/`merge` are false; `collection_default` is `"v5"`; `profile_ok` consistent across runs and non-null when the golden fixture is present.  
 6. **No native binary and no cargo:** **fail** with a clear message (this is a packaging-native smoke). Dual-path / legacy-only gates do not require this smoke when cargo is absent — see packaging gate wiring.  
 7. Never puts `crates/` on oracle `PERL5LIB`.
 

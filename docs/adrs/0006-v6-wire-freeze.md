@@ -105,7 +105,7 @@ COL-007 product E3-EVENT already shipped against the provisional lockfile. This 
 - Existing C writer and Rust decoder must continue to interoperate on frozen IDs (E3 harness).
 - New major is required to renumber opcodes/kinds/codecs/flags.
 - Default-parse always-inflate is **not** flipped by this ADR (product consumers use always-inflate helpers / model ingest explicitly).
-- CLI v6 opt-in report surfaces remain PR-B12; collection default remains v5 until R4 ADR.
+- CLI v6 opt-in report surfaces: **PR-B12 done** (`CLI-E5-V6-OPT-IN-MVP`); collection default remains v5 until R4 ADR.
 
 ## Alternatives considered
 

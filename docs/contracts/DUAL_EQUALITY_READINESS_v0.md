@@ -30,7 +30,7 @@ Plan COL-007 listed dependencies **FMT-002 through FMT-010**. This program **imp
 | **E2 — v6 encode↔decode** | Rust (or C) encode → always-inflate decode recovers equal logical events/sites/seq/strings under packing/absolute policies | `cargo test -p nytprof-format-v6` always-inflate packing/mid-stream/multi-chunk tests |
 | **E3 — C writer ↔ Rust decode** | COL-007 C emitter produces streams that Rust always-inflate path decodes with E2 equality on golden workloads | **ready (EVENT)** — C fixtures `fixtures/v6/from-c/**` + `e3_c_*` tests + `tools/oracle/e3_c_writer_parity.sh`. Stand-in harness remains engineering only. **E3-mixed residual.** |
 | **E4 — v5↔v6 semantic** | Same workload profiled as v5 and v6 yields equal advertised aggregates / dump structure after normalize | **E4-v0 ready (PR-B10)** — policy + dual-sink pairs + `e4_v0_aggregates_equal` / `e4_v0_*` tests + model-only smoke; **COL-014** logical equality harness (PR-B10a); full oracle pairs + E4 product CLI smoke residual (PR-B12b / TEST-008) |
-| **E5 — CLI product path** | CLI report/verify on v6 files as product surface (opt-in, not default) | **partial** — model+dump/verify prelim (PR-B11a); full report/html/capability residual (PR-B12); collection default remains v5 |
+| **E5 — CLI product path** | CLI report/verify on v6 files as product surface (opt-in, not default) | **ready (PR-B12)** — report/html/csv/folded/callgrind/dump/verify on v6; capability `v6_decode`/`v6_report`; convert/merge **false**; `collection_default: v5`; schema [`cli-e5-v6-opt-in-mvp-v0.md`](https://github.com/hilather/nytprof-modernization/blob/main/docs/schemas/cli-e5-v6-opt-in-mvp-v0.md) |
 
 ## Readiness matrix
 
@@ -54,9 +54,9 @@ Plan COL-007 listed dependencies **FMT-002 through FMT-010**. This program **imp
 | E4-v0 model-level aggregate equality | E4 | **ready (PR-B10)** | Dual-sink pairs → ProfileModel → `e4_v0_aggregates_equal`; smoke `--model-only`; schema [`e4-v0-model-semantic-mvp-v0.md`](https://github.com/hilather/nytprof-modernization/blob/main/docs/schemas/e4-v0-model-semantic-mvp-v0.md). Scaled shapes only; full oracle residual |
 | E4 product CLI smoke / offline_gate | E4 | **open** (PR-B12b) | After full CLI E5 |
 | Wire freeze FMT-002..010 | — | **done** (ADR-0006) | After E3-EVENT(C) + E4-v0; golden vectors |
-| Product v6→ProfileModel ingest | E5 runway | **ready (MVP)** | PR-B11a: dual-dispatch `from_path`; dump/verify prelim; schema [`product-v6-profilemodel-ingest-mvp-v0.md`](https://github.com/hilather/nytprof-modernization/blob/main/docs/schemas/product-v6-profilemodel-ingest-mvp-v0.md). **Not** full E5 capability / report matrix |
-| CLI v6 opt-in report/verify | E5 | **partial** | Model load + dump/verify work on v6 EVENT; full E5 report/html/capability residual until PR-B12 |
-| CLI v6 / format default flip (R4) | E5 | **out of scope** | Field window + ADR |
+| Product v6→ProfileModel ingest | E5 runway | **ready (MVP)** | PR-B11a: dual-dispatch `from_path`; dump/verify prelim; schema [`product-v6-profilemodel-ingest-mvp-v0.md`](https://github.com/hilather/nytprof-modernization/blob/main/docs/schemas/product-v6-profilemodel-ingest-mvp-v0.md). Full E5 surfaces: PR-B12 |
+| CLI v6 opt-in report/verify | E5 | **ready (PR-B12)** | Full product surfaces + capability honesty; schema [`cli-e5-v6-opt-in-mvp-v0.md`](https://github.com/hilather/nytprof-modernization/blob/main/docs/schemas/cli-e5-v6-opt-in-mvp-v0.md); tests `cli_e5_v6` |
+| CLI v6 / format default flip (R4) | E5 | **out of scope** | Field window + ADR; capability asserts `collection_default: v5` |
 | Full R1 HTML DOM / XS Data / FFI | E1 product depth | **residual** (not R1-preview claim) | Separate full-R1 work |
 
 ## Explicit open gates after COL-007 E3-EVENT + wire freeze
@@ -65,7 +65,7 @@ Plan COL-007 listed dependencies **FMT-002 through FMT-010**. This program **imp
 2. **E4 full oracle + product smoke:** E4-v0 model enforcement is **ready** on dual-sink scaled pairs (PR-B10). Remaining: full oracle v5+v6 pairs (TEST-003/TEST-008) and E4 product CLI smoke in offline_gate (PR-B12b). Policy: [`E4_V5_V6_SEMANTIC_EQUALITY_POLICY_v0.md`](https://github.com/hilather/nytprof-modernization/blob/main/docs/contracts/E4_V5_V6_SEMANTIC_EQUALITY_POLICY_v0.md).
 3. **Wire freeze** — **done** (ADR-0006 + golden vectors). OQ-5 seq policy frozen in ADR-0006 §3.
 4. **OI-002** full ATTRIBUTE/OPTION key vocabulary — residual (not numeric ID freeze).
-5. **CLI v6 full E5** (report/html/capability matrix + collection opt-in) — residual after model ingest MVP (PR-B11a dump/verify prelim only).
+5. **CLI v6 full E5** — **ready (PR-B12)** for offline report surfaces + capability honesty; residual: collection default flip (R4), convert/merge claims (PR-C01+).
 6. **COL-008** batched Rust writer remains deferred / non-baseline.
 7. **OQ-6 / COL-010** global string pool — deferred (FOOTER-local only).
 
@@ -75,16 +75,17 @@ Plan COL-007 listed dependencies **FMT-002 through FMT-010**. This program **imp
 |---------|----------------------------|
 | First-slice / offline R0 + R1-preview | **Complete** for advertised surfaces; COL-007 E3-EVENT **done**; COL-008 deferred |
 | Full product R1 | **Not complete** — residual: FFI/XS Data, full nytprofhtml DOM, multi-OS CI, perf cert, R3 engine default |
-| R2 v6 collection opt-in | **Runway advanced** — ADR-0001/0002 accepted; **wire freeze ADR-0006**; C writer + product E3-EVENT green; COL-014 dual-sink test/dev harness ready (OQ-4); **E4-v0 model ready**; E3-mixed / full oracle E4 / E4 product smoke / CLI E5 residual |
+| R2 v6 collection opt-in | **Runway advanced** — ADR-0001/0002 accepted; **wire freeze ADR-0006**; C writer + product E3-EVENT green; COL-014 dual-sink test/dev harness ready (OQ-4); **E4-v0 model ready**; **CLI E5 ready (PR-B12)**; E3-mixed / full oracle E4 / E4 product smoke residual (PR-B12b) |
 | R3–R5 defaults / retirement | **Not started** |
 
 ## Non-claims
 
 Do **not** treat this document as:
 
-- full dual-equality product freeze (E3-mixed / full oracle E4 still residual) or CLI v6 default / default-parse always-inflate;
+- full dual-equality product freeze (E3-mixed / full oracle E4 still residual) or CLI v6 **collection** default / default-parse always-inflate;
 - E3-mixed multi-kind complete;
-- E4 full oracle dual complete or E4 product offline_gate smoke complete;
+- E4 full oracle dual complete or E4 product offline_gate smoke complete (PR-B12b);
+- convert/merge tooling complete (capability correctly false);
 - COL-008 done;
 - full R1 HTML/XS/FFI or multi-OS CI or R3/R4 default flips.
 
@@ -106,5 +107,6 @@ Wire **numeric IDs** for major=6 **are** frozen (ADR-0006) — that claim lives 
 - COL-014 dual-sink (test/dev-only): [`docs/schemas/collector-dual-sink-mvp-v0.md`](https://github.com/hilather/nytprof-modernization/blob/main/docs/schemas/collector-dual-sink-mvp-v0.md); `collector/include/nytp_sink_dual.h`; `make -C collector test` (`test_dual_sink`); smoke step 10
 - E3 harness: `crates/nytprof-format-v6/src/dual_equality.rs` (engineering stand-in + `e3_decode_writer_bytes`); product `e3_c_*` in `crates/nytprof-format-v6/tests/e3_c.rs`. Evidence: `cargo test -p nytprof-format-v6 e3_c_` / `e3_harness`; `./tools/oracle/e3_c_writer_parity.sh`
 - Product v6→ProfileModel ingest: schema [`docs/schemas/product-v6-profilemodel-ingest-mvp-v0.md`](https://github.com/hilather/nytprof-modernization/blob/main/docs/schemas/product-v6-profilemodel-ingest-mvp-v0.md); `cargo test -p nytprof-model` (`v6_*`); CLI dump/verify on `fixtures/v6/from-c/**`
+- CLI E5 v6 opt-in: schema [`docs/schemas/cli-e5-v6-opt-in-mvp-v0.md`](https://github.com/hilather/nytprof-modernization/blob/main/docs/schemas/cli-e5-v6-opt-in-mvp-v0.md); `cargo test -p nytprof-cli --test cli_e5_v6`; capability honesty `v6_decode`/`v6_report` / no convert/merge / `collection_default: v5`
 - E4-v0 model semantic: schema [`docs/schemas/e4-v0-model-semantic-mvp-v0.md`](https://github.com/hilather/nytprof-modernization/blob/main/docs/schemas/e4-v0-model-semantic-mvp-v0.md); fixtures [`fixtures/e4/dual-sink/`](https://github.com/hilather/nytprof-modernization/blob/main/fixtures/e4/dual-sink/); `cargo test -p nytprof-model e4_v0_`; `./scripts/packaging/e4_v5_v6_semantic_smoke.sh --model-only`
 - Offline gate: `./scripts/ci/offline_gate.sh` (step 11 when cargo; E4 product smoke residual PR-B12b)

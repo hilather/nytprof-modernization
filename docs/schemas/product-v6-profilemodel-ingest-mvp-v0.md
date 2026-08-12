@@ -1,7 +1,7 @@
 # Product v6 → ProfileModel ingest MVP (v0)
 
 **Board ID:** `PRODUCT-V6-MODEL-INGEST-MVP`  
-**Status:** implemented (PR-B11a) — **not** wire freeze; **not** full CLI E5 claim; E4-v0 uses this ingest path (PR-B10)  
+**Status:** implemented (PR-B11a) — wire freeze ADR-0006 separate; **CLI E5 full surfaces:** PR-B12 ([`cli-e5-v6-opt-in-mvp-v0.md`](https://github.com/hilather/nytprof-modernization/blob/main/docs/schemas/cli-e5-v6-opt-in-mvp-v0.md)); E4-v0 uses this ingest path (PR-B10)  
 **Depends on:** COL-007 E3-EVENT (`fixtures/v6/from-c/**`); A1–A9 aggregation (`aggregate-comparison-v0.md`); dual-equality readiness  
 **Evidence:** `cargo test -p nytprof-model` (`v6_*`); `cargo test -p nytprof-format-v6 --lib dual_equality`; CLI `dump`/`verify` on `fixtures/v6/from-c/absolute.nytprof`
 
@@ -70,7 +70,7 @@ Auto-VERSION inject when body omits VERSION (header major/minor).
 
 ## Non-claims
 
-- Not wire freeze / FMT-002..010
 - Not full multi-kind SOURCE/INDEX/SUMMARY product path (E3-mixed residual)
-- Not CLI collection `format=v6` default; not full E5 capability `v6_report` advertising matrix
-- Not COL-008; not convert/merge
+- Not CLI collection `format=v6` default (R4 residual; E5 capability advertises `collection_default: v5`)
+- Full E5 report/html/csv/capability matrix: **PR-B12** ([`cli-e5-v6-opt-in-mvp-v0.md`](https://github.com/hilather/nytprof-modernization/blob/main/docs/schemas/cli-e5-v6-opt-in-mvp-v0.md)) — this ingest MVP is the load path only
+- Not COL-008; not convert/merge (capability must keep `convert`/`merge` false until PR-C01+)

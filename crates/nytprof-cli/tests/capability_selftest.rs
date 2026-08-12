@@ -51,6 +51,12 @@ fn assert_stable_markers(stdout: &str, label: &str) {
         "decode: yes",
         "report: yes",
         "verify: yes",
+        // E5 honesty (PR-B12)
+        "v6_decode: yes",
+        "v6_report: yes",
+        "convert: no",
+        "merge: no",
+        "collection_default: v5",
     ] {
         assert!(
             stdout.lines().any(|l| l == marker),
@@ -60,6 +66,10 @@ fn assert_stable_markers(stdout: &str, label: &str) {
     assert!(
         stdout.lines().any(|l| l.starts_with("profile_ok: ")),
         "{label}: missing profile_ok: line\nstdout:\n{stdout}"
+    );
+    assert!(
+        stdout.lines().any(|l| l.starts_with("v6_profile_ok: ")),
+        "{label}: missing v6_profile_ok: line\nstdout:\n{stdout}"
     );
 }
 
@@ -165,7 +175,13 @@ fn capability_twice_consistent_markers() {
                     || l.starts_with("decode: ")
                     || l.starts_with("report: ")
                     || l.starts_with("verify: ")
+                    || l.starts_with("v6_decode: ")
+                    || l.starts_with("v6_report: ")
+                    || l.starts_with("convert: ")
+                    || l.starts_with("merge: ")
+                    || l.starts_with("collection_default: ")
                     || l.starts_with("profile_ok: ")
+                    || l.starts_with("v6_profile_ok: ")
             })
             .collect();
         v.sort_unstable();
@@ -195,16 +211,34 @@ fn assert_json_capability_ok(stdout: &str, label: &str) -> Value {
     let obj = v
         .as_object()
         .unwrap_or_else(|| panic!("{label}: expected JSON object\nstdout:\n{stdout}"));
-    for key in ["ok", "decode", "report", "verify"] {
+    for key in ["ok", "decode", "report", "verify", "v6_decode", "v6_report"] {
         assert_eq!(
             obj.get(key),
             Some(&Value::Bool(true)),
             "{label}: field {key} must be true\nstdout:\n{stdout}"
         );
     }
+    // Residual tools — must not claim convert/merge until PR-C01/C02.
+    for key in ["convert", "merge"] {
+        assert_eq!(
+            obj.get(key),
+            Some(&Value::Bool(false)),
+            "{label}: field {key} must be false (residual honesty)\nstdout:\n{stdout}"
+        );
+    }
+    // No collection default flip (R4 residual).
+    assert_eq!(
+        obj.get("collection_default"),
+        Some(&Value::String("v5".into())),
+        "{label}: collection_default must be \"v5\"\nstdout:\n{stdout}"
+    );
     assert!(
         obj.contains_key("profile_ok"),
         "{label}: missing profile_ok\nstdout:\n{stdout}"
+    );
+    assert!(
+        obj.contains_key("v6_profile_ok"),
+        "{label}: missing v6_profile_ok\nstdout:\n{stdout}"
     );
     v
 }
@@ -236,6 +270,19 @@ fn capability_json_mode_ok() {
         assert!(
             profile_ok.is_null(),
             "no golden → profile_ok null, got {profile_ok}"
+        );
+    }
+    // E5: when dual-sink v6 fixture is present, v6_profile_ok must probe it.
+    let v6_fixture = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .join("../../fixtures/e4/dual-sink/default_calls1_v6.nytprof");
+    let v6_ok = &v["v6_profile_ok"];
+    if v6_fixture.is_file() {
+        let s = v6_ok
+            .as_str()
+            .unwrap_or_else(|| panic!("v6 golden present → v6_profile_ok string, got {v6_ok}"));
+        assert!(
+            s.contains("default_calls1_v6") || s.contains(".nytprof"),
+            "v6_profile_ok path unexpected: {s}"
         );
     }
 }
