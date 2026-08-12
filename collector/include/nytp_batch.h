@@ -45,12 +45,14 @@ typedef struct nytp_batch_metrics {
 typedef struct nytp_batch {
     nytp_event *events; /* heap once at create; fixed length */
     size_t capacity;    /* event slots */
-    size_t count;       /* pending events */
+    size_t count;       /* pending (unacked) events */
     size_t high_water;  /* flush when count >= high_water (1..capacity) */
 
     char *arena;
     size_t arena_cap;
     size_t arena_used;
+    /* Scratch for compact-after-partial-flush (allocated once at create). */
+    char *compact_tmp;
 
     nytp_batch_metrics metrics;
 
@@ -60,6 +62,13 @@ typedef struct nytp_batch {
 
     /* Optional prebound ops for COL-004 fast path (set on bind). */
     const nytp_sink_ops *child_ops;
+
+    /*
+     * Set after commit_event when a subsequent high-water/full flush fails.
+     * Batch-sink emit ops use this to advance COL-003 seq for the buffered
+     * event even though the public wrapper sees a hard error.
+     */
+    int last_append_buffered;
 } nytp_batch;
 
 /* ---- Batch buffer (raw module; also used by batch sink) ---- */
@@ -85,10 +94,15 @@ const nytp_batch_metrics *nytp_batch_get_metrics(const nytp_batch *batch);
 /*
  * Drain all pending events to child via child ops (not public wrappers —
  * preserves COL-003 seq already stamped on each event). Resets count/arena
- * only after full successful drain. On failure: leaves batch intact, marks
- * child failed when appropriate, returns the error.
+ * only after full successful drain.
+ *
+ * On mid-batch failure: already-acked prefix is compacted out (not re-emitted
+ * on retry); only unacked events remain. Hard errors mark the child failed.
  */
 nytp_status nytp_batch_flush(nytp_batch *batch);
+
+/* 1 if the most recent append committed an event into the buffer. */
+int nytp_batch_last_append_buffered(const nytp_batch *batch);
 
 /* ---- COL-004 no-alloc statement appends (POD only) ---- */
 

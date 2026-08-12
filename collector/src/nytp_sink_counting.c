@@ -98,16 +98,27 @@ static counting_impl *ci_of(nytp_sink *sink)
     return (counting_impl *)sink->impl;
 }
 
-/* If fail_next is armed, return it once without counting. */
+/* Fail-injection hooks: fail_next (immediate) or fail_after (N OKs then fail). */
 static nytp_status maybe_fail_next(counting_impl *ci)
 {
     nytp_status err;
-    if (ci->stats.fail_next_emit == NYTP_OK) {
-        return NYTP_OK;
+    if (ci->stats.fail_next_emit != NYTP_OK) {
+        err = ci->stats.fail_next_emit;
+        ci->stats.fail_next_emit = NYTP_OK;
+        return err;
     }
-    err = ci->stats.fail_next_emit;
-    ci->stats.fail_next_emit = NYTP_OK;
-    return err;
+    if (ci->stats.fail_after_err != NYTP_OK) {
+        if (ci->stats.fail_after_seen < ci->stats.fail_after_ok) {
+            ci->stats.fail_after_seen++;
+            return NYTP_OK;
+        }
+        err = ci->stats.fail_after_err;
+        ci->stats.fail_after_err = NYTP_OK;
+        ci->stats.fail_after_ok = 0;
+        ci->stats.fail_after_seen = 0;
+        return err;
+    }
+    return NYTP_OK;
 }
 
 static nytp_status counting_emit_attribute(nytp_sink *sink,
@@ -422,6 +433,37 @@ nytp_status nytp_counting_sink_fail_next(nytp_sink *sink, nytp_status err)
     }
     ci = (counting_impl *)sink->impl;
     ci->stats.fail_next_emit = err;
+    return NYTP_OK;
+}
+
+nytp_status nytp_counting_sink_fail_after(nytp_sink *sink, uint32_t ok_before_fail,
+                                          nytp_status err)
+{
+    counting_impl *ci;
+    if (!sink || sink->ops != &counting_ops || !sink->impl) {
+        return NYTP_ERR_NULL;
+    }
+    if (err == NYTP_OK) {
+        return NYTP_ERR_STATE;
+    }
+    ci = (counting_impl *)sink->impl;
+    ci->stats.fail_after_ok = ok_before_fail;
+    ci->stats.fail_after_seen = 0;
+    ci->stats.fail_after_err = err;
+    return NYTP_OK;
+}
+
+nytp_status nytp_counting_sink_clear_fail(nytp_sink *sink)
+{
+    counting_impl *ci;
+    if (!sink || sink->ops != &counting_ops || !sink->impl) {
+        return NYTP_ERR_NULL;
+    }
+    ci = (counting_impl *)sink->impl;
+    ci->stats.fail_next_emit = NYTP_OK;
+    ci->stats.fail_after_ok = 0;
+    ci->stats.fail_after_seen = 0;
+    ci->stats.fail_after_err = NYTP_OK;
     return NYTP_OK;
 }
 

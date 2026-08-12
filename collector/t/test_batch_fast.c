@@ -301,6 +301,7 @@ static void test_stmt_fast_no_alloc(void)
     m = nytp_batch_get_metrics(b);
     EXPECT(m->heap_allocs == heap_at_start,
            "no heap_allocs after create on stmt path");
+    EXPECT(heap_at_start == 4, "create-time heap: batch+events+arena+compact_tmp");
     EXPECT(m->stmt_fast_appends == 200 + 50, "stmt_fast_appends count");
     EXPECT(m->arena_bytes_copied == 0, "stmt path uses no arena");
     EXPECT(sizeof(nytp_event) >= 32, "event POD has useful size");
@@ -440,9 +441,9 @@ static void test_microbench_light(void)
             (unsigned long long)r.elapsed_ns);
 }
 
-static void test_failed_flush_preserves_order_state(void)
+static void test_failed_flush_sticky_parent(void)
 {
-    /* Fail-next on child after partial buffer: batch stays FAILED path. */
+    /* Fail on first flush emit: parent sticky-FAILED; further emits rejected. */
     nytp_sink *child;
     nytp_sink *batch;
     const nytp_counting_stats *st;
@@ -452,19 +453,126 @@ static void test_failed_flush_preserves_order_state(void)
     EXPECT(nytp_sink_activate(batch) == NYTP_OK, "activate");
     EXPECT(nytp_emit_time_line(batch, 1, 1, 1) == NYTP_OK, "tl1");
     EXPECT(nytp_emit_time_line(batch, 2, 1, 2) == NYTP_OK, "tl2");
-    /* Arm child to fail next emit (first of flush). */
     EXPECT(nytp_counting_sink_fail_next(child, NYTP_ERR_IO) == NYTP_OK,
            "fail_next");
     {
         nytp_status stf = nytp_sink_flush(batch);
         EXPECT(stf == NYTP_ERR_IO, "flush fails IO");
     }
-    /* Batch may still hold events; child has 0 logical if fail before commit. */
+    EXPECT(nytp_sink_get_state(batch) == NYTP_SINK_FAILED,
+           "parent sticky-FAILED after hard flush error");
+    EXPECT(nytp_sink_fail_reason(batch) == NYTP_ERR_IO, "fail_reason IO");
     st = nytp_counting_sink_stats(child);
-    EXPECT(st && st->logical_emits == 0, "no phantom on failed flush");
-    /* Pending still in batch. */
+    EXPECT(st && st->logical_emits == 0, "no phantom on fail-first flush");
     EXPECT(nytp_batch_count(nytp_batch_sink_batch(batch)) == 2,
-           "events retained on failed flush");
+           "unacked events retained");
+    /* Further emits must not silently continue. */
+    EXPECT(nytp_emit_time_line(batch, 3, 1, 3) == NYTP_ERR_STATE,
+           "emit rejected after sticky fail");
+    EXPECT(nytp_sink_flush(batch) == NYTP_ERR_STATE,
+           "flush rejected while FAILED");
+    nytp_sink_destroy(batch);
+}
+
+/*
+ * Issue 1: mid-batch partial drain must not re-emit acked prefix on retry.
+ * Buffer 3 TIME_LINE; child fails on 2nd ops emit; compact leaves 2 pending;
+ * clear fail arm; raw re-flush → child multiplicity exactly 3.
+ */
+static void test_mid_batch_partial_flush_no_reemit(void)
+{
+    nytp_sink *child;
+    nytp_sink *batch_sink;
+    nytp_batch *b;
+    const nytp_counting_stats *st;
+    nytp_status stf;
+
+    child = nytp_counting_sink_create();
+    batch_sink = nytp_batch_sink_create(child, 8, 256, 8, 1);
+    EXPECT(nytp_sink_activate(batch_sink) == NYTP_OK, "activate");
+    EXPECT(nytp_emit_time_line(batch_sink, 10, 1, 1) == NYTP_OK, "tl0");
+    EXPECT(nytp_emit_time_line(batch_sink, 20, 1, 2) == NYTP_OK, "tl1");
+    EXPECT(nytp_emit_time_line(batch_sink, 30, 1, 3) == NYTP_OK, "tl2");
+    b = nytp_batch_sink_batch(batch_sink);
+    EXPECT(nytp_batch_count(b) == 3, "three pending before flush");
+
+    /* First ops emit OK, second fails. */
+    EXPECT(nytp_counting_sink_fail_after(child, 1, NYTP_ERR_IO) == NYTP_OK,
+           "fail_after 1");
+    stf = nytp_batch_flush(b);
+    EXPECT(stf == NYTP_ERR_IO, "mid flush IO");
+    st = nytp_counting_sink_stats(child);
+    EXPECT(st && st->logical_emits == 1, "exactly one acked on partial");
+    EXPECT(st && st->by_kind[NYTP_EVT_TIME_LINE] == 1, "one TIME_LINE");
+    /* AcKed prefix compacted out — only unacked remain. */
+    EXPECT(nytp_batch_count(b) == 2, "two unacked after compact");
+
+    /* Clear inject; child may be FAILED from mark_failed — ops still callable. */
+    EXPECT(nytp_counting_sink_clear_fail(child) == NYTP_OK, "clear fail");
+    stf = nytp_batch_flush(b);
+    EXPECT(stf == NYTP_OK, "retry flush OK");
+    EXPECT(nytp_batch_count(b) == 0, "empty after full drain");
+    st = nytp_counting_sink_stats(child);
+    EXPECT(st && st->logical_emits == 3, "exactly 3 total — no re-emit");
+    EXPECT(st && st->by_kind[NYTP_EVT_TIME_LINE] == 3, "3 TIME_LINE total");
+    EXPECT(nytp_seq_check_gapless(st->seq_ring, st->seq_ring_len, 0, NULL),
+           "gapless seq after retry");
+
+    nytp_sink_destroy(batch_sink);
+}
+
+/*
+ * Issue 3: high-water flush fail after buffering still advances logical_count.
+ */
+static void test_hw_flush_fail_seq_advance(void)
+{
+    nytp_sink *child;
+    nytp_sink *batch;
+    nytp_batch *b;
+    nytp_status st;
+
+    child = nytp_counting_sink_create();
+    /* capacity 4, high_water 2 → every 2nd append triggers HW flush */
+    batch = nytp_batch_sink_create(child, 4, 256, 2, 1);
+    EXPECT(nytp_sink_activate(batch) == NYTP_OK, "activate");
+    EXPECT(nytp_emit_time_line(batch, 1, 1, 1) == NYTP_OK, "tl0 buffered");
+    EXPECT(nytp_sink_logical_count(batch) == 1, "seq after first");
+
+    /* Second append commits then HW-flush both; fail first child emit. */
+    EXPECT(nytp_counting_sink_fail_next(child, NYTP_ERR_IO) == NYTP_OK,
+           "fail_next");
+    st = nytp_emit_time_line(batch, 2, 1, 2);
+    EXPECT(st == NYTP_ERR_IO, "HW flush IO on second emit");
+    EXPECT(nytp_sink_get_state(batch) == NYTP_SINK_FAILED, "parent FAILED");
+    /*
+     * Event was buffered before HW flush failed → seq must include it
+     * (logical_count == 2), not under-count at 1.
+     */
+    EXPECT(nytp_sink_logical_count(batch) == 2,
+           "seq advanced for buffered event despite HW flush fail");
+    b = nytp_batch_sink_batch(batch);
+    /* Compact after partial: fail on first of 2 → both still unacked (i=0). */
+    EXPECT(nytp_batch_count(b) == 2, "both retained (fail on first of HW flush)");
+    nytp_sink_destroy(batch);
+}
+
+/* Issue 4: finalize forwards to child. */
+static void test_lifecycle_forward_finalize(void)
+{
+    nytp_sink *child;
+    nytp_sink *batch;
+
+    child = nytp_counting_sink_create();
+    batch = nytp_batch_sink_create(child, 4, 128, 4, 1);
+    EXPECT(nytp_sink_activate(batch) == NYTP_OK, "activate");
+    EXPECT(nytp_sink_get_state(child) == NYTP_SINK_ACTIVE, "child active");
+    EXPECT(nytp_sink_begin_finalize(batch) == NYTP_OK, "begin_finalize");
+    EXPECT(nytp_sink_get_state(batch) == NYTP_SINK_FINALIZING, "batch fin");
+    EXPECT(nytp_sink_get_state(child) == NYTP_SINK_FINALIZING, "child fin");
+    EXPECT(nytp_emit_time_line(batch, 1, 1, 1) == NYTP_ERR_STATE,
+           "hot path rejected in FINALIZING");
+    EXPECT(nytp_emit_src_line(batch, 1, 1, nytp_sv_cstr("x")) == NYTP_OK,
+           "src_line ok in FINALIZING");
     nytp_sink_destroy(batch);
 }
 
@@ -477,7 +585,10 @@ int main(void)
     test_emergency_oversized();
     test_fast_equals_public();
     test_microbench_light();
-    test_failed_flush_preserves_order_state();
+    test_failed_flush_sticky_parent();
+    test_mid_batch_partial_flush_no_reemit();
+    test_hw_flush_fail_seq_advance();
+    test_lifecycle_forward_finalize();
 
     if (failures) {
         fprintf(stderr, "FAILED: test_batch_fast (%d failures)\n", failures);

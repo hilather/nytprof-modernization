@@ -209,6 +209,7 @@ nytp_status nytp_sink_activate(nytp_sink *sink)
 
 nytp_status nytp_sink_stop(nytp_sink *sink)
 {
+    nytp_status st;
     if (!sink || !sink->ops) {
         return NYTP_ERR_NULL;
     }
@@ -216,11 +217,23 @@ nytp_status nytp_sink_stop(nytp_sink *sink)
         return NYTP_ERR_STATE;
     }
     sink->state = NYTP_SINK_STOPPED;
+    if (sink->ops->notify_stop) {
+        st = sink->ops->notify_stop(sink);
+        if (st != NYTP_OK) {
+            if (st == NYTP_ERR_IO || st == NYTP_ERR_FAILED ||
+                st == NYTP_ERR_OVERFLOW) {
+                sink->state = NYTP_SINK_FAILED;
+                sink->fail_reason = st;
+            }
+            return st;
+        }
+    }
     return NYTP_OK;
 }
 
 nytp_status nytp_sink_begin_finalize(nytp_sink *sink)
 {
+    nytp_status st;
     if (!sink || !sink->ops) {
         return NYTP_ERR_NULL;
     }
@@ -229,11 +242,23 @@ nytp_status nytp_sink_begin_finalize(nytp_sink *sink)
         return NYTP_ERR_STATE;
     }
     sink->state = NYTP_SINK_FINALIZING;
+    if (sink->ops->notify_begin_finalize) {
+        st = sink->ops->notify_begin_finalize(sink);
+        if (st != NYTP_OK) {
+            if (st == NYTP_ERR_IO || st == NYTP_ERR_FAILED ||
+                st == NYTP_ERR_OVERFLOW) {
+                sink->state = NYTP_SINK_FAILED;
+                sink->fail_reason = st;
+            }
+            return st;
+        }
+    }
     return NYTP_OK;
 }
 
 nytp_status nytp_sink_begin_fork(nytp_sink *sink)
 {
+    nytp_status st;
     if (!sink || !sink->ops) {
         return NYTP_ERR_NULL;
     }
@@ -241,11 +266,23 @@ nytp_status nytp_sink_begin_fork(nytp_sink *sink)
         return NYTP_ERR_STATE;
     }
     sink->state = NYTP_SINK_FORK_SPLIT;
+    if (sink->ops->notify_begin_fork) {
+        st = sink->ops->notify_begin_fork(sink);
+        if (st != NYTP_OK) {
+            if (st == NYTP_ERR_IO || st == NYTP_ERR_FAILED ||
+                st == NYTP_ERR_OVERFLOW) {
+                sink->state = NYTP_SINK_FAILED;
+                sink->fail_reason = st;
+            }
+            return st;
+        }
+    }
     return NYTP_OK;
 }
 
 nytp_status nytp_sink_end_fork_parent(nytp_sink *sink)
 {
+    nytp_status st;
     if (!sink || !sink->ops) {
         return NYTP_ERR_NULL;
     }
@@ -254,11 +291,23 @@ nytp_status nytp_sink_end_fork_parent(nytp_sink *sink)
     }
     /* Parent keeps sequence continuity. */
     sink->state = NYTP_SINK_ACTIVE;
+    if (sink->ops->notify_end_fork_parent) {
+        st = sink->ops->notify_end_fork_parent(sink);
+        if (st != NYTP_OK) {
+            if (st == NYTP_ERR_IO || st == NYTP_ERR_FAILED ||
+                st == NYTP_ERR_OVERFLOW) {
+                sink->state = NYTP_SINK_FAILED;
+                sink->fail_reason = st;
+            }
+            return st;
+        }
+    }
     return NYTP_OK;
 }
 
 nytp_status nytp_sink_end_fork_child(nytp_sink *sink)
 {
+    nytp_status st;
     if (!sink || !sink->ops) {
         return NYTP_ERR_NULL;
     }
@@ -270,6 +319,17 @@ nytp_status nytp_sink_end_fork_child(nytp_sink *sink)
     sink->next_seq = 0;
     sink->last_seq = 0;
     sink->has_last_seq = 0;
+    if (sink->ops->notify_end_fork_child) {
+        st = sink->ops->notify_end_fork_child(sink);
+        if (st != NYTP_OK) {
+            if (st == NYTP_ERR_IO || st == NYTP_ERR_FAILED ||
+                st == NYTP_ERR_OVERFLOW) {
+                sink->state = NYTP_SINK_FAILED;
+                sink->fail_reason = st;
+            }
+            return st;
+        }
+    }
     return NYTP_OK;
 }
 
@@ -302,6 +362,7 @@ nytp_status nytp_sink_fail_reason(const nytp_sink *sink)
 
 nytp_status nytp_sink_flush(nytp_sink *sink)
 {
+    nytp_status st;
     if (!sink || !sink->ops) {
         return NYTP_ERR_NULL;
     }
@@ -313,7 +374,13 @@ nytp_status nytp_sink_flush(nytp_sink *sink)
     if (!sink->ops->flush) {
         return NYTP_OK;
     }
-    return sink->ops->flush(sink);
+    st = sink->ops->flush(sink);
+    /* Sticky-fail parent on hard errors (same policy as emit_commit). */
+    if (st == NYTP_ERR_IO || st == NYTP_ERR_FAILED || st == NYTP_ERR_OVERFLOW) {
+        sink->state = NYTP_SINK_FAILED;
+        sink->fail_reason = st;
+    }
+    return st;
 }
 
 nytp_status nytp_sink_close(nytp_sink *sink)

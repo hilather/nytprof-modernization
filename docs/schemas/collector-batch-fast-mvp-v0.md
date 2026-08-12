@@ -43,8 +43,11 @@
 
 - Flush drains events **in order** via child `ops->emit_*` (not public wrappers — avoids double COL-003 seq).  
 - On success: `on_logical_committed(child, event.seq, kind)` + child seq state synced.  
-- On failure: batch **retains** undrained events; hard errors mark child failed.  
-- Reset of `count` / `arena_used` only after full successful drain.
+- On **mid-batch failure**: already-acked prefix is **compacted out** (arena rebuilt for remaining); only unacked events remain — retry must not re-emit acked events.  
+- Hard flush errors mark **child** failed and (via public `nytp_sink_flush` / emit path) **sticky-fail the batch sink**; further emits return `NYTP_ERR_STATE`.  
+- Buffered event + high-water flush failure still advances COL-003 seq for the buffered event (`last_append_buffered`).  
+- Reset of `count` / `arena_used` only after full successful drain.  
+- Lifecycle: batch sink forwards stop/finalize/fork to child via optional `notify_*` ops.
 
 ### Oversized payload
 

@@ -23,6 +23,7 @@ static nytp_status ensure_slot(nytp_batch *b)
     if (!b) {
         return NYTP_ERR_NULL;
     }
+    b->last_append_buffered = 0;
     if (!b->child || !b->child->ops) {
         return NYTP_ERR_STATE;
     }
@@ -118,6 +119,7 @@ static void commit_event(nytp_batch *b, const nytp_event *ev, int is_stmt_fast)
     b->events[b->count] = *ev;
     b->count++;
     b->metrics.appends++;
+    b->last_append_buffered = 1;
     if (is_stmt_fast) {
         b->metrics.stmt_fast_appends++;
     }
@@ -152,9 +154,11 @@ nytp_batch *nytp_batch_create(size_t capacity, size_t arena_cap,
     }
     b->events = (nytp_event *)calloc(capacity, sizeof(nytp_event));
     b->arena = (char *)malloc(arena_cap);
-    if (!b->events || !b->arena) {
+    b->compact_tmp = (char *)malloc(arena_cap);
+    if (!b->events || !b->arena || !b->compact_tmp) {
         free(b->events);
         free(b->arena);
+        free(b->compact_tmp);
         free(b);
         return NULL;
     }
@@ -164,11 +168,12 @@ nytp_batch *nytp_batch_create(size_t capacity, size_t arena_cap,
     b->count = 0;
     b->arena_used = 0;
     metrics_zero(&b->metrics);
-    /* create-time heap: batch + events + arena (3). No further grow. */
-    b->metrics.heap_allocs = 3;
+    /* create-time heap: batch + events + arena + compact_tmp (4). No grow. */
+    b->metrics.heap_allocs = 4;
     b->child = NULL;
     b->owns_child = 0;
     b->child_ops = NULL;
+    b->last_append_buffered = 0;
     return b;
 }
 
@@ -183,6 +188,7 @@ void nytp_batch_destroy(nytp_batch *batch)
     }
     free(batch->events);
     free(batch->arena);
+    free(batch->compact_tmp);
     free(batch);
 }
 
@@ -220,6 +226,106 @@ size_t nytp_batch_arena_used(const nytp_batch *batch)
 const nytp_batch_metrics *nytp_batch_get_metrics(const nytp_batch *batch)
 {
     return batch ? &batch->metrics : NULL;
+}
+
+int nytp_batch_last_append_buffered(const nytp_batch *batch)
+{
+    return batch ? batch->last_append_buffered : 0;
+}
+
+/* ---- compact after partial flush (drop acked prefix; rebuild arena) ---- */
+
+static nytp_status reloc_str(char *dst, size_t *used, size_t cap,
+                             const char *src_arena, nytp_arena_str *s)
+{
+    if (!s) {
+        return NYTP_ERR_NULL;
+    }
+    if (s->len == 0) {
+        s->off = 0;
+        return NYTP_OK;
+    }
+    if (*used + s->len > cap) {
+        return NYTP_ERR_OVERFLOW;
+    }
+    memcpy(dst + *used, src_arena + s->off, s->len);
+    s->off = (uint32_t)(*used);
+    *used += s->len;
+    return NYTP_OK;
+}
+
+static nytp_status reloc_event_strings(char *dst, size_t *used, size_t cap,
+                                       const char *src, nytp_event *ev)
+{
+    nytp_status st;
+    switch (ev->kind) {
+    case NYTP_EVT_ATTRIBUTE:
+    case NYTP_EVT_OPTION:
+        st = reloc_str(dst, used, cap, src, &ev->u.attr.key);
+        if (st != NYTP_OK) {
+            return st;
+        }
+        return reloc_str(dst, used, cap, src, &ev->u.attr.value);
+    case NYTP_EVT_COMMENT:
+        return reloc_str(dst, used, cap, src, &ev->u.comment.text);
+    case NYTP_EVT_NEW_FID:
+        return reloc_str(dst, used, cap, src, &ev->u.new_fid.name);
+    case NYTP_EVT_SRC_LINE:
+        return reloc_str(dst, used, cap, src, &ev->u.src_line.text);
+    case NYTP_EVT_SUB_INFO:
+        return reloc_str(dst, used, cap, src, &ev->u.sub_info.name);
+    case NYTP_EVT_SUB_CALLERS:
+        st = reloc_str(dst, used, cap, src, &ev->u.sub_callers.called);
+        if (st != NYTP_OK) {
+            return st;
+        }
+        return reloc_str(dst, used, cap, src, &ev->u.sub_callers.caller);
+    case NYTP_EVT_SUB_RETURN:
+        return reloc_str(dst, used, cap, src, &ev->u.sub_return.subname);
+    default:
+        return NYTP_OK; /* POD-only kinds */
+    }
+}
+
+/*
+ * Drop events[0..first_unacked) (already acked). Rebuild arena for remaining.
+ * Uses preallocated compact_tmp (no heap on fail path).
+ */
+static nytp_status compact_unacked(nytp_batch *b, size_t first_unacked)
+{
+    size_t n;
+    size_t i;
+    size_t used = 0;
+    nytp_status st;
+
+    if (first_unacked == 0) {
+        return NYTP_OK;
+    }
+    if (first_unacked >= b->count) {
+        b->count = 0;
+        b->arena_used = 0;
+        return NYTP_OK;
+    }
+    n = b->count - first_unacked;
+    /* Move headers first; string offsets still valid in old arena. */
+    memmove(b->events, b->events + first_unacked, n * sizeof(nytp_event));
+    b->count = n;
+
+    if (!b->compact_tmp) {
+        return NYTP_ERR_OVERFLOW;
+    }
+    for (i = 0; i < n; i++) {
+        st = reloc_event_strings(b->compact_tmp, &used, b->arena_cap, b->arena,
+                                 &b->events[i]);
+        if (st != NYTP_OK) {
+            return st;
+        }
+    }
+    if (used > 0) {
+        memcpy(b->arena, b->compact_tmp, used);
+    }
+    b->arena_used = used;
+    return NYTP_OK;
 }
 
 /* ---- flush / replay ---- */
@@ -385,7 +491,11 @@ nytp_status nytp_batch_flush(nytp_batch *batch)
     for (i = 0; i < batch->count; i++) {
         nytp_status st = replay_one(batch, &batch->events[i]);
         if (st != NYTP_OK) {
-            /* Leave remaining events buffered; fail closed on hard errors. */
+            /*
+             * Drop already-acked prefix so a later flush cannot re-emit it.
+             * Retain only events[i..count) as the new pending set.
+             */
+            (void)compact_unacked(batch, i);
             if (st == NYTP_ERR_IO || st == NYTP_ERR_FAILED ||
                 st == NYTP_ERR_OVERFLOW) {
                 (void)nytp_sink_mark_failed(batch->child, st);
@@ -1027,6 +1137,7 @@ static nytp_status batch_sink_flush(nytp_sink *sink)
 {
     batch_sink_impl *bi = (batch_sink_impl *)sink->impl;
     nytp_status st;
+    nytp_sink *child;
     if (!bi || !bi->batch) {
         return NYTP_ERR_NULL;
     }
@@ -1034,14 +1145,23 @@ static nytp_status batch_sink_flush(nytp_sink *sink)
     if (st != NYTP_OK) {
         return st;
     }
-    /* Also flush child backend. */
-    return nytp_sink_flush(bi->batch->child);
+    child = bi->batch->child;
+    if (!child) {
+        return NYTP_ERR_STATE;
+    }
+    /* Child already terminal: drain succeeded; do not report STATE as half-success. */
+    if (nytp_sink_get_state(child) == NYTP_SINK_FAILED ||
+        nytp_sink_get_state(child) == NYTP_SINK_CLOSED) {
+        return NYTP_OK;
+    }
+    return nytp_sink_flush(child);
 }
 
 static nytp_status batch_sink_close(nytp_sink *sink)
 {
     batch_sink_impl *bi = (batch_sink_impl *)sink->impl;
     nytp_status st;
+    nytp_sink *child;
     if (!bi || !bi->batch) {
         return NYTP_ERR_NULL;
     }
@@ -1049,7 +1169,96 @@ static nytp_status batch_sink_close(nytp_sink *sink)
     if (st != NYTP_OK) {
         return st;
     }
-    return nytp_sink_close(bi->batch->child);
+    child = bi->batch->child;
+    if (!child) {
+        return NYTP_ERR_STATE;
+    }
+    if (nytp_sink_get_state(child) == NYTP_SINK_CLOSED) {
+        return NYTP_OK;
+    }
+    if (nytp_sink_get_state(child) == NYTP_SINK_FAILED) {
+        /* Best-effort close of a failed child. */
+        return nytp_sink_close(child);
+    }
+    return nytp_sink_close(child);
+}
+
+/* COL-002: forward lifecycle to child so finalization gates stay aligned. */
+static nytp_status batch_notify_stop(nytp_sink *sink)
+{
+    batch_sink_impl *bi = (batch_sink_impl *)sink->impl;
+    nytp_sink *c;
+    if (!bi || !bi->batch || !bi->batch->child) {
+        return NYTP_ERR_STATE;
+    }
+    c = bi->batch->child;
+    if (nytp_sink_get_state(c) == NYTP_SINK_ACTIVE) {
+        return nytp_sink_stop(c);
+    }
+    return NYTP_OK;
+}
+
+static nytp_status batch_notify_begin_finalize(nytp_sink *sink)
+{
+    batch_sink_impl *bi = (batch_sink_impl *)sink->impl;
+    nytp_sink *c;
+    nytp_sink_state cs;
+    if (!bi || !bi->batch || !bi->batch->child) {
+        return NYTP_ERR_STATE;
+    }
+    c = bi->batch->child;
+    cs = nytp_sink_get_state(c);
+    if (cs == NYTP_SINK_OPEN || cs == NYTP_SINK_ACTIVE ||
+        cs == NYTP_SINK_STOPPED) {
+        return nytp_sink_begin_finalize(c);
+    }
+    if (cs == NYTP_SINK_FINALIZING) {
+        return NYTP_OK;
+    }
+    return NYTP_ERR_STATE;
+}
+
+static nytp_status batch_notify_begin_fork(nytp_sink *sink)
+{
+    batch_sink_impl *bi = (batch_sink_impl *)sink->impl;
+    nytp_sink *c;
+    if (!bi || !bi->batch || !bi->batch->child) {
+        return NYTP_ERR_STATE;
+    }
+    c = bi->batch->child;
+    if (nytp_sink_get_state(c) == NYTP_SINK_ACTIVE) {
+        return nytp_sink_begin_fork(c);
+    }
+    return NYTP_ERR_STATE;
+}
+
+static nytp_status batch_notify_end_fork_parent(nytp_sink *sink)
+{
+    batch_sink_impl *bi = (batch_sink_impl *)sink->impl;
+    nytp_sink *c;
+    if (!bi || !bi->batch || !bi->batch->child) {
+        return NYTP_ERR_STATE;
+    }
+    c = bi->batch->child;
+    if (nytp_sink_get_state(c) == NYTP_SINK_FORK_SPLIT) {
+        return nytp_sink_end_fork_parent(c);
+    }
+    return NYTP_OK;
+}
+
+static nytp_status batch_notify_end_fork_child(nytp_sink *sink)
+{
+    batch_sink_impl *bi = (batch_sink_impl *)sink->impl;
+    nytp_sink *c;
+    if (!bi || !bi->batch || !bi->batch->child) {
+        return NYTP_ERR_STATE;
+    }
+    c = bi->batch->child;
+    if (nytp_sink_get_state(c) == NYTP_SINK_FORK_SPLIT) {
+        return nytp_sink_end_fork_child(c);
+    }
+    /* Align child to OPEN + seq reset if already open. */
+    return NYTP_OK;
 }
 
 static void batch_sink_destroy(nytp_sink *sink)
@@ -1069,47 +1278,65 @@ static void batch_sink_destroy(nytp_sink *sink)
 }
 
 /*
- * Assign seq from the *batch sink* (public wrapper already assigned via
- * emit_commit after this returns OK). Wait — public wrappers call ops then
- * emit_commit. So ops should NOT assign seq; wrapper does.
- *
- * But append needs the seq to stamp on the event. Chicken-and-egg:
- * emit_commit assigns after ops return.
- *
- * Fix: peek next_seq on the batch sink (wrapper-owned field) at append time.
- * emit_commit will assign the same value after success.
+ * Peek next_seq for stamping; emit_commit advances on OK.
+ * If append buffers the event but HW/full flush fails, pre-advance seq so
+ * logical_count matches buffered work (Issue 3); emit_commit then sticky-fails
+ * without double-advancing.
  */
 static nytp_seq peek_seq(nytp_sink *sink)
 {
     return sink->next_seq;
 }
 
+static nytp_status bs_finish(nytp_sink *sink, nytp_batch *batch, nytp_seq seq,
+                             int logical, nytp_status st)
+{
+    if (st == NYTP_OK) {
+        return NYTP_OK;
+    }
+    if (logical && nytp_batch_last_append_buffered(batch) &&
+        sink->next_seq == seq) {
+        sink->last_seq = seq;
+        sink->next_seq = seq + 1;
+        sink->has_last_seq = 1;
+    }
+    return st;
+}
+
 static nytp_status bs_emit_attribute(nytp_sink *sink, nytp_string_view key,
                                      nytp_string_view value)
 {
     batch_sink_impl *bi = (batch_sink_impl *)sink->impl;
-    return nytp_batch_append_attribute(bi->batch, peek_seq(sink), key, value);
+    nytp_seq seq = peek_seq(sink);
+    return bs_finish(sink, bi->batch, seq, 1,
+                     nytp_batch_append_attribute(bi->batch, seq, key, value));
 }
 
 static nytp_status bs_emit_option(nytp_sink *sink, nytp_string_view key,
                                   nytp_string_view value)
 {
     batch_sink_impl *bi = (batch_sink_impl *)sink->impl;
-    return nytp_batch_append_option(bi->batch, peek_seq(sink), key, value);
+    nytp_seq seq = peek_seq(sink);
+    return bs_finish(sink, bi->batch, seq, 1,
+                     nytp_batch_append_option(bi->batch, seq, key, value));
 }
 
 static nytp_status bs_emit_comment(nytp_sink *sink, nytp_string_view text)
 {
     batch_sink_impl *bi = (batch_sink_impl *)sink->impl;
-    return nytp_batch_append_comment(bi->batch, peek_seq(sink), text);
+    nytp_seq seq = peek_seq(sink);
+    return bs_finish(sink, bi->batch, seq, 1,
+                     nytp_batch_append_comment(bi->batch, seq, text));
 }
 
 static nytp_status bs_emit_time_line(nytp_sink *sink, nytp_ticks ticks,
                                      nytp_fid fid, nytp_line line)
 {
     batch_sink_impl *bi = (batch_sink_impl *)sink->impl;
-    return nytp_batch_append_time_line(bi->batch, peek_seq(sink), ticks, fid,
-                                       line);
+    nytp_seq seq = peek_seq(sink);
+    return bs_finish(sink, bi->batch, seq, 1,
+                     nytp_batch_append_time_line(bi->batch, seq, ticks, fid,
+                                                 line));
 }
 
 static nytp_status bs_emit_time_block(nytp_sink *sink, nytp_ticks ticks,
@@ -1117,14 +1344,18 @@ static nytp_status bs_emit_time_block(nytp_sink *sink, nytp_ticks ticks,
                                       nytp_line block_line, nytp_line sub_line)
 {
     batch_sink_impl *bi = (batch_sink_impl *)sink->impl;
-    return nytp_batch_append_time_block(bi->batch, peek_seq(sink), ticks, fid,
-                                        line, block_line, sub_line);
+    nytp_seq seq = peek_seq(sink);
+    return bs_finish(sink, bi->batch, seq, 1,
+                     nytp_batch_append_time_block(bi->batch, seq, ticks, fid,
+                                                  line, block_line, sub_line));
 }
 
 static nytp_status bs_emit_discount(nytp_sink *sink)
 {
     batch_sink_impl *bi = (batch_sink_impl *)sink->impl;
-    return nytp_batch_append_discount(bi->batch, peek_seq(sink));
+    nytp_seq seq = peek_seq(sink);
+    return bs_finish(sink, bi->batch, seq, 1,
+                     nytp_batch_append_discount(bi->batch, seq));
 }
 
 static nytp_status bs_emit_new_fid(nytp_sink *sink, nytp_fid fid,
@@ -1133,16 +1364,20 @@ static nytp_status bs_emit_new_fid(nytp_sink *sink, nytp_fid fid,
                                    nytp_string_view name)
 {
     batch_sink_impl *bi = (batch_sink_impl *)sink->impl;
-    return nytp_batch_append_new_fid(bi->batch, peek_seq(sink), fid, eval_fid,
-                                     eval_line, flags, size, mtime, name);
+    nytp_seq seq = peek_seq(sink);
+    return bs_finish(sink, bi->batch, seq, 1,
+                     nytp_batch_append_new_fid(bi->batch, seq, fid, eval_fid,
+                                               eval_line, flags, size, mtime,
+                                               name));
 }
 
 static nytp_status bs_emit_src_line(nytp_sink *sink, nytp_fid fid, nytp_line line,
                                     nytp_string_view text)
 {
     batch_sink_impl *bi = (batch_sink_impl *)sink->impl;
-    return nytp_batch_append_src_line(bi->batch, peek_seq(sink), fid, line,
-                                      text);
+    nytp_seq seq = peek_seq(sink);
+    return bs_finish(sink, bi->batch, seq, 1,
+                     nytp_batch_append_src_line(bi->batch, seq, fid, line, text));
 }
 
 static nytp_status bs_emit_sub_info(nytp_sink *sink, nytp_fid fid,
@@ -1150,8 +1385,10 @@ static nytp_status bs_emit_sub_info(nytp_sink *sink, nytp_fid fid,
                                     nytp_string_view name)
 {
     batch_sink_impl *bi = (batch_sink_impl *)sink->impl;
-    return nytp_batch_append_sub_info(bi->batch, peek_seq(sink), fid, first_line,
-                                      last_line, name);
+    nytp_seq seq = peek_seq(sink);
+    return bs_finish(sink, bi->batch, seq, 1,
+                     nytp_batch_append_sub_info(bi->batch, seq, fid, first_line,
+                                                last_line, name));
 }
 
 static nytp_status bs_emit_sub_callers(nytp_sink *sink, nytp_fid fid,
@@ -1162,32 +1399,40 @@ static nytp_status bs_emit_sub_callers(nytp_sink *sink, nytp_fid fid,
                                        nytp_string_view caller)
 {
     batch_sink_impl *bi = (batch_sink_impl *)sink->impl;
-    return nytp_batch_append_sub_callers(bi->batch, peek_seq(sink), fid, line,
-                                         count, incl, excl, reci, rec_depth,
-                                         called, caller);
+    nytp_seq seq = peek_seq(sink);
+    return bs_finish(sink, bi->batch, seq, 1,
+                     nytp_batch_append_sub_callers(bi->batch, seq, fid, line,
+                                                   count, incl, excl, reci,
+                                                   rec_depth, called, caller));
 }
 
 static nytp_status bs_emit_pid_start(nytp_sink *sink, nytp_pid pid,
                                      nytp_pid ppid, double start_time)
 {
     batch_sink_impl *bi = (batch_sink_impl *)sink->impl;
-    return nytp_batch_append_pid_start(bi->batch, peek_seq(sink), pid, ppid,
-                                       start_time);
+    nytp_seq seq = peek_seq(sink);
+    return bs_finish(sink, bi->batch, seq, 1,
+                     nytp_batch_append_pid_start(bi->batch, seq, pid, ppid,
+                                                 start_time));
 }
 
 static nytp_status bs_emit_pid_end(nytp_sink *sink, nytp_pid pid,
                                    double end_time)
 {
     batch_sink_impl *bi = (batch_sink_impl *)sink->impl;
-    return nytp_batch_append_pid_end(bi->batch, peek_seq(sink), pid, end_time);
+    nytp_seq seq = peek_seq(sink);
+    return bs_finish(sink, bi->batch, seq, 1,
+                     nytp_batch_append_pid_end(bi->batch, seq, pid, end_time));
 }
 
 static nytp_status bs_emit_sub_entry(nytp_sink *sink, nytp_fid caller_fid,
                                      nytp_line caller_line)
 {
     batch_sink_impl *bi = (batch_sink_impl *)sink->impl;
-    return nytp_batch_append_sub_entry(bi->batch, peek_seq(sink), caller_fid,
-                                       caller_line);
+    nytp_seq seq = peek_seq(sink);
+    return bs_finish(sink, bi->batch, seq, 1,
+                     nytp_batch_append_sub_entry(bi->batch, seq, caller_fid,
+                                                 caller_line));
 }
 
 static nytp_status bs_emit_sub_return(nytp_sink *sink, nytp_depth depth,
@@ -1195,38 +1440,47 @@ static nytp_status bs_emit_sub_return(nytp_sink *sink, nytp_depth depth,
                                       nytp_string_view subname)
 {
     batch_sink_impl *bi = (batch_sink_impl *)sink->impl;
-    return nytp_batch_append_sub_return(bi->batch, peek_seq(sink), depth,
-                                        incl_time, excl_time, subname);
+    nytp_seq seq = peek_seq(sink);
+    return bs_finish(sink, bi->batch, seq, 1,
+                     nytp_batch_append_sub_return(bi->batch, seq, depth,
+                                                  incl_time, excl_time,
+                                                  subname));
 }
 
 static nytp_status bs_emit_start_deflate(nytp_sink *sink)
 {
     batch_sink_impl *bi = (batch_sink_impl *)sink->impl;
+    /* Control event: no logical seq. */
     return nytp_batch_append_start_deflate(bi->batch);
 }
 
 static const nytp_sink_ops BATCH_OPS = {
-    batch_sink_name,
-    batch_sink_activate,
-    batch_sink_flush,
-    batch_sink_close,
-    batch_sink_destroy,
-    bs_emit_attribute,
-    bs_emit_option,
-    bs_emit_comment,
-    bs_emit_time_line,
-    bs_emit_time_block,
-    bs_emit_discount,
-    bs_emit_new_fid,
-    bs_emit_src_line,
-    bs_emit_sub_info,
-    bs_emit_sub_callers,
-    bs_emit_pid_start,
-    bs_emit_pid_end,
-    bs_emit_sub_entry,
-    bs_emit_sub_return,
-    bs_emit_start_deflate,
-    NULL /* on_logical_committed: seq rings live on child via flush replay */
+    .name = batch_sink_name,
+    .activate = batch_sink_activate,
+    .flush = batch_sink_flush,
+    .close = batch_sink_close,
+    .destroy = batch_sink_destroy,
+    .emit_attribute = bs_emit_attribute,
+    .emit_option = bs_emit_option,
+    .emit_comment = bs_emit_comment,
+    .emit_time_line = bs_emit_time_line,
+    .emit_time_block = bs_emit_time_block,
+    .emit_discount = bs_emit_discount,
+    .emit_new_fid = bs_emit_new_fid,
+    .emit_src_line = bs_emit_src_line,
+    .emit_sub_info = bs_emit_sub_info,
+    .emit_sub_callers = bs_emit_sub_callers,
+    .emit_pid_start = bs_emit_pid_start,
+    .emit_pid_end = bs_emit_pid_end,
+    .emit_sub_entry = bs_emit_sub_entry,
+    .emit_sub_return = bs_emit_sub_return,
+    .emit_start_deflate = bs_emit_start_deflate,
+    .on_logical_committed = NULL,
+    .notify_stop = batch_notify_stop,
+    .notify_begin_finalize = batch_notify_begin_finalize,
+    .notify_begin_fork = batch_notify_begin_fork,
+    .notify_end_fork_parent = batch_notify_end_fork_parent,
+    .notify_end_fork_child = batch_notify_end_fork_child,
 };
 
 nytp_sink *nytp_batch_sink_create(nytp_sink *child, size_t capacity,
@@ -1301,6 +1555,12 @@ nytp_status nytp_fast_emit_time_line(nytp_sink *sink, nytp_ticks ticks,
     seq = sink->next_seq;
     st = nytp_batch_append_time_line(b, seq, ticks, fid, line);
     if (st != NYTP_OK) {
+        /* Buffered-but-flush-failed still consumes seq (Issue 3). */
+        if (nytp_batch_last_append_buffered(b) && sink->next_seq == seq) {
+            sink->last_seq = seq;
+            sink->next_seq = seq + 1;
+            sink->has_last_seq = 1;
+        }
         if (st == NYTP_ERR_IO || st == NYTP_ERR_FAILED ||
             st == NYTP_ERR_OVERFLOW) {
             sink->state = NYTP_SINK_FAILED;
@@ -1337,6 +1597,11 @@ nytp_status nytp_fast_emit_time_block(nytp_sink *sink, nytp_ticks ticks,
     st = nytp_batch_append_time_block(b, seq, ticks, fid, line, block_line,
                                       sub_line);
     if (st != NYTP_OK) {
+        if (nytp_batch_last_append_buffered(b) && sink->next_seq == seq) {
+            sink->last_seq = seq;
+            sink->next_seq = seq + 1;
+            sink->has_last_seq = 1;
+        }
         if (st == NYTP_ERR_IO || st == NYTP_ERR_FAILED ||
             st == NYTP_ERR_OVERFLOW) {
             sink->state = NYTP_SINK_FAILED;

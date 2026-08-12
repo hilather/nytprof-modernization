@@ -117,6 +117,17 @@ typedef struct nytp_sink_ops {
      */
     void (*on_logical_committed)(nytp_sink *sink, nytp_seq seq,
                                  nytp_event_kind kind);
+
+    /*
+     * Optional lifecycle forward hooks (NULL ok). Invoked by public
+     * COL-002 wrappers after the parent sink state is updated, so layered
+     * sinks (batch) can keep a child in sync (stop/finalize/fork).
+     */
+    nytp_status (*notify_stop)(nytp_sink *sink);
+    nytp_status (*notify_begin_finalize)(nytp_sink *sink);
+    nytp_status (*notify_begin_fork)(nytp_sink *sink);
+    nytp_status (*notify_end_fork_parent)(nytp_sink *sink);
+    nytp_status (*notify_end_fork_child)(nytp_sink *sink);
 } nytp_sink_ops;
 
 struct nytp_sink {

@@ -49,6 +49,13 @@ typedef struct nytp_counting_stats {
      * prove no phantom seq on failed emit (COL-003 / dual-compare safety).
      */
     nytp_status fail_next_emit;
+    /*
+     * Test hook: allow `fail_after_ok` successful ops emits, then fail once
+     * with fail_after_err. 0 = disabled. Used for mid-batch partial flush.
+     */
+    uint32_t fail_after_ok;
+    uint32_t fail_after_seen;
+    nytp_status fail_after_err;
 } nytp_counting_stats;
 
 /* Heap-allocate a counting sink (OPEN). Destroy with nytp_sink_destroy. */
@@ -62,6 +69,16 @@ const nytp_counting_stats *nytp_counting_sink_stats(const nytp_sink *sink);
  * Returns NYTP_ERR_NULL if not a counting sink.
  */
 nytp_status nytp_counting_sink_fail_next(nytp_sink *sink, nytp_status err);
+
+/*
+ * Allow `ok_before_fail` successful emit_* ops, then fail once with `err`.
+ * Example: ok_before_fail=1 → first emit OK, second returns err (mid-batch).
+ */
+nytp_status nytp_counting_sink_fail_after(nytp_sink *sink, uint32_t ok_before_fail,
+                                          nytp_status err);
+
+/* Clear fail_next / fail_after arms (test recovery). */
+nytp_status nytp_counting_sink_clear_fail(nytp_sink *sink);
 
 /*
  * Copy logical seq ring into out[0..*out_n). *out_n in/out capacity/count.
