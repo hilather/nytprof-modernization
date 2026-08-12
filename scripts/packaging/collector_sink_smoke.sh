@@ -162,9 +162,15 @@ EXTRA_LDFLAGS=()
 [[ -n "${LDFLAGS-}" ]] && EXTRA_LDFLAGS+=($LDFLAGS)
 
 # zlib/zstd/lz4 required for COL-006 v5 + COL-007 v6 codecs
+LINK_CFLAGS=()
+LINK_LDFLAGS=()
+if [[ ${#EXTRA_CFLAGS[@]} -gt 0 ]]; then LINK_CFLAGS+=("${EXTRA_CFLAGS[@]}"); fi
+if [[ ${#CODEC_CFLAGS[@]} -gt 0 ]]; then LINK_CFLAGS+=("${CODEC_CFLAGS[@]}"); fi
+if [[ ${#EXTRA_LDFLAGS[@]} -gt 0 ]]; then LINK_LDFLAGS+=("${EXTRA_LDFLAGS[@]}"); fi
+if [[ ${#CODEC_LDFLAGS[@]} -gt 0 ]]; then LINK_LDFLAGS+=("${CODEC_LDFLAGS[@]}"); fi
 if ! echo 'int main(void){return 0;}' | "$CC_BIN" -x c - \
-    "${EXTRA_CFLAGS[@]}" "${CODEC_CFLAGS[@]}" \
-    "${EXTRA_LDFLAGS[@]}" "${CODEC_LDFLAGS[@]}" \
+    ${LINK_CFLAGS[@]+"${LINK_CFLAGS[@]}"} \
+    ${LINK_LDFLAGS[@]+"${LINK_LDFLAGS[@]}"} \
     -lz -lzstd -llz4 -o /tmp/nytp_zcheck_$$ 2>/dev/null; then
   fail "zlib+zstd+lz4 (-lz -lzstd -llz4) required for COL-006/007 wire writers; install zlib/zstd/lz4 dev packages (macOS: brew install zlib zstd lz4)"
 fi
@@ -175,11 +181,21 @@ ok "zlib/zstd/lz4 link available"
 # Build + unit test (real entry: collector/Makefile)
 # ---------------------------------------------------------------------------
 banner "make -C collector clean test"
-# Pass discovered brew -I/-L into make so LDLIBS resolve on Darwin runners.
-export CPPFLAGS="${CPPFLAGS-} ${CODEC_CFLAGS[*]-}"
-export LDFLAGS="${LDFLAGS-} ${CODEC_LDFLAGS[*]-}"
+# Always keep collector `include/` on the path. Do not pass a bare
+# CPPFLAGS= on the make command line that drops Makefile `+= -Iinclude`.
+MAKE_CPPFLAGS="-Iinclude"
+MAKE_LDFLAGS=""
+if [[ ${#LINK_CFLAGS[@]} -gt 0 ]]; then
+  MAKE_CPPFLAGS+=" ${LINK_CFLAGS[*]}"
+fi
+if [[ ${#LINK_LDFLAGS[@]} -gt 0 ]]; then
+  MAKE_LDFLAGS+=" ${LINK_LDFLAGS[*]}"
+fi
+export CPPFLAGS="$MAKE_CPPFLAGS"
+export LDFLAGS="$MAKE_LDFLAGS"
 make -C "$COLLECTOR" clean
-make -C "$COLLECTOR" test CC="$CC_BIN" CPPFLAGS="$CPPFLAGS" LDFLAGS="$LDFLAGS"
+# Env carries CPPFLAGS/LDFLAGS (with -Iinclude); avoid empty CLI override.
+make -C "$COLLECTOR" test CC="$CC_BIN"
 
 [[ -x "$COLLECTOR/build/test_sink_api" ]] || fail "test binary missing after make test"
 [[ -x "$COLLECTOR/build/test_lifecycle_seq" ]] || fail "test_lifecycle_seq missing"
