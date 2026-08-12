@@ -9,6 +9,8 @@
 #   3. scripts/packaging/dual_path_smoke.sh (primary packaging path)
 #   4. scripts/packaging/engine_auto_fallback_smoke.sh (ENGINE-AUTO-FALLBACK)
 #   5. scripts/packaging/perl_jsonl_data_all_smoke.sh (pure-Perl JsonlData roll-up, incl. stream_complete / discount)
+#   5b. scripts/packaging/perl_xs_data_readstream_smoke.sh (PR-A06 / PERL-XS-DATA-READSTREAM-MVP:
+#       product Data/ReadStream over golden JSONL + optional binary native dump)
 #   6. scripts/packaging/perl_query_json_smoke.sh (QUERY-JSON-MVP / QUERY-JSON-EXPAND;
 #      pure-Perl golden --jsonl; no cargo required) — CI-QUERY-JSON-GATE
 #   6b. scripts/packaging/json_sub_entry_smoke.sh (JSON-SUB-ENTRY-MVP: sub_entry_events
@@ -76,6 +78,7 @@ HARNESS="$ROOT/tools/oracle/selftest_harness.sh"
 PACKAGING="$ROOT/scripts/packaging/dual_path_smoke.sh"
 ENGINE_AUTO_FALLBACK="$ROOT/scripts/packaging/engine_auto_fallback_smoke.sh"
 JSONL_DATA_ALL="$ROOT/scripts/packaging/perl_jsonl_data_all_smoke.sh"
+XS_DATA_RS_SMOKE="$ROOT/scripts/packaging/perl_xs_data_readstream_smoke.sh"
 QUERY_JSON_SMOKE="$ROOT/scripts/packaging/perl_query_json_smoke.sh"
 JSON_SUB_ENTRY_SMOKE="$ROOT/scripts/packaging/json_sub_entry_smoke.sh"
 JSON_BLOCKS_SMOKE="$ROOT/scripts/packaging/json_blocks_smoke.sh"
@@ -166,6 +169,12 @@ run_required "engine_auto_fallback_smoke (ENGINE-AUTO-FALLBACK)" "$ENGINE_AUTO_F
 # 5. Pure-Perl JsonlData roll-up (returns/edges/line_totals/subdefs/source/a4b/meta/pid/stream_complete/discount)
 # ---------------------------------------------------------------------------
 run_required "perl_jsonl_data_all_smoke (JsonlData pure-Perl)" "$JSONL_DATA_ALL"
+
+# ---------------------------------------------------------------------------
+# 5b. PR-A06 / PERL-XS-DATA-READSTREAM-MVP: product Data + ReadStream facades
+#     (binary via native dump when CLI present; golden JSONL always required).
+# ---------------------------------------------------------------------------
+run_required "perl_xs_data_readstream_smoke (PERL-XS-DATA-READSTREAM-MVP / PR-A06)" "$XS_DATA_RS_SMOKE"
 
 # ---------------------------------------------------------------------------
 # 6. QUERY-JSON-MVP / QUERY-JSON-EXPAND: structured query --json via pure-Perl
