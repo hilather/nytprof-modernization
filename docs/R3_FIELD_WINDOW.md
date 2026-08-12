@@ -50,7 +50,8 @@ Aligned with plan [REL-005](https://github.com/hilather/nytprof-modernization/bl
 | Prefer-native under auto | `runs/engine_auto_*` | Perl facade `--engine=auto report` (and query when useful) |
 | Explicit native | `runs/engine_native_*` | Same profile; semantic samples when fixture-like |
 | Explicit legacy escape | `runs/engine_legacy_*` | Force path remains usable |
-| Fallback when native missing | `runs/engine_auto_force_no_native_*` | `NYTPROF_FORCE_NO_NATIVE=1` (test hook) **or** field note when CLI absent |
+| Fallback when native missing | `runs/engine_auto_force_no_native_*` | `NYTPROF_FORCE_NO_NATIVE=1` + **auto** (test hook) **or** field note when CLI absent. STDERR fallback note required; **`rc==0` only if** `baseline/6.15/install` present — honest non-zero otherwise |
+| Explicit native fail-closed under force | `runs/engine_native_force_no_native_*` | `NYTPROF_FORCE_NO_NATIVE=1` + **native** must **not** silent-legacy; non-zero `rc` |
 | Issues / severity | report template § Issues | High-severity correctness → window fail / no promotion |
 | Platform tier | report template + provenance | Eligible tiers for a future ADR |
 | Duration / volume | report template header | Suggested window in §4 — not frozen by this pack |

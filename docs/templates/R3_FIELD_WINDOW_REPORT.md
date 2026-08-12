@@ -57,15 +57,21 @@ Confirm: no pack used `crates/` on oracle `PERL5LIB`.
 
 ### Lab / fixture baseline (required for lab packs)
 
-On `fixtures/v5/default-calls1/nytprof.out` when native is present:
+On `fixtures/v5/default-calls1/nytprof.out` when native is present. Fill from pack `runs/*` / `summary.json` (collector run ids below).
 
-| Check | Expected | Result |
-|-------|----------|--------|
-| `--engine=auto report` leaf / mid | **15** / **3** | |
-| `--engine=native report` leaf / mid | **15** / **3** | |
-| `capability --json` | `ok`/`decode`/`report`/`verify` true | |
-| `NYTPROF_FORCE_NO_NATIVE=1` + auto report | exit 0 via legacy; STDERR fallback note | |
-| Explicit `--engine=native` + force-no-native | fail closed (no silent legacy) | |
+| Check | Pack run id (when collected) | Expected | Result |
+|-------|------------------------------|----------|--------|
+| `--engine=auto report` leaf / mid | `engine_auto_report_default-calls1` | **15** / **3**, `rc==0` | |
+| `--engine=native report` leaf / mid | `engine_native_report_default-calls1` | **15** / **3**, `rc==0` | |
+| `capability --json` | `capability/capability.json` | `ok`/`decode`/`report`/`verify` true | |
+| `NYTPROF_FORCE_NO_NATIVE=1` + **auto** report | `engine_auto_force_no_native_report_default-calls1` | **STDERR auto-fallback note** required; **`rc==0` only when** `baseline/6.15/install` (oracle pin install) is present — **honest non-zero** if pin install is absent (same residual as packaging legacy smokes) | |
+| Explicit `--engine=native` + force-no-native | `engine_native_force_no_native_report_default-calls1` | **Fail closed:** non-zero `rc`; **no** silent legacy success (no leaf/mid **15**/**3** as a false native win). Matches ENGINE-AUTO-FALLBACK packaging smoke case | |
+
+**Notes (force-no-native honesty)**
+
+- Auto + force-no-native exercises prefer-native **fallback**; it is **not** a hard fail if legacy cannot run because the oracle install tree is missing — record `rc`, `stderr_fallback_note`, and whether `baseline/6.15/install` existed.
+- Native + force-no-native must **not** fall back; a non-zero exit is the success contract for this row.
+- Optional cross-check (not required from pack alone): `./scripts/packaging/engine_auto_fallback_smoke.sh` when a full oracle pin is available.
 
 Optional extra fixtures:
 

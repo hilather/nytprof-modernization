@@ -56,7 +56,8 @@ $OUT/
 | `engine_auto_query_<label>` | Perl `nytprof-engine --engine=auto query` (when profile is golden JSONL-friendly or binary dump path works) |
 | `engine_native_report_<label>` | Explicit `--engine=native report` |
 | `engine_legacy_report_<label>` | Explicit `--engine=legacy report` (stream-dump smoke path) |
-| `engine_auto_force_no_native_report_<label>` | `NYTPROF_FORCE_NO_NATIVE=1` + auto report (fallback exercise) |
+| `engine_auto_force_no_native_report_<label>` | `NYTPROF_FORCE_NO_NATIVE=1` + **auto** report (fallback exercise). **STDERR fallback note** required; **`rc==0` only when** `baseline/6.15/install` present — honest non-zero if pin install absent |
+| `engine_native_force_no_native_report_<label>` | `NYTPROF_FORCE_NO_NATIVE=1` + **native** report (when native was discoverable). Must **fail closed** (non-zero `rc`); no silent legacy success |
 
 `<label>` is a safe basename of the profile path (fixtures use e.g. `default-calls1`).
 
@@ -187,8 +188,9 @@ Must:
 2. Assert `summary.json` parses and `no_default_flip === true`.
 3. Assert all `residuals.* === false`.
 4. When native is discoverable: assert default-calls1 auto report `rc==0` and leaf **15** / mid **3**.
-5. When force-no-native run is present: require STDERR auto-fallback note; require `rc==0` **only if** `baseline/6.15/install` exists (honest non-zero when oracle pin install is absent).
-6. Exit non-zero on layout or honesty failures.
+5. When `engine_auto_force_no_native_report_*` is present: require STDERR auto-fallback note; require `rc==0` **only if** `baseline/6.15/install` exists (honest non-zero when oracle pin install is absent).
+6. When native is discoverable and `engine_native_force_no_native_report_*` is present: require **non-zero** `rc` (fail closed; no silent legacy / no leaf **15** as success).
+7. Exit non-zero on layout or honesty failures.
 
 Not wired into `offline_gate.sh` (field package; packaging gate remains separate).
 

@@ -90,18 +90,32 @@ if native:
         errs.append(f"auto leaf_returns={auto.get('leaf_returns')} (expected 15)")
     if auto.get("mid_returns") != 3:
         errs.append(f"auto mid_returns={auto.get('mid_returns')} (expected 3)")
-    # force-no-native: must record auto→legacy attempt; rc==0 only when
-    # oracle install tree is present (same residual as packaging legacy smokes).
+    # force-no-native auto: STDERR fallback note; rc==0 only when oracle install present
     fn = runs.get("engine_auto_force_no_native_report_default-calls1") or {}
     if fn:
         if not fn.get("stderr_fallback_note"):
-            errs.append("force-no-native missing stderr fallback note")
+            errs.append("force-no-native auto missing stderr fallback note")
         oracle_install = Path("$ROOT") / "baseline/6.15/install"
         if oracle_install.is_dir() and fn.get("rc") != 0:
             errs.append(
                 f"force-no-native auto rc={fn.get('rc')} (expected 0 when oracle install present)"
             )
         # if oracle absent: honest non-zero rc is OK; note is the contract
+    else:
+        errs.append("missing run engine_auto_force_no_native_report_default-calls1")
+    # force-no-native native: must fail closed (no silent legacy success)
+    nfn = runs.get("engine_native_force_no_native_report_default-calls1") or {}
+    if not nfn:
+        errs.append("missing run engine_native_force_no_native_report_default-calls1")
+    else:
+        if nfn.get("rc") == 0:
+            errs.append(
+                "native+force-no-native rc=0 (expected non-zero fail-closed; no silent legacy)"
+            )
+        if nfn.get("leaf_returns") == 15 and nfn.get("mid_returns") == 3:
+            errs.append(
+                "native+force-no-native reported leaf/mid 15/3 (must not look like native success)"
+            )
     # capability when native
     cap = pack / "capability" / "capability.json"
     if cap.is_file():

@@ -395,7 +395,12 @@ for pref in "${PROFILES[@]}"; do
   run_engine "engine_legacy_report_${label}" legacy 0 report "$pabs" "$prel"
 
   if [[ "$SKIP_FORCE_NO_NATIVE" -eq 0 ]]; then
+    # auto + force: prefer-native fallback exercise (rc==0 only when oracle install present)
     run_engine "engine_auto_force_no_native_report_${label}" auto 1 report "$pabs" "$prel"
+    # native + force: must fail closed (no silent legacy) — ENGINE-AUTO-FALLBACK case 3
+    if [[ "$NATIVE_DISCOVERABLE" -eq 1 ]]; then
+      run_engine "engine_native_force_no_native_report_${label}" native 1 report "$pabs" "$prel"
+    fi
   fi
 
   # query on auto when useful (binary profiles via facade dump path)
