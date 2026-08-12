@@ -174,7 +174,7 @@ Hooks will call **emit**, never raw v5 bytes, once integrated. Dual/v6 sinks plu
 | Complete TEST-003 | Full corpus fake-clock oracle match |
 | COL-007 | C v6 writer product E3-EVENT **done** (PR-B09); E3-mixed residual |
 | COL-014 | Dual-sink **test/dev harness done** (PR-B10a); full oracle dual residual (TEST-003/TEST-008) |
-| COL-015 | Full fork / signal lifecycle matrix with batch ownership |
+| COL-015 residual | Full TEST-018 oracle forkdepth/addpid/merge + signal-safe finalize / live XS (MVP protocol + unit stress landed in PR-C02b) |
 | BENCH-003 / BENCH-004 | Certified statement-path / writer component gates |
 
 ## Isolation
