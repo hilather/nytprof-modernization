@@ -13,8 +13,13 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use thiserror::Error;
 
+mod convert;
 mod v6_ingest;
 
+pub use convert::{
+    convert_and_models, convert_bytes, convert_path, encode_events, ConvertError, ConvertResult,
+    ConvertTarget,
+};
 pub use v6_ingest::{decode_events_from_bytes, decode_events_from_path, owned_records_to_events};
 
 /// Errors while building a [`ProfileModel`].

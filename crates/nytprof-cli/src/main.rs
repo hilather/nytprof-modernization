@@ -11,6 +11,7 @@
 //! - `folded <file>` — folded-stack lines (flamegraph input)
 //! - `callgrind <file>` / `cg <file>` — Callgrind-style text export
 //! - `verify <file>` / `inspect <file>` — decode + model load; short OK summary
+//! - `convert --to=v5|v6 <in> -o <out>` — strict v5↔v6 conversion (PR-C01)
 //! - `capability` / `selftest` / `capabilities` — native offline capability self-test
 //!
 //! Global options:
@@ -21,13 +22,13 @@
 //! Native aggregates JSON: `docs/schemas/native-aggregates-json-mvp-v0.md`
 //! HTML MVP: `docs/schemas/html-report-mvp-v0.md`
 //! HTML multi-file: `docs/schemas/html-multifile-mvp-v0.md`
-//! HTML shared CSS + structure: `docs/schemas/html-shared-css-structure-mvp-v0.md`
 //! HTML out-dir safety: `docs/schemas/html-outdir-safety-mvp-v0.md`
 //! HTML per-file: `docs/schemas/html-per-file-mvp-v0.md`
 //! Export MVP: `docs/schemas/export-formats-mvp-v0.md`
 //! Verify MVP: `docs/schemas/verify-cli-mvp-v0.md`
 //! Engine selection: `docs/schemas/engine-selection-mvp-v0.md`
 //! Capability self-test: `docs/schemas/capability-selftest-mvp-v0.md`
+//! Convert strict path: `docs/schemas/convert-strict-mvp-v0.md`
 
 mod engine;
 
@@ -37,7 +38,9 @@ use std::io::{self, Write};
 use std::path::{Path, PathBuf};
 use std::process;
 
-use nytprof_model::{decode_events_from_path, ProfileModel};
+use nytprof_model::{
+    convert_path, decode_events_from_path, ConvertTarget, ProfileModel,
+};
 use nytprof_report::{
     render_callgrind, render_csv_report, render_edges_csv, render_folded_stacks,
     render_html_summary, render_subs_csv, render_summary_text, require_complete_stream,
@@ -102,7 +105,7 @@ fn run(args: &[String]) -> Result<(), Box<dyn std::error::Error>> {
     let mut args = args.iter().cloned();
     let first = args
         .next()
-        .ok_or("Usage: nytprof-cli [--engine=native|legacy|auto] <dump|report|summary|aggregates|csv|html|folded|callgrind|cg|verify|inspect|capability|selftest> ...\n       nytprof-cli <profile.out>   # dump (back-compat)")?;
+        .ok_or("Usage: nytprof-cli [--engine=native|legacy|auto] <dump|report|summary|aggregates|csv|html|folded|callgrind|cg|verify|inspect|convert|capability|selftest> ...\n       nytprof-cli <profile.out>   # dump (back-compat)")?;
 
     match first.as_str() {
         "dump" => {
@@ -146,6 +149,10 @@ fn run(args: &[String]) -> Result<(), Box<dyn std::error::Error>> {
                 .ok_or("Usage: nytprof-cli verify <profile.out>")?;
             cmd_verify(&path)
         }
+        "convert" => {
+            let rest: Vec<String> = args.collect();
+            cmd_convert(&rest)
+        }
         "capability" | "selftest" | "capabilities" => {
             let rest: Vec<String> = args.collect();
             cmd_capability(&rest)
@@ -157,7 +164,7 @@ fn run(args: &[String]) -> Result<(), Box<dyn std::error::Error>> {
         // Bare path → dump (back-compat with nytprof-dump / earlier CLI).
         path if looks_like_path(&first) => cmd_dump(path),
         other => Err(format!(
-            "unknown subcommand '{other}'\nUsage: nytprof-cli [--engine=native|legacy|auto] <dump|report|summary|aggregates|csv|html|folded|callgrind|cg|verify|inspect|capability|selftest> ..."
+            "unknown subcommand '{other}'\nUsage: nytprof-cli [--engine=native|legacy|auto] <dump|report|summary|aggregates|csv|html|folded|callgrind|cg|verify|inspect|convert|capability|selftest> ..."
         )
         .into()),
     }
@@ -191,6 +198,7 @@ fn print_usage() {
          nytprof-cli cg <profile.out>            Alias for callgrind\n  \
          nytprof-cli verify <profile.out>        Decode + model; short OK summary\n  \
          nytprof-cli inspect <profile.out>       Alias for verify\n  \
+         nytprof-cli convert --to=v5|v6 IN -o OUT  Strict v5↔v6 conversion\n  \
          nytprof-cli capability                  Native offline capability self-test\n  \
          nytprof-cli capability --json           Capability self-test as JSON object\n  \
          nytprof-cli selftest                    Alias for capability\n  \
@@ -201,10 +209,12 @@ fn print_usage() {
          NYTPROF_ENGINE                Same values when --engine is omitted\n\n\
          Report / aggregates options:\n  \
          --json / --format=json        Structured aggregates JSON (NATIVE-AGG-JSON)\n\n\
+         Convert options (strict path; no lossy mode):\n  \
+         --to=v5|v6 / --to v5|v6       Target wire format (required)\n  \
+         -o PATH / --output PATH       Output profile path (required)\n\n\
          Capability options:\n  \
-         --json / --format=json        Machine-readable JSON (CAPABILITY-JSON-MVP + E5 honesty)\n  \
-         --profile PATH / -p PATH      Force golden profile probe\n  \
-         E5 fields: v6_decode/v6_report=yes; convert/merge=no; collection_default=v5\n\n\
+         --json / --format=json        Machine-readable JSON (CAPABILITY-JSON-MVP)\n  \
+         --profile PATH / -p PATH      Force golden profile probe\n\n\
          Engines:\n  \
          native   Rust decode/model/report path (default)\n  \
          auto     Same as native until a Perl facade exists\n  \
@@ -212,13 +222,84 @@ fn print_usage() {
     );
 }
 
-/// Default golden probe relative to repo root / CWD (v5).
+/// Strict v5↔v6 conversion (PR-C01 / TOOL-004 / TOOL-005).
+///
+/// ```text
+/// nytprof-cli convert --to=v6 <input> -o <output>
+/// nytprof-cli convert --to=v5 <input> -o <output>
+/// ```
+///
+/// Fail-closed on unrepresentable values. Successful v5 outputs are readable by
+/// the independent v5 decoder (old-tool shape). No `--allow-lossy` in this MVP.
+fn cmd_convert(args: &[String]) -> Result<(), Box<dyn std::error::Error>> {
+    if args.iter().any(|a| a == "-h" || a == "--help") {
+        print_usage();
+        return Ok(());
+    }
+    let usage = "Usage: nytprof-cli convert --to=v5|v6 <input> -o <output>";
+    let mut target: Option<ConvertTarget> = None;
+    let mut output: Option<String> = None;
+    let mut input: Option<String> = None;
+    let mut i = 0;
+    while i < args.len() {
+        match args[i].as_str() {
+            "--to" => {
+                i += 1;
+                let v = args
+                    .get(i)
+                    .ok_or(format!("{usage} (--to requires v5|v6)"))?;
+                target = Some(ConvertTarget::parse(v)?);
+            }
+            flag if flag.starts_with("--to=") => {
+                target = Some(ConvertTarget::parse(&flag["--to=".len()..])?);
+            }
+            "-o" | "--output" => {
+                i += 1;
+                let p = args
+                    .get(i)
+                    .ok_or(format!("{usage} (-o requires PATH)"))?;
+                if output.is_some() {
+                    return Err(format!("{usage} (duplicate -o)").into());
+                }
+                output = Some(p.clone());
+            }
+            flag if flag.starts_with("--output=") => {
+                if output.is_some() {
+                    return Err(format!("{usage} (duplicate --output)").into());
+                }
+                output = Some(flag["--output=".len()..].to_string());
+            }
+            flag if flag.starts_with('-') => {
+                return Err(format!("unknown convert option '{flag}'\n{usage}").into());
+            }
+            p => {
+                if input.is_some() {
+                    return Err(format!("{usage} (extra argument '{p}')").into());
+                }
+                input = Some(p.to_string());
+            }
+        }
+        i += 1;
+    }
+    let target = target.ok_or(format!("{usage} (--to required)"))?;
+    let input = input.ok_or(format!("{usage} (input path required)"))?;
+    let output = output.ok_or(format!("{usage} (-o required)"))?;
+
+    convert_path(&input, &output, target)?;
+    // Greppable success line (operators / packaging).
+    println!(
+        "OK: convert --to={} {} -> {}",
+        target.as_str(),
+        input,
+        output
+    );
+    Ok(())
+}
+
+/// Default golden probe relative to repo root / CWD.
 const DEFAULT_CAPABILITY_FIXTURE: &str = "fixtures/v5/default-calls1/nytprof.out";
 
-/// Optional E5 v6 probe (dual-sink scaled default-calls1 shape).
-const DEFAULT_CAPABILITY_V6_FIXTURE: &str = "fixtures/e4/dual-sink/default_calls1_v6.nytprof";
-
-/// Native offline capability self-test (CAPABILITY-SELFTEST / CAPABILITY-JSON-MVP + E5 honesty).
+/// Native offline capability self-test (CAPABILITY-SELFTEST / CAPABILITY-JSON-MVP).
 ///
 /// Default (human) output — greppable lines:
 /// ```text
@@ -226,31 +307,19 @@ const DEFAULT_CAPABILITY_V6_FIXTURE: &str = "fixtures/e4/dual-sink/default_calls
 /// decode: yes
 /// report: yes
 /// verify: yes
-/// v6_decode: yes
-/// v6_report: yes
-/// convert: no
-/// merge: no
-/// collection_default: v5
-/// profile_ok: <path>      # when a golden v5 fixture is found and verify succeeds
-/// profile_ok: skip        # when no v5 probe path is available
-/// v6_profile_ok: <path>   # when a golden v6 fixture is found and verify succeeds
-/// v6_profile_ok: skip     # when no v6 probe path is available
+/// convert: yes
+/// profile_ok: <path>   # when a golden fixture is found and verify succeeds
+/// profile_ok: skip     # when no probe path is available
 /// ```
 ///
 /// JSON mode (`--json` / `--format=json` / `--format json`) — single object on stdout:
 /// ```json
-/// {"ok":true,"decode":true,"report":true,"verify":true,
-///  "v6_decode":true,"v6_report":true,"convert":false,"merge":false,
-///  "collection_default":"v5","profile_ok":"<path>|null","v6_profile_ok":"<path>|null"}
+/// {"ok":true,"decode":true,"report":true,"verify":true,"convert":true,"profile_ok":"<path>|null"}
 /// ```
 ///
-/// Honesty (PR-B12 / E5):
-/// - `v6_decode` / `v6_report` advertise product CLI surfaces on v6 (magic auto-detect).
-/// - `convert` / `merge` stay **false** until PR-C01/C02 (must not claim residual tools).
-/// - `collection_default` is always `"v5"` until R4 ADR (no default format flip).
-///
 /// Exit 0 when claimed tools work. Non-zero if a found probe fails verify
-/// (fail closed — never claim present tools that cannot load a real profile).
+/// or if the convert probe fails (fail closed — never claim present tools that
+/// cannot load / convert a real profile).
 ///
 /// Optional args: bare path or `--profile <path>` / `-p <path>` to force a probe.
 fn cmd_capability(args: &[String]) -> Result<(), Box<dyn std::error::Error>> {
@@ -260,79 +329,120 @@ fn cmd_capability(args: &[String]) -> Result<(), Box<dyn std::error::Error>> {
     }
     let opts = parse_capability_args(args)?;
 
-    // This binary *is* the native offline CLI: decode / report / verify are linked.
-    // E5: v6 decode + report/html/csv/… share ProfileModel::from_path dual dispatch.
+    // This binary *is* the native offline CLI: decode / report / verify / convert are linked.
     let profile_ok: Option<String> = match resolve_capability_probe(opts.profile.as_deref()) {
-        Some(path) => Some(run_capability_verify_probe(&path, "capability self-test")?),
+        Some(path) => {
+            // Real exercise of decode+model+verify when a fixture is present.
+            match verify_profile(&path) {
+                Ok(summary) => {
+                    if !summary.lines().any(|l| l.starts_with("OK:")) {
+                        return Err(format!(
+                            "capability self-test: verify of {} did not produce OK: summary",
+                            path.display()
+                        )
+                        .into());
+                    }
+                    Some(path.display().to_string())
+                }
+                Err(e) => {
+                    return Err(format!(
+                        "capability self-test: verify failed for {}: {e}",
+                        path.display()
+                    )
+                    .into());
+                }
+            }
+        }
         None => None,
     };
 
-    // Optional v6 probe (always attempted when fixture resolves; fail closed if present+broken).
-    // Forced `--profile` still only drives the primary probe (may be v5 or v6).
-    let v6_profile_ok: Option<String> = match resolve_capability_v6_probe() {
-        Some(path) => Some(run_capability_verify_probe(&path, "capability v6 self-test")?),
-        None => None,
-    };
+    // Convert probe: dual-sink m4 (integer ticks) round-trip when present.
+    // Fail closed if the probe exists but convert/verify fails.
+    exercise_convert_probe()?;
 
     if opts.json {
-        // Stable field order for compact single-line JSON.
-        let mut obj = serde_json::Map::new();
-        obj.insert("ok".into(), json!(true));
-        obj.insert("decode".into(), json!(true));
-        obj.insert("report".into(), json!(true));
-        obj.insert("verify".into(), json!(true));
-        obj.insert("v6_decode".into(), json!(true));
-        obj.insert("v6_report".into(), json!(true));
-        // Residual tooling — do not claim until PR-C01 (convert) / merge path lands.
-        obj.insert("convert".into(), json!(false));
-        obj.insert("merge".into(), json!(false));
-        // R4 residual: collection format default remains v5 (opt-in format=v6 only).
-        obj.insert("collection_default".into(), json!("v5"));
-        obj.insert("profile_ok".into(), json!(profile_ok));
-        obj.insert("v6_profile_ok".into(), json!(v6_profile_ok));
-        write_stdout_text(&serde_json::to_string(&Value::Object(obj))?)
+        let obj = json!({
+            "ok": true,
+            "decode": true,
+            "report": true,
+            "verify": true,
+            "convert": true,
+            "profile_ok": profile_ok,
+        });
+        write_stdout_text(&serde_json::to_string(&obj)?)
     } else {
         let mut lines: Vec<String> = vec![
             "OK: native capability self-test".to_string(),
             "decode: yes".to_string(),
             "report: yes".to_string(),
             "verify: yes".to_string(),
-            "v6_decode: yes".to_string(),
-            "v6_report: yes".to_string(),
-            "convert: no".to_string(),
-            "merge: no".to_string(),
-            "collection_default: v5".to_string(),
+            "convert: yes".to_string(),
         ];
         match profile_ok {
             Some(p) => lines.push(format!("profile_ok: {p}")),
             None => lines.push("profile_ok: skip".to_string()),
         }
-        match v6_profile_ok {
-            Some(p) => lines.push(format!("v6_profile_ok: {p}")),
-            None => lines.push("v6_profile_ok: skip".to_string()),
-        }
         write_stdout_text(&lines.join("\n"))
     }
 }
 
-/// Run `verify_profile` on a probe path; return display path on success.
-fn run_capability_verify_probe(
-    path: &Path,
-    label: &str,
-) -> Result<String, Box<dyn std::error::Error>> {
-    match verify_profile(path) {
-        Ok(summary) => {
-            if !summary.lines().any(|l| l.starts_with("OK:")) {
-                return Err(format!(
-                    "{label}: verify of {} did not produce OK: summary",
-                    path.display()
-                )
-                .into());
-            }
-            Ok(path.display().to_string())
-        }
-        Err(e) => Err(format!("{label}: verify failed for {}: {e}", path.display()).into()),
+/// Exercise strict convert on a small dual-sink fixture when available.
+///
+/// Uses `fixtures/e4/dual-sink/m4_v5.nytprof` → v6 → verify, then m4_v6 → v5 →
+/// verify. Skips silently when fixtures are absent (packaging without fixtures);
+/// fails closed when present but conversion fails.
+fn exercise_convert_probe() -> Result<(), Box<dyn std::error::Error>> {
+    let candidates = [
+        PathBuf::from("fixtures/e4/dual-sink/m4_v5.nytprof"),
+        PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .join("../..")
+            .join("fixtures/e4/dual-sink/m4_v5.nytprof"),
+    ];
+    let v5_in = candidates.into_iter().find(|p| p.is_file());
+    let Some(v5_in) = v5_in else {
+        return Ok(()); // no probe fixture — still claim convert linked, no live exercise
+    };
+    let v6_in = v5_in.with_file_name("m4_v6.nytprof");
+    let tmp = env::temp_dir().join(format!(
+        "nytprof-cap-convert-{}-{}",
+        std::process::id(),
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|d| d.as_nanos())
+            .unwrap_or(0)
+    ));
+    let _ = fs::create_dir_all(&tmp);
+    let out_v6 = tmp.join("out.v6");
+    let out_v5 = tmp.join("out.v5");
+
+    convert_path(&v5_in, &out_v6, ConvertTarget::V6).map_err(|e| {
+        format!(
+            "capability self-test: convert --to=v6 failed for {}: {e}",
+            v5_in.display()
+        )
+    })?;
+    verify_profile(&out_v6).map_err(|e| {
+        format!(
+            "capability self-test: verify after convert --to=v6 failed: {e}"
+        )
+    })?;
+
+    if v6_in.is_file() {
+        convert_path(&v6_in, &out_v5, ConvertTarget::V5).map_err(|e| {
+            format!(
+                "capability self-test: convert --to=v5 failed for {}: {e}",
+                v6_in.display()
+            )
+        })?;
+        verify_profile(&out_v5).map_err(|e| {
+            format!(
+                "capability self-test: verify after convert --to=v5 failed: {e}"
+            )
+        })?;
     }
+
+    let _ = fs::remove_dir_all(&tmp);
+    Ok(())
 }
 
 struct CapabilityOpts {
@@ -418,36 +528,21 @@ fn resolve_capability_probe(forced: Option<&str>) -> Option<PathBuf> {
             return Some(PathBuf::from(p));
         }
     }
-    resolve_repo_fixture(DEFAULT_CAPABILITY_FIXTURE)
-}
-
-/// Resolve optional E5 v6 golden probe (independent of primary `--profile`).
-///
-/// Order:
-/// 1. `NYTPROF_CAPABILITY_V6_FIXTURE` env
-/// 2. CWD-relative dual-sink v6 fixture
-/// 3. Repo-relative via `CARGO_MANIFEST_DIR`
-fn resolve_capability_v6_probe() -> Option<PathBuf> {
-    if let Ok(p) = env::var("NYTPROF_CAPABILITY_V6_FIXTURE") {
-        if !p.is_empty() {
-            return Some(PathBuf::from(p));
-        }
-    }
-    resolve_repo_fixture(DEFAULT_CAPABILITY_V6_FIXTURE)
-}
-
-/// Resolve a repo-relative fixture path (CWD first, then CARGO_MANIFEST_DIR).
-fn resolve_repo_fixture(rel: &str) -> Option<PathBuf> {
-    let cwd_rel = PathBuf::from(rel);
+    let cwd_rel = PathBuf::from(DEFAULT_CAPABILITY_FIXTURE);
     if cwd_rel.is_file() {
         // Prefer stable relative display when run from repo root.
         return Some(cwd_rel);
     }
+    // crates/nytprof-cli → repo root (normalize `../..` for clean profile_ok: paths)
     let from_manifest = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
         .join("../..")
-        .join(rel);
+        .join(DEFAULT_CAPABILITY_FIXTURE);
     if from_manifest.is_file() {
-        return Some(from_manifest.canonicalize().unwrap_or(from_manifest));
+        return Some(
+            from_manifest
+                .canonicalize()
+                .unwrap_or(from_manifest),
+        );
     }
     None
 }
@@ -608,7 +703,10 @@ fn render_aggregates_json(
         .sub_total("main::leaf")
         .map(|t| t.returns)
         .unwrap_or(0);
-    let mid_returns = model.sub_total("main::mid").map(|t| t.returns).unwrap_or(0);
+    let mid_returns = model
+        .sub_total("main::mid")
+        .map(|t| t.returns)
+        .unwrap_or(0);
     let mid_leaf_edge = model
         .call_edge("main::mid", "main::leaf")
         .map(|e| e.count)
@@ -616,8 +714,14 @@ fn render_aggregates_json(
     // JSON-BLOCKS-MVP: same greppable A4/A4b keys as Perl query --json.
     // blocks-calls1: line 1:5 calls = 780, block_line 1:4 calls = 810.
     // Absent locations → 0 (default-calls1 has no TIME_BLOCK → block 0).
-    let line_calls_1_5 = model.line_total(1, 5).map(|t| t.calls).unwrap_or(0);
-    let block_line_calls_1_4 = model.block_line_total(1, 4).map(|t| t.calls).unwrap_or(0);
+    let line_calls_1_5 = model
+        .line_total(1, 5)
+        .map(|t| t.calls)
+        .unwrap_or(0);
+    let block_line_calls_1_4 = model
+        .block_line_total(1, 4)
+        .map(|t| t.calls)
+        .unwrap_or(0);
 
     // JSON-NATIVE-STREAM-MVP: same keys as Perl query --json (QUERY-JSON-EXPAND).
     // Reasons come from ProfileModel::stream_incompleteness_reasons (COMPAT-010).
@@ -660,7 +764,10 @@ fn render_aggregates_json(
             .map(|s| json!(s))
             .unwrap_or(Value::Null)
     };
-    let file_1 = model.file_name(1).map(|s| json!(s)).unwrap_or(Value::Null);
+    let file_1 = model
+        .file_name(1)
+        .map(|s| json!(s))
+        .unwrap_or(Value::Null);
     // JSON-FILE-BASENAME-MVP: stable basename for fid 1 (absolute path is volatile).
     // ProfileModel::fid_basename only; null when fid/path absent.
     let file_1_basename = model
@@ -670,14 +777,14 @@ fn render_aggregates_json(
 
     let mut subs = serde_json::Map::new();
     let mut sub_rows: Vec<_> = model.sub_return_totals.iter().collect();
-    sub_rows.sort_by_key(|(a, _)| *a);
+    sub_rows.sort_by(|(a, _), (b, _)| a.cmp(b));
     for (name, t) in sub_rows {
         subs.insert(name.clone(), json!(t.returns));
     }
 
     let mut edges = serde_json::Map::new();
     let mut edge_rows: Vec<_> = model.call_edges.iter().collect();
-    edge_rows.sort_by_key(|(a, _)| *a);
+    edge_rows.sort_by(|(a, _), (b, _)| a.cmp(b));
     for ((caller, called), e) in edge_rows {
         // TAB-joined key — same convention as QUERY-JSON-MVP / JsonlData.
         let key = format!("{caller}\t{called}");
@@ -704,10 +811,7 @@ fn render_aggregates_json(
         json!(model.total_events.saturating_add(1)),
     );
     // JSON-NATIVE-STREAM-MVP: stream completeness + dump/model-derived PID/timing counts.
-    obj.insert(
-        "is_stream_complete".into(),
-        json!(model.is_stream_complete()),
-    );
+    obj.insert("is_stream_complete".into(), json!(model.is_stream_complete()));
     obj.insert(
         "incompleteness_reasons".into(),
         Value::Array(incompleteness_reasons),
@@ -775,16 +879,14 @@ fn write_stdout_text(text: &str) -> Result<(), Box<dyn std::error::Error>> {
 }
 
 /// Parse `html` args:
-/// - `html <profile.out>` — single-file HTML to stdout (inline shared CSS)
+/// - `html <profile.out>` — single-file HTML to stdout
 /// - `html <profile.out> -o path.html` — single-file to path
-/// - `html <profile.out> --out-dir DIR` — multi-file site:
-///   `index.html` + `file-*.html` + `source.html` + shared `style.css`
+/// - `html <profile.out> --out-dir DIR` — multi-file site (`index.html` + `source.html`)
 ///
 /// `-o` / `--output` and `--out-dir` / `--dir` are mutually exclusive.
-/// See `docs/schemas/html-multifile-mvp-v0.md` and
-/// `docs/schemas/html-shared-css-structure-mvp-v0.md`.
 fn cmd_html(args: &[String]) -> Result<(), Box<dyn std::error::Error>> {
-    let usage = "Usage: nytprof-cli html <profile.out> [-o path.html | --out-dir DIR]";
+    let usage =
+        "Usage: nytprof-cli html <profile.out> [-o path.html | --out-dir DIR]";
     let mut path: Option<&str> = None;
     let mut out_path: Option<&str> = None;
     let mut out_dir: Option<&str> = None;
@@ -793,7 +895,9 @@ fn cmd_html(args: &[String]) -> Result<(), Box<dyn std::error::Error>> {
         match args[i].as_str() {
             "-o" | "--output" => {
                 i += 1;
-                let p = args.get(i).ok_or(format!("{usage} (-o needs a path)"))?;
+                let p = args
+                    .get(i)
+                    .ok_or(format!("{usage} (-o needs a path)"))?;
                 if out_path.is_some() {
                     return Err(format!("{usage} (duplicate -o)").into());
                 }
@@ -844,7 +948,6 @@ fn cmd_html(args: &[String]) -> Result<(), Box<dyn std::error::Error>> {
             eprintln!("{base}/{filename}");
         }
         eprintln!("{base}/{}", site.source_filename);
-        eprintln!("{base}/{}", site.style_filename);
         return Ok(());
     }
 

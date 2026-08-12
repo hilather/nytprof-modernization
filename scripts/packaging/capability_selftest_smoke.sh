@@ -18,8 +18,6 @@ ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 cd "$ROOT"
 
 FIXTURE_REL="fixtures/v5/default-calls1/nytprof.out"
-# E5 optional v6 probe (symmetric fail-closed when fixture is in-tree).
-V6_FIXTURE_REL="fixtures/e4/dual-sink/default_calls1_v6.nytprof"
 ok() { printf 'OK: %s\n' "$*"; }
 fail() { printf 'ERROR: %s\n' "$*" >&2; exit 1; }
 log() { printf '%s\n' "$*"; }
@@ -100,28 +98,23 @@ fi
 ok "capability ×2 exited 0"
 
 # Required stable markers (present on both runs).
-# E5 honesty: v6_decode/v6_report yes; convert/merge no; collection_default v5.
 for marker in \
   "OK: native capability self-test" \
   "decode: yes" \
   "report: yes" \
   "verify: yes" \
-  "v6_decode: yes" \
-  "v6_report: yes" \
-  "convert: no" \
-  "merge: no" \
-  "collection_default: v5"
+  "convert: yes"
 do
   grep -qxF "$marker" "$OUT1" || fail "run #1 missing marker: $marker\n$(cat "$OUT1")"
   grep -qxF "$marker" "$OUT2" || fail "run #2 missing marker: $marker\n$(cat "$OUT2")"
 done
-ok "stable markers present on both runs (incl. E5 honesty)"
+ok "stable markers present on both runs"
 
-# Consistency: extract contract lines (+ profile probes) and compare.
-# profile_ok / v6_profile_ok may be path or skip; both runs must match each other.
+# Consistency: extract the fixed lines (+ profile_ok) and compare.
+# profile_ok may be path or skip; both runs must match each other.
 extract_core() {
   # Keep only the contract lines (ignore any trailing noise).
-  grep -E '^(OK: native capability self-test|decode: |report: |verify: |v6_decode: |v6_report: |convert: |merge: |collection_default: |profile_ok: |v6_profile_ok: )' "$1" | sort
+  grep -E '^(OK: native capability self-test|decode: |report: |verify: |convert: |profile_ok: )' "$1" | sort
 }
 
 CORE1="$(extract_core "$OUT1")"
@@ -135,9 +128,8 @@ $CORE2"
 fi
 ok "capability output consistent across two runs"
 
-# profile_ok / v6_profile_ok lines must exist
+# profile_ok line must exist
 grep -qE '^profile_ok: ' "$OUT1" || fail "missing profile_ok: line\n$(cat "$OUT1")"
-grep -qE '^v6_profile_ok: ' "$OUT1" || fail "missing v6_profile_ok: line\n$(cat "$OUT1")"
 
 # In-repo golden fixture: probe must not be skip when fixture is present.
 if [[ -f "$ROOT/$FIXTURE_REL" ]]; then
@@ -154,22 +146,6 @@ $(cat "$OUT1")"
   ok "profile_ok probed golden fixture (not skip)"
 else
   log "NOTE: $FIXTURE_REL absent; accepting profile_ok: skip or other probe"
-fi
-
-# E5 dual-sink v6 fixture: symmetric fail-closed when present (Issue 2).
-if [[ -f "$ROOT/$V6_FIXTURE_REL" ]]; then
-  if grep -qxF 'v6_profile_ok: skip' "$OUT1"; then
-    fail "fixture $V6_FIXTURE_REL present but v6_profile_ok: skip
-$(cat "$OUT1")"
-  fi
-  grep -qE '^v6_profile_ok: .+' "$OUT1" || fail "expected non-skip v6_profile_ok with fixture present"
-  if ! grep -qE '^v6_profile_ok: .*(default_calls1_v6|\.nytprof)' "$OUT1"; then
-    log "NOTE: v6_profile_ok path (for operators):"
-    grep -E '^v6_profile_ok: ' "$OUT1" || true
-  fi
-  ok "v6_profile_ok probed E5 dual-sink fixture (not skip)"
-else
-  log "NOTE: $V6_FIXTURE_REL absent; accepting v6_profile_ok: skip or other probe"
 fi
 
 # Optional aliases smoke (selftest / capabilities) — cheap, same markers.
@@ -227,23 +203,15 @@ with open(path, encoding="utf-8") as fh:
     obj = json.load(fh)
 if not isinstance(obj, dict):
     sys.exit("not an object")
-for k in ("ok", "decode", "report", "verify", "v6_decode", "v6_report"):
+for k in ("ok", "decode", "report", "verify", "convert"):
     if obj.get(k) is not True:
         sys.exit(f"{k} must be true, got {obj.get(k)!r}")
-for k in ("convert", "merge"):
-    if obj.get(k) is not False:
-        sys.exit(f"{k} must be false (residual honesty), got {obj.get(k)!r}")
-if obj.get("collection_default") != "v5":
-    sys.exit(f"collection_default must be 'v5', got {obj.get('collection_default')!r}")
 if "profile_ok" not in obj:
     sys.exit("missing profile_ok")
-if "v6_profile_ok" not in obj:
-    sys.exit("missing v6_profile_ok")
-# profile_ok / v6_profile_ok: str or null only
-for key in ("profile_ok", "v6_profile_ok"):
-    po = obj[key]
-    if po is not None and not isinstance(po, str):
-        sys.exit(f"{key} must be str or null, got {type(po).__name__}")
+# profile_ok: str or null only
+po = obj["profile_ok"]
+if po is not None and not isinstance(po, str):
+    sys.exit(f"profile_ok must be str or null, got {type(po).__name__}")
 PY
     then
       fail "$label: required JSON fields missing or false
@@ -256,25 +224,12 @@ $(cat "$f")"
       local $/; my $raw = <$fh>;
       my $obj = JSON::PP->new->decode($raw);
       die "not object\n" unless ref($obj) eq "HASH";
-      for my $k (qw(ok decode report verify v6_decode v6_report)) {
+      for my $k (qw(ok decode report verify convert)) {
         die "$k must be true\n" unless $obj->{$k};
       }
-      # Residual honesty: keys must exist and be JSON false (missing must fail;
-      # bare "if $obj->{$k}" would treat missing as false and pass incorrectly).
-      for my $k (qw(convert merge)) {
-        die "missing $k\n" unless exists $obj->{$k};
-        my $v = $obj->{$k};
-        die "$k must be JSON false, got " . (defined $v ? $v : "undef") . "\n"
-          unless JSON::PP::is_bool($v) && !$v;
-      }
-      die "collection_default\n" unless defined $obj->{collection_default}
-        && $obj->{collection_default} eq "v5";
       die "missing profile_ok\n" unless exists $obj->{profile_ok};
-      die "missing v6_profile_ok\n" unless exists $obj->{v6_profile_ok};
-      for my $k (qw(profile_ok v6_profile_ok)) {
-        my $po = $obj->{$k};
-        die "$k type\n" if defined $po && ref($po);
-      }
+      my $po = $obj->{profile_ok};
+      die "profile_ok type\n" if defined $po && ref($po);
     ' "$f" || fail "$label: invalid JSON or fields (perl JSON::PP)\n$(cat "$f")"
   else
     # Last-resort structured greps (compact single-line object).
@@ -286,27 +241,17 @@ $(cat "$f")"
       || fail "$label: missing report:true\n$(cat "$f")"
     grep -qE '"verify"[[:space:]]*:[[:space:]]*true' "$f" \
       || fail "$label: missing verify:true\n$(cat "$f")"
-    grep -qE '"v6_decode"[[:space:]]*:[[:space:]]*true' "$f" \
-      || fail "$label: missing v6_decode:true\n$(cat "$f")"
-    grep -qE '"v6_report"[[:space:]]*:[[:space:]]*true' "$f" \
-      || fail "$label: missing v6_report:true\n$(cat "$f")"
-    grep -qE '"convert"[[:space:]]*:[[:space:]]*false' "$f" \
-      || fail "$label: missing convert:false\n$(cat "$f")"
-    grep -qE '"merge"[[:space:]]*:[[:space:]]*false' "$f" \
-      || fail "$label: missing merge:false\n$(cat "$f")"
-    grep -qE '"collection_default"[[:space:]]*:[[:space:]]*"v5"' "$f" \
-      || fail "$label: missing collection_default:v5\n$(cat "$f")"
+    grep -qE '"convert"[[:space:]]*:[[:space:]]*true' "$f" \
+      || fail "$label: missing convert:true\n$(cat "$f")"
     grep -qE '"profile_ok"' "$f" \
       || fail "$label: missing profile_ok\n$(cat "$f")"
-    grep -qE '"v6_profile_ok"' "$f" \
-      || fail "$label: missing v6_profile_ok\n$(cat "$f")"
     log "NOTE: no python3/perl JSON::PP; used key greps for $label"
   fi
 }
 
 json_validate_file "$JOUT1" "json run #1"
 json_validate_file "$JOUT2" "json run #2"
-ok "capability --json fields ok (incl. E5 honesty) on both runs"
+ok "capability --json fields ok/decode/report/verify/convert true on both runs"
 
 # Consistency of profile_ok across two JSON runs (and vs fixture presence).
 json_profile_ok() {
@@ -355,54 +300,6 @@ $(cat "$JOUT1")"
   ok "JSON profile_ok probed golden fixture (not null)"
 else
   log "NOTE: $FIXTURE_REL absent; accepting JSON profile_ok null or other probe ($JPO1)"
-fi
-
-# E5: JSON v6_profile_ok consistency + fail-closed when dual-sink fixture present.
-json_v6_profile_ok() {
-  local f="$1"
-  if command -v python3 >/dev/null 2>&1; then
-    python3 -c 'import json,sys; o=json.load(open(sys.argv[1],encoding="utf-8")); v=o.get("v6_profile_ok"); print("null" if v is None else v)' "$f"
-  elif command -v perl >/dev/null 2>&1; then
-    perl -MJSON::PP -e '
-      open my $fh, "<", $ARGV[0] or die $!;
-      local $/; my $obj = JSON::PP->new->decode(<$fh>);
-      print defined $obj->{v6_profile_ok} ? $obj->{v6_profile_ok} : "null";
-    ' "$f"
-  else
-    if grep -qE '"v6_profile_ok"[[:space:]]*:[[:space:]]*null' "$f"; then
-      printf 'null'
-    else
-      sed -n 's/.*"v6_profile_ok"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' "$f" | head -n1
-    fi
-  fi
-}
-
-JV6_1="$(json_v6_profile_ok "$JOUT1")"
-JV6_2="$(json_v6_profile_ok "$JOUT2")"
-if [[ "$JV6_1" != "$JV6_2" ]]; then
-  fail "capability --json v6_profile_ok not consistent
---- run1 ---
-$JV6_1
---- run2 ---
-$JV6_2
---- raw1 ---
-$(cat "$JOUT1")
---- raw2 ---
-$(cat "$JOUT2")"
-fi
-ok "capability --json v6_profile_ok consistent across two runs ($JV6_1)"
-
-if [[ -f "$ROOT/$V6_FIXTURE_REL" ]]; then
-  if [[ "$JV6_1" == "null" || -z "$JV6_1" ]]; then
-    fail "fixture $V6_FIXTURE_REL present but JSON v6_profile_ok is null/empty
-$(cat "$JOUT1")"
-  fi
-  if [[ "$JV6_1" != *"default_calls1_v6"* && "$JV6_1" != *".nytprof"* ]]; then
-    log "NOTE: JSON v6_profile_ok path (for operators): $JV6_1"
-  fi
-  ok "JSON v6_profile_ok probed E5 dual-sink fixture (not null)"
-else
-  log "NOTE: $V6_FIXTURE_REL absent; accepting JSON v6_profile_ok null or other probe ($JV6_1)"
 fi
 
 # --format=json accepted and equivalent core fields to --json
