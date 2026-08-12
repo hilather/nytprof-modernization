@@ -172,13 +172,15 @@ nytp_status nytp_sink_begin_finalize(nytp_sink *sink);
 
 /*
  * ACTIVE -> FORK_SPLIT. Follow with end_fork_parent or end_fork_child.
- * Full fork buffer ownership is COL-015 residual; this freezes the state
- * transitions only.
+ * Prefer nytp_fork_prepare / resume_* (nytp_fork.h, COL-015) which flush
+ * buffered sinks and document path/seq/dict domains. begin_fork alone still
+ * triggers batch preflush via notify_begin_fork.
  */
 nytp_status nytp_sink_begin_fork(nytp_sink *sink);
 /* FORK_SPLIT -> ACTIVE; sequence continues (parent). */
 nytp_status nytp_sink_end_fork_parent(nytp_sink *sink);
-/* FORK_SPLIT -> OPEN; sequence resets to 0 (child new stream). */
+/* FORK_SPLIT -> OPEN; sequence resets to 0 (child new stream).
+ * Batch sinks discard residual pending events (COL-015). */
 nytp_status nytp_sink_end_fork_child(nytp_sink *sink);
 
 /* Sticky fail: any non-CLOSED -> FAILED. reason should be non-OK. */

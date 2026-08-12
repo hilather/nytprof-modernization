@@ -1002,3 +1002,43 @@ nytp_status nytp_dual_sink_write_compare_meta(const nytp_sink *sink,
     }
     return NYTP_OK;
 }
+
+nytp_status nytp_dual_sink_fork_child_reinit(nytp_sink *dual,
+                                             const char *path_v5,
+                                             const char *path_v6)
+{
+    dual_impl *di;
+    nytp_status st = NYTP_OK;
+    nytp_status st2;
+    if (!nytp_dual_sink_is_dual(dual) || !dual->impl) {
+        return NYTP_ERR_NULL;
+    }
+    di = (dual_impl *)dual->impl;
+    if (di->primary) {
+        if (nytp_v5_sink_is_v5(di->primary)) {
+            st2 = nytp_v5_sink_fork_child_reinit(di->primary, path_v5);
+            if (st2 != NYTP_OK && st == NYTP_OK) {
+                st = st2;
+            }
+        } else if (nytp_v6_sink_is_v6(di->primary)) {
+            st2 = nytp_v6_sink_fork_child_reinit(di->primary, path_v6);
+            if (st2 != NYTP_OK && st == NYTP_OK) {
+                st = st2;
+            }
+        }
+    }
+    if (di->secondary) {
+        if (nytp_v5_sink_is_v5(di->secondary)) {
+            st2 = nytp_v5_sink_fork_child_reinit(di->secondary, path_v5);
+            if (st2 != NYTP_OK && st == NYTP_OK) {
+                st = st2;
+            }
+        } else if (nytp_v6_sink_is_v6(di->secondary)) {
+            st2 = nytp_v6_sink_fork_child_reinit(di->secondary, path_v6);
+            if (st2 != NYTP_OK && st == NYTP_OK) {
+                st = st2;
+            }
+        }
+    }
+    return st;
+}

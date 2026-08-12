@@ -208,6 +208,26 @@ void nytp_v6_sink_test_fail_seal_after_chunks(nytp_sink *sink, uint32_t n);
  */
 nytp_status nytp_v6_sink_test_try_seal(nytp_sink *sink);
 
+/*
+ * COL-015 path ownership: detach so flush/close will not write a file.
+ */
+nytp_status nytp_v6_sink_detach_path(nytp_sink *sink);
+
+/* COL-015: rebind path (copied). NULL == detach. Does not clear wire. */
+nytp_status nytp_v6_sink_rebind_path(nytp_sink *sink, const char *path);
+
+/*
+ * COL-015 child post-fork re-init (retained sink object):
+ *   - rebind path (NULL detach)
+ *   - drop open body / packing / FOOTER dict state
+ *   - clear sealed wire and rewrite file prefix for a clean child stream
+ *   - reset counting stats
+ * Does not continue mid-stream codec compressor state into the child.
+ * Call after nytp_fork_resume_child. Fails if CLOSED/FAILED/already final-sealed
+ * without reinit ability (sealed profiles cannot be reopened).
+ */
+nytp_status nytp_v6_sink_fork_child_reinit(nytp_sink *sink, const char *new_path);
+
 #ifdef __cplusplus
 }
 #endif

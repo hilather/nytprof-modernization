@@ -2140,6 +2140,88 @@ void nytp_v6_sink_version(const nytp_sink *sink, uint16_t *major,
     }
 }
 
+nytp_status nytp_v6_sink_detach_path(nytp_sink *sink)
+{
+    return nytp_v6_sink_rebind_path(sink, NULL);
+}
+
+nytp_status nytp_v6_sink_rebind_path(nytp_sink *sink, const char *path)
+{
+    v6_impl *vi;
+    char *np = NULL;
+    if (!nytp_v6_sink_is_v6(sink) || !sink->impl) {
+        return NYTP_ERR_NULL;
+    }
+    if (sink->state == NYTP_SINK_CLOSED || sink->state == NYTP_SINK_FAILED) {
+        return NYTP_ERR_STATE;
+    }
+    vi = (v6_impl *)sink->impl;
+    if (path) {
+        size_t n = strlen(path);
+        np = (char *)malloc(n + 1);
+        if (!np) {
+            return NYTP_ERR_IO;
+        }
+        memcpy(np, path, n + 1);
+    }
+    free(vi->path);
+    vi->path = np;
+    vi->file_written = 0;
+    return NYTP_OK;
+}
+
+nytp_status nytp_v6_sink_fork_child_reinit(nytp_sink *sink, const char *new_path)
+{
+    v6_impl *vi;
+    nytp_status st;
+    uint32_t i;
+    if (!nytp_v6_sink_is_v6(sink) || !sink->impl) {
+        return NYTP_ERR_NULL;
+    }
+    if (sink->state == NYTP_SINK_CLOSED || sink->state == NYTP_SINK_FAILED) {
+        return NYTP_ERR_STATE;
+    }
+    vi = (v6_impl *)sink->impl;
+
+    st = nytp_v6_sink_rebind_path(sink, new_path);
+    if (st != NYTP_OK) {
+        return st;
+    }
+
+    /* Drop parent stream state; child starts a clean profile (COL-015). */
+    vi->wire_len = 0;
+    vi->body_len = 0;
+    vi->rec_off_len = 0;
+    vi->event_count = 0;
+    vi->total_event_records = 0;
+    vi->event_chunk_count = 0;
+    vi->next_chunk_seq = 0;
+    vi->sealed = 0;
+    vi->has_footer_dict = 0;
+    vi->header_ok = 0;
+    vi->file_written = 0;
+    vi->emit_snap_active = 0;
+    memset(&vi->pack, 0, sizeof(vi->pack));
+    if (vi->dict) {
+        for (i = 0; i < vi->dict_len; i++) {
+            free(vi->dict[i].data);
+            vi->dict[i].data = NULL;
+            vi->dict[i].len = 0;
+        }
+    }
+    vi->dict_len = 0;
+    vi->dict_next_id = 1;
+    vi->dict_total_bytes = 0;
+    memset(&vi->stats, 0, sizeof(vi->stats));
+
+    st = write_file_prefix(vi);
+    if (st != NYTP_OK) {
+        return st;
+    }
+    vi->header_ok = 1;
+    return NYTP_OK;
+}
+
 nytp_status nytp_v6_sink_test_force_body_len(nytp_sink *sink, size_t len)
 {
     v6_impl *vi;

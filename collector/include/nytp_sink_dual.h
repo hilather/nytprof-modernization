@@ -14,10 +14,11 @@
  * Residuals:
  *   - Full fixtures/v5/ oracle stream equality under dual needs live hooks
  *     / complete TEST-003 + TEST-008 M6 suite (not claimed here).
- *   - COL-015 fork/PID ownership matrix remains residual.
  *   - Secondary-fail after primary wire write: dual parent sticky-fails for
  *     all secondary non-OK (STATE/UNSUPPORTED mapped to FAILED); primary
  *     bytes/stats are not rolled back (partial dual residual; COL-018).
+ *   - Full live TEST-018 oracle forkdepth/addpid matrices remain residual;
+ *     unit stress for dual+batch fork is under COL-015 (nytp_fork + test_fork_pid).
  */
 #ifndef NYTP_SINK_DUAL_H
 #define NYTP_SINK_DUAL_H
@@ -114,6 +115,16 @@ const nytp_counting_stats *nytp_dual_child_stats(const nytp_sink *child);
  */
 nytp_status nytp_dual_sink_write_compare_meta(const nytp_sink *sink,
                                               const char *path);
+
+/*
+ * COL-015: re-init both wire children after child resume when they are v5/v6.
+ * Counting children are left intact (stats continue / separate trees preferred).
+ * path_v5 / path_v6 may be NULL (detach). Non-v5/v6 children are skipped.
+ * Returns first hard error; best-effort continues to the other child.
+ */
+nytp_status nytp_dual_sink_fork_child_reinit(nytp_sink *dual,
+                                             const char *path_v5,
+                                             const char *path_v6);
 
 #ifdef __cplusplus
 }

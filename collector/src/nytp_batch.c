@@ -233,6 +233,21 @@ int nytp_batch_last_append_buffered(const nytp_batch *batch)
     return batch ? batch->last_append_buffered : 0;
 }
 
+size_t nytp_batch_pending(const nytp_batch *batch)
+{
+    return batch ? batch->count : 0;
+}
+
+void nytp_batch_discard_pending(nytp_batch *batch)
+{
+    if (!batch) {
+        return;
+    }
+    batch->count = 0;
+    batch->arena_used = 0;
+    batch->last_append_buffered = 0;
+}
+
 /* ---- compact after partial flush (drop acked prefix; rebuild arena) ---- */
 
 static nytp_status reloc_str(char *dst, size_t *used, size_t cap,
@@ -1222,8 +1237,21 @@ static nytp_status batch_notify_begin_fork(nytp_sink *sink)
 {
     batch_sink_impl *bi = (batch_sink_impl *)sink->impl;
     nytp_sink *c;
+    nytp_status st;
     if (!bi || !bi->batch || !bi->batch->child) {
         return NYTP_ERR_STATE;
+    }
+    /*
+     * COL-015: drain pending before FORK_SPLIT so parent and child do not
+     * both inherit the same unacked events (duplicate drain risk).
+     * Public nytp_fork_prepare also flushes; this covers begin_fork alone.
+     */
+    if (bi->batch->count > 0) {
+        st = nytp_batch_flush(bi->batch);
+        if (st != NYTP_OK) {
+            return st;
+        }
+        bi->batch->metrics.fork_preflush++;
     }
     c = bi->batch->child;
     if (nytp_sink_get_state(c) == NYTP_SINK_ACTIVE) {
@@ -1250,8 +1278,15 @@ static nytp_status batch_notify_end_fork_child(nytp_sink *sink)
 {
     batch_sink_impl *bi = (batch_sink_impl *)sink->impl;
     nytp_sink *c;
+    size_t residual;
     if (!bi || !bi->batch || !bi->batch->child) {
         return NYTP_ERR_STATE;
+    }
+    /* COL-015: never drain inherited residual into the child stream. */
+    residual = bi->batch->count;
+    if (residual > 0 || bi->batch->arena_used > 0) {
+        bi->batch->metrics.fork_child_discard += (uint64_t)residual;
+        nytp_batch_discard_pending(bi->batch);
     }
     c = bi->batch->child;
     if (nytp_sink_get_state(c) == NYTP_SINK_FORK_SPLIT) {

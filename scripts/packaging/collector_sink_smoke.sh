@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
-# COL-001..007 + COL-014 / PR-B02..B10a — collector sink + lifecycle/seq +
-# batch/fast + fake-clock + real v5 wire + absolute v6 wire + dual-sink
-# (test/dev-only OQ-4) smoke.
+# COL-001..007 + COL-014 + COL-015 / PR-B02..B10a + C02b — collector sink +
+# lifecycle/seq + batch/fast + fake-clock + real v5 wire + absolute v6 wire +
+# dual-sink (test/dev-only OQ-4) + fork/PID protocol stress smoke.
 #
 # When a C toolchain is present: build + unit-test the overlay sink (needs zlib).
 # When absent: honest skip (offline_gate remains green).
@@ -24,7 +24,7 @@ ok() { printf 'OK: %s\n' "$*"; }
 fail() { printf 'ERROR: %s\n' "$*" >&2; exit 1; }
 banner() { printf '\n=== %s ===\n' "$*"; }
 
-banner "collector_sink_smoke (COL-001..007-pack + COL-014 dual + fake-clock + v5/v6 wire)"
+banner "collector_sink_smoke (COL-001..007-pack + COL-014 dual + COL-015 fork + fake-clock + v5/v6 wire)"
 
 # ---------------------------------------------------------------------------
 # Tree present (this smoke is only meaningful after PR-B02 lands sources)
@@ -49,7 +49,10 @@ banner "collector_sink_smoke (COL-001..007-pack + COL-014 dual + fake-clock + v5
 [[ -f "$COLLECTOR/include/nytp_sink_dual.h" ]] || fail "missing nytp_sink_dual.h (PR-B10a COL-014)"
 [[ -f "$COLLECTOR/src/nytp_sink_dual.c" ]] || fail "missing nytp_sink_dual.c (PR-B10a COL-014)"
 [[ -f "$COLLECTOR/t/test_dual_sink.c" ]] || fail "missing test_dual_sink.c (PR-B10a COL-014)"
-ok "collector/ overlay tree present (B0-A; COL-001..007 + COL-014 dual)"
+[[ -f "$COLLECTOR/include/nytp_fork.h" ]] || fail "missing nytp_fork.h (PR-C02b COL-015)"
+[[ -f "$COLLECTOR/src/nytp_fork.c" ]] || fail "missing nytp_fork.c (PR-C02b COL-015)"
+[[ -f "$COLLECTOR/t/test_fork_pid.c" ]] || fail "missing test_fork_pid.c (PR-C02b COL-015)"
+ok "collector/ overlay tree present (B0-A; COL-001..007 + COL-014 dual + COL-015 fork)"
 
 # ---------------------------------------------------------------------------
 # Isolation: never put collector/ (or crates/) on oracle PERL5LIB
@@ -151,6 +154,7 @@ make -C "$COLLECTOR" test CC="$CC_BIN"
 [[ -x "$COLLECTOR/build/test_v5_wire" ]] || fail "test_v5_wire missing (PR-B05)"
 [[ -x "$COLLECTOR/build/test_v6_abs_wire" ]] || fail "test_v6_abs_wire missing (PR-B06)"
 [[ -x "$COLLECTOR/build/test_dual_sink" ]] || fail "test_dual_sink missing (PR-B10a COL-014)"
+[[ -x "$COLLECTOR/build/test_fork_pid" ]] || fail "test_fork_pid missing (PR-C02b COL-015)"
 # Re-run shipped binaries from collector/ so relative build/*.nytprof paths work.
 (
   cd "$COLLECTOR"
@@ -161,8 +165,9 @@ make -C "$COLLECTOR" test CC="$CC_BIN"
   ./build/test_v5_wire
   ./build/test_v6_abs_wire
   ./build/test_dual_sink
+  ./build/test_fork_pid
 )
-ok "collector unit tests (sink + lifecycle/seq + fake-clock mini M4 + batch/fast + v5 + v6-abs + dual-sink)"
+ok "collector unit tests (sink + lifecycle/seq + fake-clock mini M4 + batch/fast + v5 + v6-abs + dual-sink + fork/PID)"
 
 # Mini wire artifact from test_v5_wire
 WIRE="$COLLECTOR/build/m4_mini_wire.nytprof"
@@ -271,13 +276,23 @@ printf 'NYTPROF6' | cmp -n 8 - "$DUAL_V6" >/dev/null 2>&1 \
 grep -q 'test_dev_only' "$DUAL_META" || fail "dual meta missing test_dev_only marker"
 ok "COL-014 dual-sink m4 artifacts + out-of-band meta present (test/dev-only)"
 
+# COL-015 fork/PID artifacts (addpid child + parent files from test_fork_pid)
+FORK_CHILD="$COLLECTOR/build/fork_v5_parent.nytprof.4242"
+FORK_POSIX="$COLLECTOR/build/fork_posix_parent.nytprof"
+[[ -f "$FORK_CHILD" ]] || fail "expected COL-015 addpid child artifact $FORK_CHILD"
+[[ -f "$FORK_POSIX" ]] || fail "expected COL-015 POSIX fork parent artifact $FORK_POSIX"
+printf 'NYTProf 5 0\n' | cmp -n 12 - "$FORK_CHILD" >/dev/null 2>&1 \
+  || fail "fork child missing NYTProf 5 0 header"
+ok "COL-015 fork/PID artifacts present (addpid child + POSIX parent)"
+
 echo "NOTE: COL-007 ABS+CODEC+PACK scaffold; product E3-EVENT = fixtures/v6/from-c + e3_c_* (see e3_c_writer_parity.sh); E3-mixed residual; not live XS hooks"
 echo "NOTE: COL-014 dual-sink is test/dev-only (OQ-4) — not product format=dual UX; full oracle dual equality residual (TEST-003/TEST-008)"
+echo "NOTE: COL-015 fork/PID MVP done (protocol + buffered sinks + POSIX stress); full TEST-018 oracle forkdepth/addpid residual"
 echo "NOTE: M4 mini sample only — full oracle corpus under fake-clock needs complete TEST-003"
 echo "NOTE: batch light microbench is engineering only — not BENCH-003/006 certification"
 echo "NOTE: flush/compression discount timing vs BASE-003 remains residual"
 echo "NOTE: nytp_ticks outside I32 fails closed (OI-003-01 overflow composition residual)"
 
 banner "collector_sink_smoke PASSED"
-ok "COL-001..007 + COL-014 dual (test/dev) + fake-clock + v5/v6-abs wire scaffold build + isolation"
+ok "COL-001..007 + COL-014 dual + COL-015 fork (test/dev) + fake-clock + v5/v6-abs wire scaffold build + isolation"
 exit 0

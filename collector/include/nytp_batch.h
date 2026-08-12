@@ -11,8 +11,11 @@
  *   - High-water triggers flush before capacity exhaustion.
  *   - Oversized payload uses emergency direct path after flush attempt.
  *
- * Residuals: full fixtures/v5 corpus (complete TEST-003); not COL-007; not live XS hooks;
- * full flush-discount timing ADR still open (BASE-003 / COMPAT-003).
+ * COL-015: begin_fork preflushes pending events; end_fork_child discards residual.
+ *
+ * Residuals: full fixtures/v5 corpus (complete TEST-003); not live XS hooks;
+ * full flush-discount timing ADR still open (BASE-003 / COMPAT-003);
+ * full TEST-018 live signal/forkdepth oracle matrix beyond unit stress.
  */
 #ifndef NYTP_BATCH_H
 #define NYTP_BATCH_H
@@ -40,6 +43,9 @@ typedef struct nytp_batch_metrics {
     uint64_t emergency_direct;   /* oversized payload emitted without buffer */
     uint64_t arena_bytes_copied; /* total bytes copied into arena */
     uint64_t heap_allocs;        /* increments only on create / grow (none after create) */
+    /* COL-015 fork ownership */
+    uint64_t fork_preflush;      /* begin_fork triggered a preflush of pending */
+    uint64_t fork_child_discard; /* end_fork_child discarded residual events */
 } nytp_batch_metrics;
 
 typedef struct nytp_batch {
@@ -103,6 +109,15 @@ nytp_status nytp_batch_flush(nytp_batch *batch);
 
 /* 1 if the most recent append committed an event into the buffer. */
 int nytp_batch_last_append_buffered(const nytp_batch *batch);
+
+/*
+ * COL-015: drop pending events + arena without emitting to child.
+ * Used on child post-fork so inherited residual cannot double-drain.
+ */
+void nytp_batch_discard_pending(nytp_batch *batch);
+
+/* Pending unacked event count (0 if NULL). */
+size_t nytp_batch_pending(const nytp_batch *batch);
 
 /* ---- COL-004 no-alloc statement appends (POD only) ---- */
 

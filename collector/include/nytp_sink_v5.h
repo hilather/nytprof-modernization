@@ -79,6 +79,30 @@ int nytp_v5_sink_is_deflating(const nytp_sink *sink);
 void nytp_v5_sink_version(const nytp_sink *sink, uint32_t *major,
                           uint32_t *minor);
 
+/*
+ * COL-015 path ownership:
+ * Detach output path so subsequent flush/close will not write a file
+ * (in-memory wire retained). Avoids child double-write to parent addpid base.
+ */
+nytp_status nytp_v5_sink_detach_path(nytp_sink *sink);
+
+/*
+ * COL-015: rebind output path (copied). NULL path == detach.
+ * Does not clear the wire buffer (use fork_child_reinit for a clean stream).
+ */
+nytp_status nytp_v5_sink_rebind_path(nytp_sink *sink, const char *path);
+
+/*
+ * COL-015 child post-fork re-init (same sink object retained across fork):
+ *   - rebind path to new_path (NULL => detach; typical addpid child path)
+ *   - abort mid-stream zlib if active (child does not inherit compressor)
+ *   - clear wire buffer and rewrite "NYTProf 5 0\n" header
+ *   - reset counting stats and file_written
+ * Lifecycle/seq are owned by nytp_fork_resume_child — call reinit after that
+ * (or while FORK_SPLIT / OPEN). Fails if CLOSED/FAILED.
+ */
+nytp_status nytp_v5_sink_fork_child_reinit(nytp_sink *sink, const char *new_path);
+
 #ifdef __cplusplus
 }
 #endif

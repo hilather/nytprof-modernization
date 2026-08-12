@@ -1090,3 +1090,71 @@ void nytp_v5_sink_version(const nytp_sink *sink, uint32_t *major,
         *minor = NYTP_V5_MINOR;
     }
 }
+
+nytp_status nytp_v5_sink_detach_path(nytp_sink *sink)
+{
+    return nytp_v5_sink_rebind_path(sink, NULL);
+}
+
+nytp_status nytp_v5_sink_rebind_path(nytp_sink *sink, const char *path)
+{
+    v5_impl *vi;
+    char *np = NULL;
+    if (!nytp_v5_sink_is_v5(sink) || !sink->impl) {
+        return NYTP_ERR_NULL;
+    }
+    if (sink->state == NYTP_SINK_CLOSED || sink->state == NYTP_SINK_FAILED) {
+        return NYTP_ERR_STATE;
+    }
+    vi = (v5_impl *)sink->impl;
+    if (path) {
+        size_t n = strlen(path);
+        np = (char *)malloc(n + 1);
+        if (!np) {
+            return NYTP_ERR_IO;
+        }
+        memcpy(np, path, n + 1);
+    }
+    free(vi->path);
+    vi->path = np;
+    vi->file_written = 0;
+    return NYTP_OK;
+}
+
+nytp_status nytp_v5_sink_fork_child_reinit(nytp_sink *sink, const char *new_path)
+{
+    v5_impl *vi;
+    static const char header[] = "NYTProf 5 0\n";
+    nytp_status st;
+    if (!nytp_v5_sink_is_v5(sink) || !sink->impl) {
+        return NYTP_ERR_NULL;
+    }
+    if (sink->state == NYTP_SINK_CLOSED || sink->state == NYTP_SINK_FAILED) {
+        return NYTP_ERR_STATE;
+    }
+    vi = (v5_impl *)sink->impl;
+
+    /* Abort inherited compressor — child starts a clean stream (COL-015). */
+    if (vi->deflating && !vi->deflate_finished) {
+        (void)deflateEnd(&vi->zs);
+    }
+    vi->deflating = 0;
+    vi->deflate_finished = 0;
+    memset(&vi->zs, 0, sizeof(vi->zs));
+
+    st = nytp_v5_sink_rebind_path(sink, new_path);
+    if (st != NYTP_OK) {
+        return st;
+    }
+
+    vi->len = 0;
+    vi->file_written = 0;
+    vi->header_ok = 0;
+    memset(&vi->stats, 0, sizeof(vi->stats));
+    st = buf_append_raw(vi, header, sizeof(header) - 1);
+    if (st != NYTP_OK) {
+        return st;
+    }
+    vi->header_ok = 1;
+    return NYTP_OK;
+}

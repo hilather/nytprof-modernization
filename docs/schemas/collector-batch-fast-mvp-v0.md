@@ -47,7 +47,8 @@
 - Hard flush errors mark **child** failed and (via public `nytp_sink_flush` / emit path) **sticky-fail the batch sink**; further emits return `NYTP_ERR_STATE`.  
 - Buffered event + high-water flush failure still advances COL-003 seq for the buffered event (`last_append_buffered`).  
 - Reset of `count` / `arena_used` only after full successful drain.  
-- Lifecycle: batch sink forwards stop/finalize/fork to child via optional `notify_*` ops.
+- Lifecycle: batch sink forwards stop/finalize/fork to child via optional `notify_*` ops.  
+- **COL-015:** `notify_begin_fork` **preflushes** pending events; `notify_end_fork_child` **discards** residual (metrics `fork_preflush` / `fork_child_discard`). Prefer `nytp_fork_*` protocol wrapper.
 
 ### Oversized payload
 
@@ -74,7 +75,7 @@ If a string payload cannot fit the empty arena after flush → **emergency direc
 | Production microbench certification | BENCH-003 / BENCH-006 (light bench here is **engineering only**) |
 | Live Perl/XS opcode hooks | later COL |
 | Dual-sink overhead product path | ARCH-007 |
-| COL-015 full fork buffer ownership with batches | COL-015 |
+| Full TEST-018 oracle forkdepth/addpid (beyond unit stress) | TEST-018 / COL-015 residual |
 
 ## Tests
 

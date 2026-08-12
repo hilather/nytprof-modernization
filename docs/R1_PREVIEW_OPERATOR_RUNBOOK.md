@@ -58,9 +58,8 @@ Policy: [BUILD_SUPPORT_POLICY.md](https://github.com/hilather/nytprof-modernizat
 | 7 | `./scripts/packaging/native_agg_json_smoke.sh` (+ stream + incomplete) | **Optional when native** (**NATIVE-AGG-JSON** **15/3/15**; **JSON-NATIVE-STREAM-MVP**; **JSON-REPORT-INCOMPLETE-FAILCLOSED** via `json_report_incomplete_smoke.sh`) |
 | 8 | `./scripts/packaging/native_query_json_cross_smoke.sh` | **Optional when native** (**NATIVE-QUERY-JSON-CROSS** / **CROSS-EXPAND** / **CROSS-BLOCKS** / **CROSS-META** / **CROSS-TIMEBLOCK** / **CROSS-COUNTS** / **CROSS-TOTAL**: native `report --json` ↔ Perl `query --json` **15/3/15** + discount **818** + `sub_entry_events` **0** when both expose; calls2 **27**; blocks-calls1 **780**/**810**; `time_block_events` **0**/**916** when both expose; event counts **27/3/13/632/31** + `file_1_basename` when both expose; default-calls1 stream/PID + A9/A8 + greppable meta when both expose) |
 | 9 | `./scripts/packaging/capability_selftest_smoke.sh` | Run when cargo **or** `prefix`/`target` native CLI (or `$NYTPROF_NATIVE_CLI`); **honest skip** otherwise (**CI-CAPABILITY-GATE**) |
-| 10 | `./scripts/packaging/collector_sink_smoke.sh` | **COL-001..007 + COL-014 dual (test/dev-only OQ-4)** — isolation always; `make -C collector test` when CC; honest skip without C. |
+| 10 | `./scripts/packaging/collector_sink_smoke.sh` | **COL-001..007 + COL-014 dual (test/dev-only OQ-4) + COL-015 fork/PID** — isolation always; `make -C collector test` when CC; honest skip without C. |
 | 11 | `./tools/oracle/e3_c_writer_parity.sh` | **COL-007 product E3-EVENT** (when cargo): C fixtures `fixtures/v6/from-c/**` + `e3_c_*`; E3-mixed residual; honest skip without cargo (fixture presence still checked). |
-| 12 | `./tools/oracle/selftest_security_fuzz.sh` | **SEC-FUZZ-HARDENING-MVP** (when cargo): v5+v6 decode-fuzz batteries + optional collector batch/fork unit suite; honest skip without cargo. **Not** full SEC-002 continuous fuzz; COL-015 residual. |
 
 Not part of this gate (document only): broader `./scripts/packaging/packaging_gate.sh`, `./scripts/packaging/makemaker_dual_path_smoke.sh`. Not multi-OS CI (**BUILD-006**).
 
@@ -337,8 +336,6 @@ Do **not** claim these under offline R0 / R1-preview (full-R1 residuals; `R1-HON
 | **No full MakeMaker XS CPAN dual-build** | Candidate `Makefile.PL` facade only (**BUILD-MAKEMAKER-OPT**), not BUILD-003 full. |
 | **No multi-OS CI matrix** | Single-host `offline_gate.sh` only (**BUILD-006** open). |
 | **No product default flip** | Native remains opt-in; Perl `engine=auto` is facade behavior, not charter R3 product default. |
-| **No full continuous fuzz / SEC-012** | Offline package **SEC-FUZZ-HARDENING-MVP** (PR-C03) covers deterministic v5+v6 batteries + batch/fork threat catalogue — **not** SEC-002 continuous fuzz jobs, sanitizer matrices, or independent SEC-012 release sign-off. Contract: [`SECURITY_FUZZ_HARDENING_PACKAGE_v0.md`](https://github.com/hilather/nytprof-modernization/blob/main/docs/contracts/SECURITY_FUZZ_HARDENING_PACKAGE_v0.md). |
-| **No full COL-015 fork suite** | Lifecycle fork-state MVP + batch notify only; shared-FD / compressor inheritance stress residual (PR-C02b). |
 
 Advertised preview **does** include native aggregates JSON (incl. **SUB_ENTRY**, stream/PID, A2 `time_block_events` **0**/**916**, A9/A8 samples, ATTRIBUTE/OPTION/file samples, and blocks A4/A4b greppable ints), pure-Perl query JSON, **JSON report incomplete fail-closed** (COMPAT-010), **native↔query JSON cross-parity** with **CROSS-EXPAND** / **CROSS-BLOCKS** / **CROSS-META** / **CROSS-TIMEBLOCK** (`sub_entry` on default-calls1 **0** + calls2 **27** + blocks **780**/**810** + `time_block_events` **0**/**916** + stream/PID + A9/A8 + greppable meta when native CLI present), and pure-Perl **SUB_ENTRY** event multiplicity — without promoting those to full R1 / CPAN / FFI readiness.
 
@@ -594,9 +591,9 @@ Also on blocks-calls1 when asserted: leaf returns **15**, mid returns **3** (sam
 | `FMT-V6-EVENT-BODY-UNKNOWN-OPTIONAL-SKIP-PROVISIONAL` | **done** | Unknown optional length-framed skip preflight (`FLAG_BODY_LENGTH`). Not permanent flag freeze. Default `parse_chunk_frame` stays non-inflating. **Before full COL-007.** |
 | `FMT-V6-EVENT-BODY-UNKNOWN-OPTIONAL-SKIP-MVP` | **done** | Length-framed unknown-optional skip + always-inflate EVENT/mixed tests (order+fields; SOURCE co-kind). **Before full COL-007.** |
 | `COL-001-SINK-MVP` | **done (scaffold)** | Overlay `collector/` semantic sink + counting + v5 wire; smoke offline_gate step 10; **not** live hooks |
-| `COL-014-DUAL-SINK-MVP` | **done (test/dev-only)** | Same-run dual fan-out v5+v6 (OQ-4 not product UX); `test_dual_sink`; schema `collector-dual-sink-mvp-v0.md`; full oracle dual residual; feeds E4-v0 model pairs |
-| `E4-V0-MODEL-SEMANTIC-MVP` | **done** | E4-v0 model-level v5↔v6 aggregates on dual-sink pairs; `e4_v0_*` tests + `e4_v5_v6_semantic_smoke.sh --model-only`; full oracle + product CLI residual (PR-B12b) |
-| `COL-002-LIFECYCLE-MVP` | **done (scaffold)** | Explicit sink lifecycle + emit gates; **not** COL-015 full fork/signal matrix |
+| `COL-014-DUAL-SINK-MVP` | **done (test/dev-only)** | Same-run dual fan-out v5+v6 (OQ-4 not product UX); `test_dual_sink`; schema `collector-dual-sink-mvp-v0.md`; full oracle dual residual |
+| `COL-015-FORK-PID-MVP` | **done (scaffold)** | Fork/PID protocol + buffered preflush/discard + v5/v6 child reinit + POSIX fork stress (`test_fork_pid`); schema `collector-fork-pid-mvp-v0.md`. **Residual:** full TEST-018 oracle forkdepth/addpid; live XS; mid-deflate continue-in-child |
+| `COL-002-LIFECYCLE-MVP` | **done (scaffold)** | Explicit sink lifecycle + emit gates; COL-015 protocol MVP done; residual full TEST-018 / signal matrix |
 | `COL-003-SEQ-MVP` | **done (scaffold)** | Internal gapless logical seq; not on default v5 wire |
 | `COL-004-FAST-PATH-MVP` | **done (scaffold)** | No-alloc TIME_LINE/TIME_BLOCK batch append + `nytp_fast_emit_*`; light microbench engineering only — **not** BENCH cert |
 | `COL-005-BATCH-MVP` | **done (scaffold)** | Bounded event batch + arena; order under cap 1..64; SV lifetime; emergency oversized; flush-discount residual |
@@ -647,8 +644,8 @@ Also on blocks-calls1 when asserted: leaf returns **15**, mid returns **3** (sam
 | `DUAL-EQUALITY-READINESS-MVP` | **done** | Honesty sync; first-slice complete, full R1 residual, R2 runway only. **Before full COL-007.** |
 | `ADR-0002-V6-STRING-POOL-CANDIDATE` | **done** (proposed) | FOOTER string-pool ADR candidate. Not global pool; not COL-007. **Before full COL-007.** |
 | `E3-DUAL-EQUALITY-HARNESS-MVP` | **done** | E3 harness writer-bytes→decode equality (stand-in absolute/packing/string-dict/mid-stream). Stand-in **not** product dual-equality evidence. Not COL-007 C writer. **Before full COL-007.** |
-| `E4-V5-V6-SEMANTIC-EQUALITY-POLICY-PROVISIONAL` | **done** | E4 v5↔v6 semantic equality policy draft. E4-v0 model enforcement ready (PR-B10). |
-| `E4-V5-V6-SEMANTIC-EQUALITY-POLICY-MVP` | **done** | E4 policy honesty sync. E4-v0 model ready; full oracle + product CLI residual. |
+| `E4-V5-V6-SEMANTIC-EQUALITY-POLICY-PROVISIONAL` | **done** | E4 v5↔v6 semantic equality policy draft. Enforcement open. **Before full COL-007.** |
+| `E4-V5-V6-SEMANTIC-EQUALITY-POLICY-MVP` | **done** | E4 policy honesty sync. COL-007 deferred. **Before full COL-007.** |
 | `COL-007` | deferred | C v6 writer — unblocked for *start* after report-side evidence; not implemented by this runbook |
 
 ## Revision rule
