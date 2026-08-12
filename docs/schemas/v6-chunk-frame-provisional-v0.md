@@ -1,6 +1,6 @@
 # Format v6 chunk frame (provisional) — v0
 
-**Status:** provisional — **not** a v6 wire freeze (not FMT-002..010 ratification; not COL-007 C writer)  
+**Status:** numeric IDs + 40-byte chunk header **frozen** for major=6 by [ADR-0006](https://github.com/hilather/nytprof-modernization/blob/main/docs/adrs/0006-v6-wire-freeze.md); detailed layout text retained; not CLI v6 default  
 **Board IDs:** `FMT-V6-CHUNK-PROVISIONAL` (contract), `FMT-V6-CHUNK-PARSE-MVP` (shipped parse + tests)  
 **Depends on:** plan draft [`docs/plan/04_FILE_FORMAT_V6_TASKS.md`](https://github.com/hilather/nytprof-modernization/blob/main/docs/plan/04_FILE_FORMAT_V6_TASKS.md) §4; fixed-header preflight [`v6-fixed-header-provisional-v0.md`](https://github.com/hilather/nytprof-modernization/blob/main/docs/schemas/v6-fixed-header-provisional-v0.md)  
 **Gate:** COL-007 runway preflight only — **before** full C v6 encoder / event codecs / dictionaries

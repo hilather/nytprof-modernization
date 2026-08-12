@@ -73,10 +73,10 @@ Record decisions that affect stable semantics, wire bytes, platform support, pac
 - **Status:** accepted (packing intent frozen via ADR-0001); wire encode residual open
 - **Blocks:** FMT-007, COL-012
 - **Accepted binding ADR:** [`docs/adrs/0001-v6-event-body-packing-candidate.md`](https://github.com/hilather/nytprof-modernization/blob/main/docs/adrs/0001-v6-event-body-packing-candidate.md) (**accepted** OQ-1) — site deltas, `FLAG_HAS_SEQ`, `TIME_LINE_RUN` / `TIME_BLOCK_RUN` expansion, multi-chunk/mid-stream packing continuity.
-- **Provisional IDs:** opcodes 18/19 + flags `FLAG_SITE_DELTA`/`FLAG_HAS_SEQ` in [`V6_PROVISIONAL_ID_LOCKFILE_v0.md`](https://github.com/hilather/nytprof-modernization/blob/main/docs/contracts/V6_PROVISIONAL_ID_LOCKFILE_v0.md) — **not** wire freeze; packing encode/decode preflight residual.
+- **IDs:** opcodes 18/19 + flags `FLAG_SITE_DELTA`/`FLAG_HAS_SEQ` in [`V6_PROVISIONAL_ID_LOCKFILE_v0.md`](https://github.com/hilather/nytprof-modernization/blob/main/docs/contracts/V6_PROVISIONAL_ID_LOCKFILE_v0.md) — **frozen** for major=6 by [ADR-0006](https://github.com/hilather/nytprof-modernization/blob/main/docs/adrs/0006-v6-wire-freeze.md).
 - **Question (closed for product intent):** Which repeated event patterns justify specialized records — answered by ADR-0001 (runs + site-delta + seq compose; absolute baseline retained).
-- **Residual open:** packing encode/decode preflight land; dual-equality E2/E3 with packed profiles; formal wire freeze of numeric IDs after E3/E4.
-- **Decision must specify (done in ADR-0001):** expansion semantics, continuity, limits intent; wire numeric freeze remains separate.
+- **Residual open:** E3-mixed multi-kind C fixtures; full oracle E4; convert tooling depth (not ID freeze).
+- **Decision must specify (done in ADR-0001 + ADR-0006):** expansion semantics, continuity, limits; wire numeric freeze accepted after E3/E4-v0.
 
 ### ADR-Q007 - Source blob hashing and identity
 

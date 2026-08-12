@@ -1,6 +1,6 @@
 # Format v6 fixed file header (provisional) — v0
 
-**Status:** provisional — **not** a v6 wire freeze (not FMT-002..010 ratification; not COL-007 C writer)  
+**Status:** numeric IDs + 36-byte full header **frozen** for major=6 by [ADR-0006](https://github.com/hilather/nytprof-modernization/blob/main/docs/adrs/0006-v6-wire-freeze.md); detailed layout text retained; not CLI v6 default  
 **Board IDs:** `FMT-V6-HEADER-PROVISIONAL` (contract), `FMT-V6-HEADER-PARSE-MVP` (shipped parse + tests)  
 **Depends on:** plan draft [`docs/plan/04_FILE_FORMAT_V6_TASKS.md`](https://github.com/hilather/nytprof-modernization/blob/main/docs/plan/04_FILE_FORMAT_V6_TASKS.md) §3.1  
 **Gate:** COL-007 runway preflight only — **before** full C v6 encoder / ADR freeze

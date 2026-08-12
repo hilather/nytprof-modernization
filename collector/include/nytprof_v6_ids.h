@@ -1,20 +1,21 @@
 /* SPDX-License-Identifier: Artistic-1.0-Perl OR GPL-1.0-or-later
  *
- * nytprof_v6_ids.h — Provisional format v6 numeric ID lockfile (C mirror)
+ * nytprof_v6_ids.h — Format v6 numeric ID lockfile (C mirror)
  *
- * Status: provisional COL-007 runway constants — NOT a v6 wire freeze
- *         (not FMT-002..010 ratification; not COL-007 product complete).
+ * Status: FROZEN for SUPPORTED_MAJOR=6 by ADR-0006 (PR-B11).
+ *         Values must not change without a new major / superseding ADR.
  *
  * Normative docs:
- *   docs/contracts/V6_PROVISIONAL_ID_LOCKFILE_v0.md
+ *   docs/adrs/0006-v6-wire-freeze.md
+ *   docs/schemas/v6-wire-ids-frozen-v1.md
+ *   docs/contracts/V6_PROVISIONAL_ID_LOCKFILE_v0.md  (historical path; status frozen)
  *   docs/adrs/0001-v6-event-body-packing-candidate.md  (accepted packing intent)
  *   docs/adrs/0002-v6-string-pool-candidate.md         (accepted FOOTER-local dict)
  *
  * Must stay aligned with crates/nytprof-format-v6 (MAGIC, SUPPORTED_MAJOR,
  * chunk::kind/codec, event_body::opcode/flags, tlv::type_id, …).
  *
- * Plan deviation: COL-007 implements against this lockfile; formal wire freeze
- * is promoted after dual-equality E3 (C bytes) + E4 evidence.
+ * Golden vectors: fixtures/v6/vectors/
  */
 #ifndef NYTPROF_V6_IDS_H
 #define NYTPROF_V6_IDS_H
@@ -85,15 +86,15 @@ extern "C" {
 #define NYTPROF_V6_OP_COMMENT 15u
 #define NYTPROF_V6_OP_START_DEFLATE 16u
 #define NYTPROF_V6_OP_VERSION 17u
-/** ADR-0001 packing forms (provisional numbers; not wire freeze). */
+/** ADR-0001 packing forms (frozen opcode numbers; ADR-0006). */
 #define NYTPROF_V6_OP_TIME_LINE_RUN 18u
 #define NYTPROF_V6_OP_TIME_BLOCK_RUN 19u
 
-/* Event-body flags (u8 after opcode) */
+/* Event-body flags (u8 after opcode) — frozen bit assignments (ADR-0006) */
 #define NYTPROF_V6_FLAG_OPCODE_REQUIRED 0x01u
 #define NYTPROF_V6_FLAG_BODY_LENGTH 0x02u
 #define NYTPROF_V6_FLAG_SITE_DELTA 0x04u /* ADR-0001 */
-#define NYTPROF_V6_FLAG_HAS_SEQ 0x08u    /* ADR-0001 / OI-001-03 runway */
+#define NYTPROF_V6_FLAG_HAS_SEQ 0x08u    /* OQ-5 permanent optional seq (ADR-0006) */
 
 /* ---- String-blob -------------------------------------------------------- */
 
@@ -115,7 +116,7 @@ extern "C" {
 #define NYTPROF_V6_MAX_TLV_REGION_BYTES (64ull * 1024ull * 1024ull)
 #define NYTPROF_V6_MAX_TIME_RUN_LEN 1048576u
 
-/* ---- FOOTER string-dictionary (ADR-0002 provisional) -------------------- */
+/* ---- FOOTER string-dictionary (ADR-0002; IDs frozen ADR-0006) ------------ */
 
 #define NYTPROF_V6_MAX_DICT_ENTRIES 1048576u
 #define NYTPROF_V6_MAX_DICT_TOTAL_BYTES (64ull * 1024ull * 1024ull)

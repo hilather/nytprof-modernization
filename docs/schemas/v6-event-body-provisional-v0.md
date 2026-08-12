@@ -1,6 +1,6 @@
 # Format v6 event-body opcode codec (provisional) — v0
 
-**Status:** provisional — **not** a v6 wire freeze (not FMT-002..010 ratification; not COL-007 C writer)  
+**Status:** opcode/flag numeric IDs **frozen** for major=6 by [ADR-0006](https://github.com/hilather/nytprof-modernization/blob/main/docs/adrs/0006-v6-wire-freeze.md); detailed body layouts retained; not CLI v6 default  
 **Board IDs:** `FMT-V6-EVENT-BODY-PROVISIONAL` (contract), `FMT-V6-EVENT-BODY-MVP` (shipped encode/decode + tests)  
 **Depends on:** ULEB128 [`v6-varint-uleb128-provisional-v0.md`](https://github.com/hilather/nytprof-modernization/blob/main/docs/schemas/v6-varint-uleb128-provisional-v0.md); string/blob [`v6-string-blob-provisional-v0.md`](https://github.com/hilather/nytprof-modernization/blob/main/docs/schemas/v6-string-blob-provisional-v0.md); chunk frame (codec NONE payload role) [`v6-chunk-frame-provisional-v0.md`](https://github.com/hilather/nytprof-modernization/blob/main/docs/schemas/v6-chunk-frame-provisional-v0.md)  
 **Gate:** COL-007 runway preflight only — **before** full event catalog / payload inflate / C v6 writer

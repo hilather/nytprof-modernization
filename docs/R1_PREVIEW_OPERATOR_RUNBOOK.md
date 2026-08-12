@@ -601,7 +601,9 @@ Also on blocks-calls1 when asserted: leaf returns **15**, mid returns **3** (sam
 | `TEST-003-FAKE-CLOCK-MVP` | **done (scaffold)** | Fake-clock + M4 **mini** sample (counting + v5 wire); full corpus residual until complete TEST-003 |
 | `ADR-0001-V6-PACKING-ACCEPTED` | **done** (accepted) | Packing intent ADR accepted as-is (OQ-1). Not wire freeze; not COL-007. **Before full COL-007.** |
 | `ADR-0002-V6-STRING-POOL-ACCEPTED` | **done** (accepted) | FOOTER string-pool ADR accepted as-is (OQ-1). Not global pool; not COL-007. **Before full COL-007.** |
-| `FMT-V6-PROVISIONAL-ID-LOCKFILE` | **done** | Provisional ID lockfile + C header stub; plan FMT-002..010 deviation (COL-007 vs lockfile; freeze after E3/E4). **Before full COL-007.** |
+| `FMT-V6-PROVISIONAL-ID-LOCKFILE` | **done** (frozen status) | ID lockfile + C header; promoted by ADR-0006 after E3/E4-v0. |
+| `FMT-V6-WIRE-FREEZE` | **done** | ADR-0006 major=6 numeric ID freeze; catalog `v6-wire-ids-frozen-v1.md`. Residual: E3-mixed / CLI v6 default / COL-008. |
+| `FMT-V6-GOLDEN-VECTORS` | **done** | `fixtures/v6/vectors/` + `cargo test -p nytprof-format-v6 golden_vector_`. |
 | `DUAL-EQUALITY-READINESS-MVP` | **done** | Dual-equality readiness contract (E1–E5); not product freeze. **Before full COL-007.** |
 | `COL-007-ABS-MVP` | **done (scaffold)** | Absolute v6 writer (codec NONE EVENT) + unit vectors; **not** packing/codecs/E3-C; **not** board COL-007 done |
 | `COL-007` | deferred | C v6 writer product — staged after ABS-MVP; board flip at PR-B09 E3-C; against accepted ADR-0001/0002 + provisional ID lockfile |

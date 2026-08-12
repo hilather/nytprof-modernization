@@ -27,6 +27,10 @@ fixtures/v6/from-c/        # C-produced product E3-EVENT matrix (COL-007)
   mid_stream.nytprof
   mid_stream_dict.nytprof
   README.md
+
+fixtures/v6/vectors/       # Immutable golden wire vectors (ADR-0006 / FMT-012)
+  primitives/ event/ profiles/
+  SHA256SUMS manifest.json README.md
 ```
 
 ## Capture

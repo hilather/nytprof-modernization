@@ -17,24 +17,23 @@ pub const FLAG_OPCODE_REQUIRED: u8 = 0x01;
 
 /// Flag: typed body is length-framed (`ULEB128 body_len || body_len bytes`).
 ///
-/// Provisional preflight for **unknown optional** opcode skip. Known opcodes use
-/// their fixed typed layouts and ignore this bit. Not a permanent wire freeze of
-/// the flag space (future ADR may reassign bits).
+/// Unknown optional opcode skip. Known opcodes use their fixed typed layouts and
+/// ignore this bit. **Frozen** bit assignment for major=6 ([ADR-0006](https://github.com/hilather/nytprof-modernization/blob/main/docs/adrs/0006-v6-wire-freeze.md)).
 pub const FLAG_BODY_LENGTH: u8 = 0x02;
 
 /// Flag: TIME_LINE / TIME_BLOCK / SUB_ENTRY site fields are **signed deltas**
 /// (ZigZag+ULEB) relative to a running base, not absolute ULEB sites.
 ///
-/// Provisional location-delta preflight only — not a permanent packing ADR.
-/// Absolute path remains flags `0` (default encode_event_body).
+/// Packing form per ADR-0001; **frozen** bit for major=6 (ADR-0006). Absolute path
+/// remains flags `0` (default encode_event_body).
 pub const FLAG_SITE_DELTA: u8 = 0x04;
 
-/// Flag: record carries a provisional **logical event sequence number** (ULEB128)
-/// immediately after the flags byte and before the typed body.
+/// Flag: record carries a **logical event sequence number** (ULEB128) immediately
+/// after the flags byte and before the typed body.
 ///
-/// OI-001-03 runway preflight only — not a permanent freeze of whether VERSION /
-/// START_DEFLATE participate in dual-output sequence numbers, and not a permanent
-/// flag-bit ADR. Default [`encode_event_body`] omits the flag (no seq field).
+/// **Frozen** optional bit (ADR-0006 §3 / OQ-5): when dual-output seq is emitted,
+/// VERSION and START_DEFLATE may participate in the same monotonic space. Default
+/// [`encode_event_body`] omits the flag (no seq field).
 pub const FLAG_HAS_SEQ: u8 = 0x08;
 
 /// Fail-closed upper bound on a single length-framed unknown body (same as event-body cap).
@@ -42,17 +41,17 @@ pub const MAX_SKIP_BODY_BYTES: usize = MAX_EVENT_BODY_BYTES;
 
 /// Fail-closed upper bound on TIME_LINE_RUN packed length `N` (ticks count).
 ///
-/// Provisional preflight cap — not a permanent packing ADR. Checked **before**
-/// expanding to N logical TIME_LINE records.
+/// Frozen cap for major=6 (ADR-0006). Checked **before** expanding to N logical
+/// TIME_LINE records.
 pub const MAX_TIME_LINE_RUN_LEN: usize = 1_048_576;
 
 /// Fail-closed upper bound on TIME_BLOCK_RUN packed length `N` (ticks count).
 ///
-/// Provisional preflight cap — not a permanent packing ADR. Checked **before**
-/// expanding to N logical TIME_BLOCK records.
+/// Frozen cap for major=6 (ADR-0006). Checked **before** expanding to N logical
+/// TIME_BLOCK records.
 pub const MAX_TIME_BLOCK_RUN_LEN: usize = 1_048_576;
 
-/// Provisional event opcodes.
+/// Event opcodes (numeric IDs frozen for major=6 — ADR-0006).
 pub mod opcode {
     /// Reserved — always fail closed.
     pub const RESERVED: u64 = 0;
@@ -94,13 +93,13 @@ pub mod opcode {
     ///
     /// Body: `fid`, `line`, `N`, then `N` × `ticks` (all ULEB128). Decode expands
     /// to N logical TIME_LINE records retaining every per-event ticks value.
-    /// Provisional packed-run preflight — not a permanent packing ADR.
+    /// Packing form ADR-0001; opcode number frozen ADR-0006.
     pub const TIME_LINE_RUN: u64 = 18;
     /// Packed run of consecutive same-site TIME_BLOCK events (expands on decode).
     ///
     /// Body: `fid`, `line`, `block_line`, `N`, then `N` × `ticks` (all ULEB128).
     /// Decode expands to N logical TIME_BLOCK records retaining every per-event ticks.
-    /// Provisional packed-run preflight — not a permanent packing ADR.
+    /// Packing form ADR-0001; opcode number frozen ADR-0006.
     pub const TIME_BLOCK_RUN: u64 = 19;
 }
 

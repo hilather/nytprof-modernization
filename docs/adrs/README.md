@@ -8,13 +8,31 @@ Queue: [`docs/plan/18_OPEN_QUESTIONS_AND_ADR_QUEUE.md`](https://github.com/hilat
 
 | ADR | Title | Status |
 |-----|-------|--------|
-| 0001 | *(reserved)* Format v6 event-body packing candidate | reserved for R2 runway (land/accept via packing work + **PR-B01** / OQ-1) |
-| 0002 | *(reserved)* Format v6 FOOTER string-pool / dictionary candidate | reserved for R2 runway (land/accept via packing work + **PR-B01** / OQ-1) |
-| [0003](https://github.com/hilather/nytprof-modernization/blob/main/docs/adrs/0003-r1-full-residual-policy.md) | Full R1 residual close-or-waive policy (HTML map + OQ-2) | **accepted** (**PR-A04**) |
-| 0004 | *(reserved)* Collector packaging / source-tree layout | reserved for **PR-B00** (`0004-collector-packaging-source-tree.md` when that PR lands; do **not** reuse 0003) |
-| [0005](https://github.com/hilather/nytprof-modernization/blob/main/docs/adrs/0005-r3-engine-auto-default-promotion.md) | R3 `engine=auto` product default promotion (gated) | **accepted (policy)**; **flip not executed** (**PR-D02** / ADR-Q024) |
+| [0001](https://github.com/hilather/nytprof-modernization/blob/main/docs/adrs/0001-v6-event-body-packing-candidate.md) | Format v6 event-body packing candidate design | **accepted** (OQ-1 as-is; packing intent; not COL-007 alone) |
+| [0002](https://github.com/hilather/nytprof-modernization/blob/main/docs/adrs/0002-v6-string-pool-candidate.md) | Format v6 FOOTER string-pool / dictionary candidate | **accepted** (OQ-1 as-is; FOOTER-local; not global pool) |
+| [0004](https://github.com/hilather/nytprof-modernization/blob/main/docs/adrs/0004-collector-packaging-source-tree.md) | Collector packaging / source-tree layout (B0-A overlay) | **accepted** — required before COL-001 / PR-B02 merge |
+| [0006](https://github.com/hilather/nytprof-modernization/blob/main/docs/adrs/0006-v6-wire-freeze.md) | Format v6 wire freeze (numeric IDs + core layouts) | **accepted** — after E3-EVENT(C) + E4-v0; golden vectors |
 
-**Numbering coordination (PLAN `8c9b1a63`):** 0001–0002 = format packing track (B01); **0003 = residual policy (A04)**; **0004 = collector packaging (B00)**; **0005 = R3 default promotion (D02)**. Later ADRs start at **0006+**. Do not steal 0001–0005. R4 format default is a separate ADR (not 0005).
+**Numbering map (coordinate across parallel PRs):**
+
+| Number | Topic | Track / PR |
+|--------|-------|------------|
+| **0001** | Format v6 event-body packing candidate | R2 format — PR-B01 |
+| **0002** | Format v6 FOOTER string-pool / dictionary candidate | R2 format — PR-B01 |
+| **0003** | Full R1 residual policy (CLOSE / WAIVE / OUT-OF-R1) | Track A — PR-A04 (may land as `0003-r1-full-residual-policy.md` on that branch) |
+| **0004** | Collector packaging / source-tree (B0-A) | Track B — PR-B00 |
+| **0005** | R3 `engine=auto` default promotion | Track D — PR-D02 (when present) |
+| **0006** | Format v6 wire freeze (IDs + golden vectors) | Track B — PR-B11 |
+
+### Related (not ADRs)
+
+| Doc | Role |
+|-----|------|
+| [`V6_PROVISIONAL_ID_LOCKFILE_v0`](https://github.com/hilather/nytprof-modernization/blob/main/docs/contracts/V6_PROVISIONAL_ID_LOCKFILE_v0.md) | ID lockfile (path historical; **status frozen** by ADR-0006) |
+| [`v6-wire-ids-frozen-v1`](https://github.com/hilather/nytprof-modernization/blob/main/docs/schemas/v6-wire-ids-frozen-v1.md) | Authoritative frozen major=6 ID catalog |
+| [`DUAL_EQUALITY_READINESS_v0`](https://github.com/hilather/nytprof-modernization/blob/main/docs/contracts/DUAL_EQUALITY_READINESS_v0.md) | Dual-equality readiness checklist (E1–E5) |
+| C header | [`collector/include/nytprof_v6_ids.h`](https://github.com/hilather/nytprof-modernization/blob/main/collector/include/nytprof_v6_ids.h) — mirrors frozen constants |
+| Golden vectors | [`fixtures/v6/vectors/`](https://github.com/hilather/nytprof-modernization/blob/main/fixtures/v6/vectors/) |
 
 Governance ratifications (not format ADRs):
 

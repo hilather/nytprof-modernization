@@ -37,7 +37,7 @@ Committed binaries keep `cargo test` green without regenerating.
 | Residual | Notes |
 |----------|--------|
 | **E3-mixed** | SOURCE/INDEX/SUMMARY multi-kind product C fixtures not claimed here |
-| Wire freeze FMT-002..010 | still open after E3/E4 |
+| Wire freeze FMT-002..010 | **done** (ADR-0006 / PR-B11) |
 | CLI v6 default | residual |
 | E4-v0 model enforcement | ready on dual-sink pairs (PR-B10); full oracle residual |
 | COL-008 batched Rust writer | deferred / non-baseline |

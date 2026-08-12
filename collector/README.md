@@ -1,10 +1,10 @@
 
-# Collector overlay (ADR-0004 B0-A) — COL-001..007 + COL-014 dual (test/dev) + COL-015 fork + fake-clock scaffold
+# Collector overlay (ADR-0004 B0-A) — COL-001..007 + COL-014 dual (test/dev) + fake-clock scaffold
 
-**Status:** scaffolding + product E3-EVENT (PR-B02..**B05 v5 wire** + **B06 absolute v6** + **B07 codecs/multi-chunk/CRC** + **B08 packing/FOOTER dict/mid-stream** + **B09 E3-C fixtures / board COL-007 done** + **B10a COL-014 dual-sink test/dev-only OQ-4** + **C02b COL-015 fork/PID with buffered sinks**)  
+**Status:** scaffolding + product E3-EVENT (PR-B02..**B05 v5 wire** + **B06 absolute v6** + **B07 codecs/multi-chunk/CRC** + **B08 packing/FOOTER dict/mid-stream** + **B09 E3-C fixtures / board COL-007 done** + **B10a COL-014 dual-sink test/dev-only OQ-4**)  
 **Layout decision:** [ADR-0004](https://github.com/hilather/nytprof-modernization/blob/main/docs/adrs/0004-collector-packaging-source-tree.md)  
 **Logical events:** [COMPAT-001](https://github.com/hilather/nytprof-modernization/blob/main/docs/contracts/COMPAT-001_LOGICAL_EVENT_CONTRACT.md)  
-**Schemas:** [collector-sink-api-mvp-v0.md](https://github.com/hilather/nytprof-modernization/blob/main/docs/schemas/collector-sink-api-mvp-v0.md), [collector-lifecycle-seq-fake-clock-mvp-v0.md](https://github.com/hilather/nytprof-modernization/blob/main/docs/schemas/collector-lifecycle-seq-fake-clock-mvp-v0.md), [collector-batch-fast-mvp-v0.md](https://github.com/hilather/nytprof-modernization/blob/main/docs/schemas/collector-batch-fast-mvp-v0.md), [collector-v5-wire-mvp-v0.md](https://github.com/hilather/nytprof-modernization/blob/main/docs/schemas/collector-v5-wire-mvp-v0.md), [collector-v6-absolute-wire-mvp-v0.md](https://github.com/hilather/nytprof-modernization/blob/main/docs/schemas/collector-v6-absolute-wire-mvp-v0.md), [collector-v6-codecs-multi-chunk-crc-mvp-v0.md](https://github.com/hilather/nytprof-modernization/blob/main/docs/schemas/collector-v6-codecs-multi-chunk-crc-mvp-v0.md), [collector-v6-packing-footer-dict-mvp-v0.md](https://github.com/hilather/nytprof-modernization/blob/main/docs/schemas/collector-v6-packing-footer-dict-mvp-v0.md), [collector-v6-e3-c-fixtures-mvp-v0.md](https://github.com/hilather/nytprof-modernization/blob/main/docs/schemas/collector-v6-e3-c-fixtures-mvp-v0.md), [collector-dual-sink-mvp-v0.md](https://github.com/hilather/nytprof-modernization/blob/main/docs/schemas/collector-dual-sink-mvp-v0.md), [collector-fork-pid-mvp-v0.md](https://github.com/hilather/nytprof-modernization/blob/main/docs/schemas/collector-fork-pid-mvp-v0.md)  
+**Schemas:** [collector-sink-api-mvp-v0.md](https://github.com/hilather/nytprof-modernization/blob/main/docs/schemas/collector-sink-api-mvp-v0.md), [collector-lifecycle-seq-fake-clock-mvp-v0.md](https://github.com/hilather/nytprof-modernization/blob/main/docs/schemas/collector-lifecycle-seq-fake-clock-mvp-v0.md), [collector-batch-fast-mvp-v0.md](https://github.com/hilather/nytprof-modernization/blob/main/docs/schemas/collector-batch-fast-mvp-v0.md), [collector-v5-wire-mvp-v0.md](https://github.com/hilather/nytprof-modernization/blob/main/docs/schemas/collector-v5-wire-mvp-v0.md), [collector-v6-absolute-wire-mvp-v0.md](https://github.com/hilather/nytprof-modernization/blob/main/docs/schemas/collector-v6-absolute-wire-mvp-v0.md), [collector-v6-codecs-multi-chunk-crc-mvp-v0.md](https://github.com/hilather/nytprof-modernization/blob/main/docs/schemas/collector-v6-codecs-multi-chunk-crc-mvp-v0.md), [collector-v6-packing-footer-dict-mvp-v0.md](https://github.com/hilather/nytprof-modernization/blob/main/docs/schemas/collector-v6-packing-footer-dict-mvp-v0.md), [collector-v6-e3-c-fixtures-mvp-v0.md](https://github.com/hilather/nytprof-modernization/blob/main/docs/schemas/collector-v6-e3-c-fixtures-mvp-v0.md), [collector-dual-sink-mvp-v0.md](https://github.com/hilather/nytprof-modernization/blob/main/docs/schemas/collector-dual-sink-mvp-v0.md)  
 **Timing notes:** [BASE-003](https://github.com/hilather/nytprof-modernization/blob/main/baseline/inventories/timing-lifecycle-notes.md)
 
 Modernization C sources for the **semantic event sink** live here — **not** under `baseline/6.15/` (oracle pin remains immutable).
@@ -13,9 +13,9 @@ Modernization C sources for the **semantic event sink** live here — **not** un
 
 ```text
 collector/
-  include/     public C headers (sink API, types, clock, batch/event, fork, counting + v5/v6 wire + dual + v6 IDs)
-  src/         sink wrappers + backends + fake-clock + batch/fast path + fork protocol + v5 + v6 + dual writers
-  t/           unit tests (no Perl; pure C; zlib/zstd/lz4 for wire; POSIX fork stress)
+  include/     public C headers (sink API, types, clock, batch/event, counting + v5/v6 wire + dual + v6 IDs)
+  src/         sink wrappers + backends + fake-clock + batch/fast path + v5 + v6 + dual writers
+  t/           unit tests (no Perl; pure C; zlib/zstd/lz4 for wire)
   xs/          reserved for future XS glue (empty)
   Makefile     opt-in C build (links -lz -lzstd -llz4)
   build/       gitignored objects / test binaries / sample .nytprof
@@ -39,16 +39,15 @@ collector/
 | **COL-007-PACK (PR-B08)** | ADR-0001 packing continuity; mid-stream codec region; ADR-0002 FOOTER string dict |
 | **COL-007 product E3-EVENT (PR-B09)** | C-only fixtures under `fixtures/v6/from-c/`; `gen_e3_c_fixtures`; product `e3_c_*` Rust always-inflate equality |
 | **COL-014 dual-sink (PR-B10a, OQ-4)** | **Test/dev-only** fan-out to v5+v6; same-run logical equality; env probe `NYTPROF_DUAL_SINK` / `NYTPROF_FORMAT=dual` (**not** product UX) |
-| **COL-015 fork/PID (PR-C02b)** | `nytp_fork_prepare/resume_*` protocol; batch preflush + child residual discard; addpid paths; v5/v6 child reinit; dual reinit; stress `test_fork_pid` |
 | **Fake-clock harness** | Scripted ticks + BASE-003 stmt driver + M4 **mini** sample |
-| `make -C collector test` | `test_sink_api` + `test_lifecycle_seq` + `test_fake_clock` + `test_batch_fast` + **`test_v5_wire`** + **`test_v6_abs_wire`** + **`test_v6_codec_chunk_crc`** + **`test_v6_packing_footer`** + **`test_dual_sink`** + **`test_fork_pid`** |
+| `make -C collector test` | `test_sink_api` + `test_lifecycle_seq` + `test_fake_clock` + `test_batch_fast` + **`test_v5_wire`** + **`test_v6_abs_wire`** + **`test_v6_codec_chunk_crc`** + **`test_v6_packing_footer`** + **`test_dual_sink`** |
 | `make -C collector gen-e3-fixtures` | Write product E3-EVENT C matrix to `OUTDIR` (default `../fixtures/v6/from-c`) |
 
 ## Explicit non-claims
 
 - **Not full M4 oracle corpus** — mini sample only; full `fixtures/v5/*` v5-via-sink equality needs complete TEST-003  
-- **Board COL-007 is done for product E3-EVENT** (`fixtures/v6/from-c/`, `e3_c_*`, `tools/oracle/e3_c_writer_parity.sh`; schema [collector-v6-e3-c-fixtures-mvp-v0.md](https://github.com/hilather/nytprof-modernization/blob/main/docs/schemas/collector-v6-e3-c-fixtures-mvp-v0.md)). **Residuals:** **E3-mixed** multi-kind C fixtures; wire freeze; CLI v6 default; E4 enforcement; live XS hooks; COL-008  
-- **COL-015 MVP done** (protocol + buffered ownership + stress); residual full TEST-018 oracle forkdepth/addpid/merge, live XS, mid-deflate continue-in-child, signal-safe finalize  
+- **Board COL-007 is done for product E3-EVENT** (`fixtures/v6/from-c/`, `e3_c_*`, `tools/oracle/e3_c_writer_parity.sh`; schema [collector-v6-e3-c-fixtures-mvp-v0.md](https://github.com/hilather/nytprof-modernization/blob/main/docs/schemas/collector-v6-e3-c-fixtures-mvp-v0.md)). **Wire freeze** major=6 IDs: [ADR-0006](https://github.com/hilather/nytprof-modernization/blob/main/docs/adrs/0006-v6-wire-freeze.md) + golden vectors `fixtures/v6/vectors/`. **Residuals:** **E3-mixed** multi-kind C fixtures; CLI v6 default; full oracle E4 / E4 product smoke (E4-v0 model on dual-sink pairs is ready); live XS hooks; COL-008  
+- **Not COL-015** — full fork buffer ownership / signal-safe finalization matrix  
 - **Not** hooked into live Perl opcode profiler yet  
 - **Not** a default dependency of `make legacy-smoke` or dual-path legacy half  
 - Dual-sink (COL-014) is **test/dev only** (OQ-4) — not advertised product `format=dual`; full fixtures dual equality residual  
@@ -91,8 +90,6 @@ OPEN --activate--> ACTIVE --stop--> STOPPED --activate--> ACTIVE
                       +--begin_fork--> FORK_SPLIT --> parent ACTIVE / child OPEN (seq reset)
                       +--mark_failed--> FAILED --> close --> CLOSED
 ```
-
-Prefer **`nytp_fork_prepare` / `nytp_fork_resume_parent` / `nytp_fork_resume_child`** (COL-015) so buffered sinks preflush and child residual is discarded. Wire sinks: `nytp_v5/v6_sink_fork_child_reinit` for addpid path + clean stream.
 
 Emit: all kinds in `OPEN`/`ACTIVE`; finalization subset in `FINALIZING`; none in `STOPPED`/`FORK_SPLIT`/`FAILED`/`CLOSED`.
 
@@ -174,7 +171,7 @@ Hooks will call **emit**, never raw v5 bytes, once integrated. Dual/v6 sinks plu
 | Complete TEST-003 | Full corpus fake-clock oracle match |
 | COL-007 | C v6 writer product E3-EVENT **done** (PR-B09); E3-mixed residual |
 | COL-014 | Dual-sink **test/dev harness done** (PR-B10a); full oracle dual residual (TEST-003/TEST-008) |
-| COL-015 residual | Full TEST-018 oracle forkdepth/addpid/merge + signal-safe finalize / live XS (MVP protocol + unit stress landed in PR-C02b) |
+| COL-015 | Full fork / signal lifecycle matrix with batch ownership |
 | BENCH-003 / BENCH-004 | Certified statement-path / writer component gates |
 
 ## Isolation
@@ -185,12 +182,12 @@ Hooks will call **emit**, never raw v5 bytes, once integrated. Dual/v6 sinks plu
 | `collector/`, `collector/install/`, `prefix/collector/` | **Never** |
 | `crates/`, candidate `perl/` | **Never** (oracle context) |
 
-## Provisional v6 ID lockfile (C)
+## Format v6 ID lockfile (C) — frozen major=6 (ADR-0006)
 
 | Path | Role |
 |------|------|
-| [`include/nytprof_v6_ids.h`](https://github.com/hilather/nytprof-modernization/blob/main/collector/include/nytprof_v6_ids.h) | Mirrored provisional MAGIC / kind / codec / opcode / flag constants for COL-007 |
+| [`include/nytprof_v6_ids.h`](https://github.com/hilather/nytprof-modernization/blob/main/collector/include/nytprof_v6_ids.h) | Mirrored **frozen** MAGIC / kind / codec / opcode / flag constants (ADR-0006) |
 
 Normative note: [`docs/contracts/V6_PROVISIONAL_ID_LOCKFILE_v0.md`](https://github.com/hilather/nytprof-modernization/blob/main/docs/contracts/V6_PROVISIONAL_ID_LOCKFILE_v0.md).
 
-**Not** a wire freeze. Board COL-007 product E3-EVENT is **done** (PR-B09); E3-mixed / CLI v6 / live XS residual.
+**Wire freeze** for major=6 IDs is **done** (ADR-0006 / PR-B11). Board COL-007 product E3-EVENT is **done** (PR-B09); residual E3-mixed / CLI v6 default / live XS / COL-008.
