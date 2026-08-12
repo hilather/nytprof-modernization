@@ -101,6 +101,24 @@ static nytp_status body_append(v6_impl *vi, const void *p, size_t n)
     return buf_append(&vi->body, &vi->body_len, &vi->body_cap, p, n);
 }
 
+/* Checkpoint / rollback so a failed multi-field emit never leaves a truncated record. */
+static void body_rollback(v6_impl *vi, size_t mark)
+{
+    if (mark <= vi->body_len) {
+        vi->body_len = mark;
+    }
+}
+
+/*
+ * On any emit failure after body bytes may have been written: restore mark.
+ * Call only for non-OK statuses from mid-record paths.
+ */
+static nytp_status emit_fail(v6_impl *vi, size_t mark, nytp_status st)
+{
+    body_rollback(vi, mark);
+    return st;
+}
+
 /* ---- ULEB128 (canonical, matches Rust encode_u64) ---- */
 
 static size_t uleb_encode(uint64_t value, uint8_t out[10])
@@ -392,11 +410,24 @@ static nytp_status encode_chunk_frame(v6_impl *vi, uint8_t kind, uint8_t codec,
     return NYTP_OK;
 }
 
-static nytp_status seal_event_chunk(v6_impl *vi)
+static nytp_status seal_event_chunk(v6_impl *vi, const nytp_sink *sink)
 {
     nytp_status st;
     uint32_t unc;
     if (vi->sealed) {
+        return NYTP_OK;
+    }
+    /*
+     * Sticky FAILED (OVERFLOW/IO after emit): do **not** seal a product
+     * mini-profile. Emit paths checkpoint/rollback so open body has no
+     * truncated record; discard remaining complete-but-failed-stream body
+     * so close cannot report OK with a sealed EVENT after sticky fail.
+     * Lifecycle close-from-FAILED still returns OK (prefix-only wire).
+     */
+    if (sink && sink->state == NYTP_SINK_FAILED) {
+        vi->body_len = 0;
+        vi->event_count = 0;
+        vi->sealed = 1; /* finished; no EVENT chunk */
         return NYTP_OK;
     }
     if (vi->body_len > NYTPROF_V6_MAX_CHUNK_PAYLOAD ||
@@ -405,10 +436,8 @@ static nytp_status seal_event_chunk(v6_impl *vi)
     }
     unc = (uint32_t)vi->body_len;
     /*
-     * Empty body → still emit one EVENT chunk with zero payload when any
-     * logical path ran, OR when body is empty but we always seal after
-     * close for decoder-ready mini-profile parity with encode_mini_profile:
-     * empty events → no EVENT chunk. Match Rust: empty events ⇒ no chunk.
+     * Empty body → no EVENT chunk (Rust encode_mini_profile empty parity).
+     * Non-empty / event_count > 0 → one codec-NONE EVENT chunk.
      */
     if (vi->body_len > 0 || vi->event_count > 0) {
         st = encode_chunk_frame(vi, (uint8_t)NYTPROF_V6_KIND_EVENT,
@@ -470,8 +499,9 @@ static nytp_status v6_flush(nytp_sink *sink)
 static nytp_status v6_close(nytp_sink *sink)
 {
     v6_impl *vi = vi_of(sink);
-    nytp_status st = seal_event_chunk(vi);
+    nytp_status st = seal_event_chunk(vi, sink);
     if (st != NYTP_OK) {
+        /* Do not write a path file after refuse-seal / sticky fail. */
         return st;
     }
     if (vi->path) {
@@ -515,10 +545,12 @@ static nytp_status v6_emit_attribute(nytp_sink *sink, nytp_string_view key,
                                      nytp_string_view value)
 {
     v6_impl *vi = vi_of(sink);
+    size_t mark;
     nytp_status st;
     if (vi->sealed) {
         return NYTP_ERR_STATE;
     }
+    mark = vi->body_len;
     st = check_str_view(key);
     if (st != NYTP_OK) {
         return st;
@@ -529,27 +561,33 @@ static nytp_status v6_emit_attribute(nytp_sink *sink, nytp_string_view key,
     }
     st = body_op(vi, NYTPROF_V6_OP_ATTRIBUTE);
     if (st != NYTP_OK) {
-        return st;
+        return emit_fail(vi, mark, st);
     }
     st = body_string_blob(vi, 0, utf8_flag(key), key);
     if (st != NYTP_OK) {
-        return st;
+        return emit_fail(vi, mark, st);
     }
     st = body_string_blob(vi, 0, utf8_flag(value), value);
     if (st != NYTP_OK) {
-        return st;
+        return emit_fail(vi, mark, st);
     }
-    return after_record(vi, NYTP_EVT_ATTRIBUTE);
+    st = after_record(vi, NYTP_EVT_ATTRIBUTE);
+    if (st != NYTP_OK) {
+        return emit_fail(vi, mark, st);
+    }
+    return NYTP_OK;
 }
 
 static nytp_status v6_emit_option(nytp_sink *sink, nytp_string_view key,
                                   nytp_string_view value)
 {
     v6_impl *vi = vi_of(sink);
+    size_t mark;
     nytp_status st;
     if (vi->sealed) {
         return NYTP_ERR_STATE;
     }
+    mark = vi->body_len;
     st = check_str_view(key);
     if (st != NYTP_OK) {
         return st;
@@ -560,39 +598,49 @@ static nytp_status v6_emit_option(nytp_sink *sink, nytp_string_view key,
     }
     st = body_op(vi, NYTPROF_V6_OP_OPTION);
     if (st != NYTP_OK) {
-        return st;
+        return emit_fail(vi, mark, st);
     }
     st = body_string_blob(vi, 0, utf8_flag(key), key);
     if (st != NYTP_OK) {
-        return st;
+        return emit_fail(vi, mark, st);
     }
     st = body_string_blob(vi, 0, utf8_flag(value), value);
     if (st != NYTP_OK) {
-        return st;
+        return emit_fail(vi, mark, st);
     }
-    return after_record(vi, NYTP_EVT_OPTION);
+    st = after_record(vi, NYTP_EVT_OPTION);
+    if (st != NYTP_OK) {
+        return emit_fail(vi, mark, st);
+    }
+    return NYTP_OK;
 }
 
 static nytp_status v6_emit_comment(nytp_sink *sink, nytp_string_view text)
 {
     v6_impl *vi = vi_of(sink);
+    size_t mark;
     nytp_status st;
     if (vi->sealed) {
         return NYTP_ERR_STATE;
     }
+    mark = vi->body_len;
     st = check_str_view(text);
     if (st != NYTP_OK) {
         return st;
     }
     st = body_op(vi, NYTPROF_V6_OP_COMMENT);
     if (st != NYTP_OK) {
-        return st;
+        return emit_fail(vi, mark, st);
     }
     st = body_string_blob(vi, 0, utf8_flag(text), text);
     if (st != NYTP_OK) {
-        return st;
+        return emit_fail(vi, mark, st);
     }
-    return after_record(vi, NYTP_EVT_COMMENT);
+    st = after_record(vi, NYTP_EVT_COMMENT);
+    if (st != NYTP_OK) {
+        return emit_fail(vi, mark, st);
+    }
+    return NYTP_OK;
 }
 
 static nytp_status v6_emit_time_line(nytp_sink *sink, nytp_ticks ticks,
@@ -600,36 +648,42 @@ static nytp_status v6_emit_time_line(nytp_sink *sink, nytp_ticks ticks,
 {
     v6_impl *vi = vi_of(sink);
     uint64_t ut;
+    size_t mark;
     nytp_status st;
     if (vi->sealed) {
         return NYTP_ERR_STATE;
     }
+    mark = vi->body_len;
     st = ticks_to_u64(ticks, &ut);
     if (st != NYTP_OK) {
         return st;
     }
     st = body_op(vi, NYTPROF_V6_OP_TIME_LINE);
     if (st != NYTP_OK) {
-        return st;
+        return emit_fail(vi, mark, st);
     }
     st = body_uleb(vi, (uint64_t)fid);
     if (st != NYTP_OK) {
-        return st;
+        return emit_fail(vi, mark, st);
     }
     st = body_uleb(vi, (uint64_t)line);
     if (st != NYTP_OK) {
-        return st;
+        return emit_fail(vi, mark, st);
     }
     st = body_uleb(vi, ut);
     if (st != NYTP_OK) {
-        return st;
+        return emit_fail(vi, mark, st);
     }
     vi->stats.last_ticks = ticks;
     vi->stats.last_fid = fid;
     vi->stats.last_line = line;
     vi->stats.last_block_line = 0;
     vi->stats.last_sub_line = 0;
-    return after_record(vi, NYTP_EVT_TIME_LINE);
+    st = after_record(vi, NYTP_EVT_TIME_LINE);
+    if (st != NYTP_OK) {
+        return emit_fail(vi, mark, st);
+    }
+    return NYTP_OK;
 }
 
 static nytp_status v6_emit_time_block(nytp_sink *sink, nytp_ticks ticks,
@@ -638,55 +692,67 @@ static nytp_status v6_emit_time_block(nytp_sink *sink, nytp_ticks ticks,
 {
     v6_impl *vi = vi_of(sink);
     uint64_t ut;
+    size_t mark;
     nytp_status st;
     if (vi->sealed) {
         return NYTP_ERR_STATE;
     }
     (void)sub_line; /* provisional absolute TIME_BLOCK has no sub_line field */
+    mark = vi->body_len;
     st = ticks_to_u64(ticks, &ut);
     if (st != NYTP_OK) {
         return st;
     }
     st = body_op(vi, NYTPROF_V6_OP_TIME_BLOCK);
     if (st != NYTP_OK) {
-        return st;
+        return emit_fail(vi, mark, st);
     }
     st = body_uleb(vi, (uint64_t)fid);
     if (st != NYTP_OK) {
-        return st;
+        return emit_fail(vi, mark, st);
     }
     st = body_uleb(vi, (uint64_t)line);
     if (st != NYTP_OK) {
-        return st;
+        return emit_fail(vi, mark, st);
     }
     st = body_uleb(vi, (uint64_t)block_line);
     if (st != NYTP_OK) {
-        return st;
+        return emit_fail(vi, mark, st);
     }
     st = body_uleb(vi, ut);
     if (st != NYTP_OK) {
-        return st;
+        return emit_fail(vi, mark, st);
     }
     vi->stats.last_ticks = ticks;
     vi->stats.last_fid = fid;
     vi->stats.last_line = line;
     vi->stats.last_block_line = block_line;
     vi->stats.last_sub_line = sub_line;
-    return after_record(vi, NYTP_EVT_TIME_BLOCK);
+    st = after_record(vi, NYTP_EVT_TIME_BLOCK);
+    if (st != NYTP_OK) {
+        return emit_fail(vi, mark, st);
+    }
+    return NYTP_OK;
 }
 
 static nytp_status v6_emit_discount(nytp_sink *sink)
 {
     v6_impl *vi = vi_of(sink);
+    size_t mark;
     nytp_status st;
     if (vi->sealed) {
         return NYTP_ERR_STATE;
     }
+    mark = vi->body_len;
     st = body_op(vi, NYTPROF_V6_OP_DISCOUNT);
     if (st != NYTP_OK) {
-        return st;
+        return emit_fail(vi, mark, st);
     }
-    return after_record(vi, NYTP_EVT_DISCOUNT);
+    st = after_record(vi, NYTP_EVT_DISCOUNT);
+    if (st != NYTP_OK) {
+        return emit_fail(vi, mark, st);
+    }
+    return NYTP_OK;
 }
 
 static nytp_status v6_emit_new_fid(nytp_sink *sink, nytp_fid fid,
@@ -695,6 +761,7 @@ static nytp_status v6_emit_new_fid(nytp_sink *sink, nytp_fid fid,
                                    uint32_t mtime, nytp_string_view name)
 {
     v6_impl *vi = vi_of(sink);
+    size_t mark;
     nytp_status st;
     if (vi->sealed) {
         return NYTP_ERR_STATE;
@@ -705,60 +772,71 @@ static nytp_status v6_emit_new_fid(nytp_sink *sink, nytp_fid fid,
     (void)flags;
     (void)size;
     (void)mtime;
+    mark = vi->body_len;
     st = check_str_view(name);
     if (st != NYTP_OK) {
         return st;
     }
     st = body_op(vi, NYTPROF_V6_OP_NEW_FID);
     if (st != NYTP_OK) {
-        return st;
+        return emit_fail(vi, mark, st);
     }
     st = body_uleb(vi, (uint64_t)fid);
     if (st != NYTP_OK) {
-        return st;
+        return emit_fail(vi, mark, st);
     }
     st = body_string_blob(vi, 0, utf8_flag(name), name);
     if (st != NYTP_OK) {
-        return st;
+        return emit_fail(vi, mark, st);
     }
     vi->stats.last_fid = fid;
-    return after_record(vi, NYTP_EVT_NEW_FID);
+    st = after_record(vi, NYTP_EVT_NEW_FID);
+    if (st != NYTP_OK) {
+        return emit_fail(vi, mark, st);
+    }
+    return NYTP_OK;
 }
 
 static nytp_status v6_emit_src_line(nytp_sink *sink, nytp_fid fid,
                                     nytp_line line, nytp_string_view text)
 {
     v6_impl *vi = vi_of(sink);
+    size_t mark;
     nytp_status st;
     if (vi->sealed) {
         return NYTP_ERR_STATE;
     }
+    mark = vi->body_len;
     st = check_str_view(text);
     if (st != NYTP_OK) {
         return st;
     }
     st = body_op(vi, NYTPROF_V6_OP_SRC_LINE);
     if (st != NYTP_OK) {
-        return st;
+        return emit_fail(vi, mark, st);
     }
     st = body_uleb(vi, (uint64_t)fid);
     if (st != NYTP_OK) {
-        return st;
+        return emit_fail(vi, mark, st);
     }
     st = body_uleb(vi, (uint64_t)line);
     if (st != NYTP_OK) {
-        return st;
+        return emit_fail(vi, mark, st);
     }
     st = body_string_blob(vi, 0, utf8_flag(text), text);
     if (st != NYTP_OK) {
-        return st;
+        return emit_fail(vi, mark, st);
     }
     vi->stats.last_fid = fid;
     vi->stats.last_line = line;
     vi->stats.last_src_fid = fid;
     vi->stats.last_src_line = line;
     copy_src_text(vi, text);
-    return after_record(vi, NYTP_EVT_SRC_LINE);
+    st = after_record(vi, NYTP_EVT_SRC_LINE);
+    if (st != NYTP_OK) {
+        return emit_fail(vi, mark, st);
+    }
+    return NYTP_OK;
 }
 
 static nytp_status v6_emit_sub_info(nytp_sink *sink, nytp_fid fid,
@@ -766,39 +844,45 @@ static nytp_status v6_emit_sub_info(nytp_sink *sink, nytp_fid fid,
                                     nytp_string_view name)
 {
     v6_impl *vi = vi_of(sink);
+    size_t mark;
     nytp_status st;
     if (vi->sealed) {
         return NYTP_ERR_STATE;
     }
+    mark = vi->body_len;
     st = check_str_view(name);
     if (st != NYTP_OK) {
         return st;
     }
     st = body_op(vi, NYTPROF_V6_OP_SUB_INFO);
     if (st != NYTP_OK) {
-        return st;
+        return emit_fail(vi, mark, st);
     }
     st = body_uleb(vi, (uint64_t)fid);
     if (st != NYTP_OK) {
-        return st;
+        return emit_fail(vi, mark, st);
     }
     st = body_uleb(vi, (uint64_t)first_line);
     if (st != NYTP_OK) {
-        return st;
+        return emit_fail(vi, mark, st);
     }
     st = body_uleb(vi, (uint64_t)last_line);
     if (st != NYTP_OK) {
-        return st;
+        return emit_fail(vi, mark, st);
     }
     st = body_string_blob(vi, 0, utf8_flag(name), name);
     if (st != NYTP_OK) {
-        return st;
+        return emit_fail(vi, mark, st);
     }
     vi->stats.last_fid = fid;
     vi->stats.last_line = first_line;
     vi->stats.last_block_line = last_line;
     copy_subname(vi, name);
-    return after_record(vi, NYTP_EVT_SUB_INFO);
+    st = after_record(vi, NYTP_EVT_SUB_INFO);
+    if (st != NYTP_OK) {
+        return emit_fail(vi, mark, st);
+    }
+    return NYTP_OK;
 }
 
 static nytp_status v6_emit_sub_callers(nytp_sink *sink, nytp_fid fid,
@@ -810,10 +894,12 @@ static nytp_status v6_emit_sub_callers(nytp_sink *sink, nytp_fid fid,
 {
     v6_impl *vi = vi_of(sink);
     uint64_t ui, ue, ur;
+    size_t mark;
     nytp_status st;
     if (vi->sealed) {
         return NYTP_ERR_STATE;
     }
+    mark = vi->body_len;
     st = check_str_view(called);
     if (st != NYTP_OK) {
         return st;
@@ -836,48 +922,52 @@ static nytp_status v6_emit_sub_callers(nytp_sink *sink, nytp_fid fid,
     }
     st = body_op(vi, NYTPROF_V6_OP_SUB_CALLERS);
     if (st != NYTP_OK) {
-        return st;
+        return emit_fail(vi, mark, st);
     }
     st = body_uleb(vi, (uint64_t)fid);
     if (st != NYTP_OK) {
-        return st;
+        return emit_fail(vi, mark, st);
     }
     st = body_uleb(vi, (uint64_t)line);
     if (st != NYTP_OK) {
-        return st;
+        return emit_fail(vi, mark, st);
     }
     st = body_uleb(vi, (uint64_t)count);
     if (st != NYTP_OK) {
-        return st;
+        return emit_fail(vi, mark, st);
     }
     st = body_uleb(vi, ui);
     if (st != NYTP_OK) {
-        return st;
+        return emit_fail(vi, mark, st);
     }
     st = body_uleb(vi, ue);
     if (st != NYTP_OK) {
-        return st;
+        return emit_fail(vi, mark, st);
     }
     st = body_uleb(vi, ur);
     if (st != NYTP_OK) {
-        return st;
+        return emit_fail(vi, mark, st);
     }
     st = body_uleb(vi, (uint64_t)rec_depth);
     if (st != NYTP_OK) {
-        return st;
+        return emit_fail(vi, mark, st);
     }
     st = body_string_blob(vi, 0, utf8_flag(called), called);
     if (st != NYTP_OK) {
-        return st;
+        return emit_fail(vi, mark, st);
     }
     st = body_string_blob(vi, 0, utf8_flag(caller), caller);
     if (st != NYTP_OK) {
-        return st;
+        return emit_fail(vi, mark, st);
     }
     vi->stats.last_fid = fid;
     vi->stats.last_line = line;
     copy_subname(vi, called);
-    return after_record(vi, NYTP_EVT_SUB_CALLERS);
+    st = after_record(vi, NYTP_EVT_SUB_CALLERS);
+    if (st != NYTP_OK) {
+        return emit_fail(vi, mark, st);
+    }
+    return NYTP_OK;
 }
 
 static nytp_status v6_emit_pid_start(nytp_sink *sink, nytp_pid pid,
@@ -885,32 +975,38 @@ static nytp_status v6_emit_pid_start(nytp_sink *sink, nytp_pid pid,
 {
     v6_impl *vi = vi_of(sink);
     uint64_t ut;
+    size_t mark;
     nytp_status st;
     if (vi->sealed) {
         return NYTP_ERR_STATE;
     }
+    mark = vi->body_len;
     st = nv_to_u64(start_time, &ut);
     if (st != NYTP_OK) {
         return st;
     }
     st = body_op(vi, NYTPROF_V6_OP_PID_START);
     if (st != NYTP_OK) {
-        return st;
+        return emit_fail(vi, mark, st);
     }
     st = body_uleb(vi, (uint64_t)pid);
     if (st != NYTP_OK) {
-        return st;
+        return emit_fail(vi, mark, st);
     }
     st = body_uleb(vi, (uint64_t)ppid);
     if (st != NYTP_OK) {
-        return st;
+        return emit_fail(vi, mark, st);
     }
     st = body_uleb(vi, ut);
     if (st != NYTP_OK) {
-        return st;
+        return emit_fail(vi, mark, st);
     }
     vi->stats.last_fid = (nytp_fid)pid;
-    return after_record(vi, NYTP_EVT_PID_START);
+    st = after_record(vi, NYTP_EVT_PID_START);
+    if (st != NYTP_OK) {
+        return emit_fail(vi, mark, st);
+    }
+    return NYTP_OK;
 }
 
 static nytp_status v6_emit_pid_end(nytp_sink *sink, nytp_pid pid,
@@ -918,53 +1014,65 @@ static nytp_status v6_emit_pid_end(nytp_sink *sink, nytp_pid pid,
 {
     v6_impl *vi = vi_of(sink);
     uint64_t ut;
+    size_t mark;
     nytp_status st;
     if (vi->sealed) {
         return NYTP_ERR_STATE;
     }
+    mark = vi->body_len;
     st = nv_to_u64(end_time, &ut);
     if (st != NYTP_OK) {
         return st;
     }
     st = body_op(vi, NYTPROF_V6_OP_PID_END);
     if (st != NYTP_OK) {
-        return st;
+        return emit_fail(vi, mark, st);
     }
     st = body_uleb(vi, (uint64_t)pid);
     if (st != NYTP_OK) {
-        return st;
+        return emit_fail(vi, mark, st);
     }
     st = body_uleb(vi, ut);
     if (st != NYTP_OK) {
-        return st;
+        return emit_fail(vi, mark, st);
     }
     vi->stats.last_fid = (nytp_fid)pid;
-    return after_record(vi, NYTP_EVT_PID_END);
+    st = after_record(vi, NYTP_EVT_PID_END);
+    if (st != NYTP_OK) {
+        return emit_fail(vi, mark, st);
+    }
+    return NYTP_OK;
 }
 
 static nytp_status v6_emit_sub_entry(nytp_sink *sink, nytp_fid caller_fid,
                                      nytp_line caller_line)
 {
     v6_impl *vi = vi_of(sink);
+    size_t mark;
     nytp_status st;
     if (vi->sealed) {
         return NYTP_ERR_STATE;
     }
+    mark = vi->body_len;
     st = body_op(vi, NYTPROF_V6_OP_SUB_ENTRY);
     if (st != NYTP_OK) {
-        return st;
+        return emit_fail(vi, mark, st);
     }
     st = body_uleb(vi, (uint64_t)caller_fid);
     if (st != NYTP_OK) {
-        return st;
+        return emit_fail(vi, mark, st);
     }
     st = body_uleb(vi, (uint64_t)caller_line);
     if (st != NYTP_OK) {
-        return st;
+        return emit_fail(vi, mark, st);
     }
     vi->stats.last_fid = caller_fid;
     vi->stats.last_line = caller_line;
-    return after_record(vi, NYTP_EVT_SUB_ENTRY);
+    st = after_record(vi, NYTP_EVT_SUB_ENTRY);
+    if (st != NYTP_OK) {
+        return emit_fail(vi, mark, st);
+    }
+    return NYTP_OK;
 }
 
 static nytp_status v6_emit_sub_return(nytp_sink *sink, nytp_depth depth,
@@ -973,10 +1081,12 @@ static nytp_status v6_emit_sub_return(nytp_sink *sink, nytp_depth depth,
 {
     v6_impl *vi = vi_of(sink);
     uint64_t ui, ue;
+    size_t mark;
     nytp_status st;
     if (vi->sealed) {
         return NYTP_ERR_STATE;
     }
+    mark = vi->body_len;
     st = check_str_view(subname);
     if (st != NYTP_OK) {
         return st;
@@ -991,27 +1101,31 @@ static nytp_status v6_emit_sub_return(nytp_sink *sink, nytp_depth depth,
     }
     st = body_op(vi, NYTPROF_V6_OP_SUB_RETURN);
     if (st != NYTP_OK) {
-        return st;
+        return emit_fail(vi, mark, st);
     }
     st = body_uleb(vi, (uint64_t)depth);
     if (st != NYTP_OK) {
-        return st;
+        return emit_fail(vi, mark, st);
     }
     st = body_uleb(vi, ui);
     if (st != NYTP_OK) {
-        return st;
+        return emit_fail(vi, mark, st);
     }
     st = body_uleb(vi, ue);
     if (st != NYTP_OK) {
-        return st;
+        return emit_fail(vi, mark, st);
     }
     st = body_string_blob(vi, 0, utf8_flag(subname), subname);
     if (st != NYTP_OK) {
-        return st;
+        return emit_fail(vi, mark, st);
     }
     vi->stats.last_depth = depth;
     copy_subname(vi, subname);
-    return after_record(vi, NYTP_EVT_SUB_RETURN);
+    st = after_record(vi, NYTP_EVT_SUB_RETURN);
+    if (st != NYTP_OK) {
+        return emit_fail(vi, mark, st);
+    }
+    return NYTP_OK;
 }
 
 /*
@@ -1022,16 +1136,22 @@ static nytp_status v6_emit_sub_return(nytp_sink *sink, nytp_depth depth,
 static nytp_status v6_emit_start_deflate(nytp_sink *sink)
 {
     v6_impl *vi = vi_of(sink);
+    size_t mark;
     nytp_status st;
     if (vi->sealed) {
         return NYTP_ERR_STATE;
     }
+    mark = vi->body_len;
     st = body_op(vi, NYTPROF_V6_OP_START_DEFLATE);
     if (st != NYTP_OK) {
-        return st;
+        return emit_fail(vi, mark, st);
     }
     /* Counts as a body record for chunk logical_event_count. */
-    return after_record(vi, NYTP_EVT_START_DEFLATE);
+    st = after_record(vi, NYTP_EVT_START_DEFLATE);
+    if (st != NYTP_OK) {
+        return emit_fail(vi, mark, st);
+    }
+    return NYTP_OK;
 }
 
 static const nytp_sink_ops v6_ops = {
@@ -1181,19 +1301,51 @@ void nytp_v6_sink_version(const nytp_sink *sink, uint16_t *major,
                           uint16_t *minor)
 {
     const v6_impl *vi;
+    if (!nytp_v6_sink_is_v6(sink) || !sink->impl) {
+        if (major) {
+            *major = 0;
+        }
+        if (minor) {
+            *minor = 0;
+        }
+        return;
+    }
+    vi = (const v6_impl *)sink->impl;
     if (major) {
         *major = (uint16_t)NYTPROF_V6_SUPPORTED_MAJOR;
     }
     if (minor) {
-        *minor = 0;
-    }
-    if (!nytp_v6_sink_is_v6(sink) || !sink->impl) {
-        return;
-    }
-    vi = (const v6_impl *)sink->impl;
-    if (minor) {
         *minor = vi->minor;
     }
+}
+
+nytp_status nytp_v6_sink_test_force_body_len(nytp_sink *sink, size_t len)
+{
+    v6_impl *vi;
+    nytp_status st;
+    if (!nytp_v6_sink_is_v6(sink) || !sink->impl) {
+        return NYTP_ERR_NULL;
+    }
+    vi = (v6_impl *)sink->impl;
+    if (vi->sealed) {
+        return NYTP_ERR_STATE;
+    }
+    if (len > NYTPROF_V6_MAX_EVENT_BODY_BYTES) {
+        return NYTP_ERR_OVERFLOW;
+    }
+    if (len > vi->body_cap) {
+        /* Grow capacity without treating the extra as payload yet. */
+        size_t need_extra = len - vi->body_len;
+        st = buf_reserve(&vi->body, &vi->body_len, &vi->body_cap, need_extra);
+        if (st != NYTP_OK) {
+            return st;
+        }
+    }
+    if (len > vi->body_len) {
+        memset(vi->body + vi->body_len, 0, len - vi->body_len);
+    }
+    vi->body_len = len;
+    return NYTP_OK;
 }
 
 uint32_t nytp_v6_sink_event_count(const nytp_sink *sink)

@@ -72,6 +72,7 @@ COL-003 sequence numbers are **not** written on the wire.
 | negative ticks | `NYTP_ERR_OVERFLOW` |
 | NaN / negative / out-of-u64 NV times | `NYTP_ERR_OVERFLOW` |
 | emit after seal | `NYTP_ERR_STATE` |
+| mid-record body fail (OVERFLOW/IO) | rollback body to pre-emit mark; no truncated record; sticky `FAILED`; close seals **no** EVENT (prefix-only) |
 
 ## Acceptance for this MVP
 

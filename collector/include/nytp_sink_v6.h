@@ -89,6 +89,14 @@ uint32_t nytp_v6_sink_event_count(const nytp_sink *sink);
  */
 const uint8_t *nytp_v6_sink_event_body(const nytp_sink *sink, size_t *out_len);
 
+/*
+ * Test hook: force open event-body length (zeros reserved capacity).
+ * Used to exercise mid-record fail-closed rollback near MAX_EVENT_BODY_BYTES
+ * without multi-gigabyte emit loops. No-op / ERR if not v6 or sealed or
+ * len > MAX_EVENT_BODY_BYTES.
+ */
+nytp_status nytp_v6_sink_test_force_body_len(nytp_sink *sink, size_t len);
+
 #ifdef __cplusplus
 }
 #endif

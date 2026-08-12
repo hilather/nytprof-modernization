@@ -171,6 +171,18 @@ printf 'NYTPROF6' | cmp -n 8 - "$WIRE6" >/dev/null 2>&1 \
   || fail "v6 mini missing NYTPROF6 magic"
 ok "absolute v6 mini artifact present with NYTPROF6 magic ($WIRE6)"
 
+# Optional: Rust decode_mini_profile on C absolute v6 artifact (honest skip without cargo).
+if command -v cargo >/dev/null 2>&1; then
+  banner "Rust v6 decode_mini_profile (COL-007-ABS dual-path check)"
+  if (cd "$ROOT" && cargo run -q -p nytprof-format-v6 --example decode_abs_c_mini -- "$WIRE6"); then
+    ok "Rust decode_mini_profile accepted C absolute v6 mini"
+  else
+    fail "Rust decode_mini_profile failed on C absolute v6 mini"
+  fi
+else
+  echo "NOTE: skip Rust v6 decode_mini_profile (no cargo) — C self-tests still cover wire"
+fi
+
 # Optional: independent Rust v5 decoder when already built or cargo available.
 resolve_dump() {
   if [[ -n "${NYTPROF_NATIVE_CLI-}" && -x "${NYTPROF_NATIVE_CLI}" ]]; then

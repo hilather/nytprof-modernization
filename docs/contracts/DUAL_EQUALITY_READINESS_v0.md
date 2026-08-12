@@ -41,7 +41,7 @@ Plan COL-007 lists dependencies **FMT-002 through FMT-010**. This program **inte
 | Absolute v6 mini/multi-chunk encode↔decode | E2 | **preflight ready** | Not wire freeze |
 | Packing site-delta / seq / TIME_*_RUN / multi-chunk / mid-stream continuity | E2 | **intent accepted** (ADR-0001) | Preflight encode paths + wire freeze still open |
 | FOOTER string-dictionary resolve | E2 | **intent accepted** (ADR-0002 FOOTER-local) | Dict preflight encode + wire freeze still open |
-| Provisional ID lockfile (Rust + C mirror) | — | **ready** (this PR) | Not wire freeze; COL-007 implements against it |
+| Provisional ID lockfile (Rust + C mirror) | — | **ready** (lockfile shipped B01) | Not wire freeze; COL-007 implements against it |
 | Auto-VERSION header/body align | E2 | **preflight ready** | Full dual-output VERSION policy (OI-001-03) open |
 | Default `parse_chunk_frame` inflate/CRC | — | **residual** (stays non-inflating) | Product policy ADR if default flips |
 | E3 harness (writer bytes → Rust decode) | E3 | **open / runway** | COL-007 C producer + harness |
@@ -69,7 +69,7 @@ Plan COL-007 lists dependencies **FMT-002 through FMT-010**. This program **inte
 |---------|----------------------------|
 | First-slice / offline R0 + R1-preview | **Complete** for advertised surfaces; COL-007/008 deferred |
 | Full product R1 | **Not complete** — residual: FFI/XS Data, full nytprofhtml DOM, multi-OS CI, perf cert, R3 engine default |
-| R2 v6 collection opt-in | **Runway** — ADR-0001/0002 **accepted**; provisional ID lockfile shipped; no COL-007 writer |
+| R2 v6 collection opt-in | **Runway** — ADR-0001/0002 **accepted**; provisional ID lockfile shipped; absolute C MVP scaffold only (PR-B06); product COL-007 / E3-C open (PR-B09) |
 | R3–R5 defaults / retirement | **Not started** |
 
 ## Non-claims

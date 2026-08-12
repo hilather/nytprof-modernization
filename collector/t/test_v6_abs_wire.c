@@ -14,6 +14,7 @@
  * Build/run: make -C collector test
  */
 #include "nytp_sink.h"
+#include "nytp_sink_counting.h"
 #include "nytp_sink_v6.h"
 #include "nytprof_v6_ids.h"
 
@@ -630,6 +631,90 @@ static void test_attr_string_vector(void)
     nytp_sink_destroy(s);
 }
 
+/*
+ * Mid-record body_append fail must roll back truncated opcode bytes and
+ * refuse to seal a product EVENT after sticky FAILED (prefix-only wire).
+ */
+static void test_mid_record_overflow_rollback(void)
+{
+    nytp_sink *s;
+    const uint8_t *body;
+    size_t blen = 0;
+    size_t mark;
+    const uint8_t *wire;
+    size_t wlen = 0;
+    const uint8_t *pbody = NULL;
+    size_t pblen = 0;
+    uint32_t lcount = 0;
+    const char *path = "build/v6_partial_fail.nytprof";
+
+    s = nytp_v6_sink_create(path);
+    EXPECT(s != NULL, "create path");
+    EXPECT(nytp_emit_time_line(s, 7, 1, 5) == NYTP_OK, "good TIME_LINE first");
+    body = nytp_v6_sink_event_body(s, &blen);
+    EXPECT(body && blen > 0, "body after good emit");
+    mark = blen;
+    EXPECT(nytp_v6_sink_event_count(s) == 1, "event_count 1");
+
+    /* Leave only 3 free bytes — body_op (2) may succeed, later fields fail. */
+    EXPECT(nytp_v6_sink_test_force_body_len(
+               s, (size_t)NYTPROF_V6_MAX_EVENT_BODY_BYTES - 3) == NYTP_OK,
+           "force near max");
+    body = nytp_v6_sink_event_body(s, &blen);
+    EXPECT(blen == (size_t)NYTPROF_V6_MAX_EVENT_BODY_BYTES - 3, "near max len");
+    mark = blen;
+
+    EXPECT(nytp_emit_time_line(s, 99, 2, 9) == NYTP_ERR_OVERFLOW,
+           "mid-record OVERFLOW");
+    body = nytp_v6_sink_event_body(s, &blen);
+    EXPECT(blen == mark, "body rolled back to mark (no truncated record)");
+    EXPECT(nytp_v6_sink_event_count(s) == 1, "event_count unchanged");
+    EXPECT(nytp_sink_get_state(s) == NYTP_SINK_FAILED, "sticky FAILED");
+
+    /* Close must not seal a product EVENT after sticky fail. */
+    EXPECT(nytp_sink_close(s) == NYTP_OK, "close from FAILED ok (lifecycle)");
+    EXPECT(nytp_v6_sink_is_sealed(s), "sealed flag (prefix-only finish)");
+    wire = nytp_v6_sink_wire(s, &wlen);
+    EXPECT(wire && wlen > 0, "wire present");
+    EXPECT(parse_mini(wire, wlen, &pbody, &pblen, &lcount), "parse prefix");
+    EXPECT(pbody == NULL && pblen == 0 && lcount == 0,
+           "no EVENT chunk after failed stream");
+    EXPECT(nytp_v6_sink_event_count(s) == 0,
+           "event_count cleared on refuse-seal");
+    /* Path write is prefix-only (not a decoder-ready failed product claim). */
+    EXPECT(nytp_v6_sink_file_written(s), "path written (prefix only)");
+    nytp_sink_destroy(s);
+}
+
+static void test_emit_after_seal_state(void)
+{
+    nytp_sink *s = nytp_v6_sink_create(NULL);
+    EXPECT(nytp_emit_time_line(s, 1, 1, 1) == NYTP_OK, "emit");
+    EXPECT(nytp_sink_close(s) == NYTP_OK, "close");
+    EXPECT(nytp_v6_sink_is_sealed(s), "sealed");
+    EXPECT(nytp_emit_time_line(s, 2, 1, 2) == NYTP_ERR_STATE,
+           "emit after seal");
+    nytp_sink_destroy(s);
+}
+
+static void test_version_non_v6(void)
+{
+    uint16_t major = 99, minor = 99;
+    nytp_sink *c = nytp_counting_sink_create();
+    EXPECT(c != NULL, "counting");
+    nytp_v6_sink_version(c, &major, &minor);
+    EXPECT(major == 0 && minor == 0, "non-v6 version zeros");
+    nytp_v6_sink_version(NULL, &major, &minor);
+    EXPECT(major == 0 && minor == 0, "null sink version zeros");
+    {
+        nytp_sink *v = nytp_v6_sink_create(NULL);
+        nytp_v6_sink_version(v, &major, &minor);
+        EXPECT(major == 6 && minor == 0, "v6 version");
+        nytp_sink_destroy(v);
+    }
+    nytp_sink_destroy(c);
+}
+
 int main(void)
 {
     test_lockfile_ids();
@@ -639,6 +724,9 @@ int main(void)
     test_full_tag_mini();
     test_fail_closed();
     test_empty_profile();
+    test_mid_record_overflow_rollback();
+    test_emit_after_seal_state();
+    test_version_non_v6();
 
     if (failures) {
         fprintf(stderr, "test_v6_abs_wire: %d failure(s)\n", failures);
