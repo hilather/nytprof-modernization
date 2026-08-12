@@ -260,8 +260,8 @@ static void test_sequence_gapless_and_control(void)
 
 static void test_v5_stub_seq_not_wire_claim(void)
 {
-    /* v5 stub still assigns internal seq for dual compare; no wire write. */
-    nytp_sink *s = nytp_v5_sink_create("nytprof.out");
+    /* v5 wire sink still assigns internal seq for dual compare (not on wire). */
+    nytp_sink *s = nytp_v5_sink_create(NULL);
     const nytp_counting_stats *st;
     nytp_seq last = 0;
     EXPECT(s != NULL, "create");

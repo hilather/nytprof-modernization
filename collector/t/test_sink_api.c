@@ -114,7 +114,7 @@ static void test_counting_hot_path(void)
 
 static void test_v5_stub_routing(void)
 {
-    nytp_sink *s = nytp_v5_sink_create("nytprof.out");
+    nytp_sink *s = nytp_v5_sink_create("build/test_sink_api.nytprof");
     const nytp_counting_stats *st;
     EXPECT(s != NULL, "v5 create");
     if (!s) {
@@ -122,10 +122,11 @@ static void test_v5_stub_routing(void)
     }
 
     EXPECT(nytp_v5_sink_is_v5(s), "is v5");
-    EXPECT(strcmp(nytp_sink_name(s), "v5-stub") == 0, "v5 name");
+    EXPECT(strcmp(nytp_sink_name(s), "v5") == 0, "v5 name");
     EXPECT(nytp_v5_sink_path(s) != NULL, "path set");
     if (nytp_v5_sink_path(s)) {
-        EXPECT(strcmp(nytp_v5_sink_path(s), "nytprof.out") == 0, "path value");
+        EXPECT(strcmp(nytp_v5_sink_path(s), "build/test_sink_api.nytprof") == 0,
+               "path value");
     }
 
     EXPECT(nytp_sink_activate(s) == NYTP_OK, "v5 activate");
@@ -170,7 +171,7 @@ static void test_v5_stub_routing(void)
 static void test_type_safe_backend_identity(void)
 {
     nytp_sink *c = nytp_counting_sink_create();
-    nytp_sink *v = nytp_v5_sink_create("nytprof.out");
+    nytp_sink *v = nytp_v5_sink_create(NULL);
     EXPECT(c != NULL, "counting create");
     EXPECT(v != NULL, "v5 create");
     if (!c || !v) {

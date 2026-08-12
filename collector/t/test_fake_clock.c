@@ -11,6 +11,7 @@
 #include "nytp_sink_counting.h"
 #include "nytp_sink_v5.h"
 
+#include <stdint.h>
 #include <stdio.h>
 #include <string.h>
 
@@ -203,23 +204,29 @@ static void test_m4_mini_sample_counting(void)
     nytp_sink_destroy(s);
 }
 
-static void test_m4_mini_sample_v5_stub(void)
+static void test_m4_mini_sample_v5_wire(void)
 {
-    nytp_sink *s = nytp_v5_sink_create("m4-mini.out");
+    nytp_sink *s = nytp_v5_sink_create("build/m4-mini-fake-clock.nytprof");
     nytp_m4_harness_result res;
     const nytp_counting_stats *st;
+    size_t wlen = 0;
+    const uint8_t *wire;
     EXPECT(s != NULL, "create");
     if (!s) {
         return;
     }
 
-    EXPECT(nytp_m4_mini_sample_run(s, &res) == NYTP_OK, "m4 run v5-stub");
+    EXPECT(nytp_m4_mini_sample_run(s, &res) == NYTP_OK, "m4 run v5 wire");
     EXPECT(res.gapless_ok && res.ticks_match, "ok flags");
     st = nytp_v5_sink_stats(s);
     EXPECT(st && st->by_kind[NYTP_EVT_TIME_LINE] == 3, "v5 tl count");
     EXPECT(st && st->logical_emits == 12, "v5 logical");
-    /* Residual: stub does not write wire bytes — COL-006. */
-    EXPECT(nytp_v5_sink_path(s) != NULL, "path diagnostic only");
+    /* COL-006: real wire bytes present (header + body). */
+    wire = nytp_v5_sink_wire(s, &wlen);
+    EXPECT(wire != NULL && wlen >= 12, "wire bytes");
+    EXPECT(wire && memcmp(wire, "NYTProf 5 0\n", 12) == 0, "v5 header");
+    EXPECT(nytp_v5_sink_path(s) != NULL, "path set");
+    EXPECT(nytp_v5_sink_file_written(s), "file written");
     nytp_sink_destroy(s);
 }
 
@@ -230,12 +237,12 @@ int main(void)
     test_stmt_driver_no_clock_consume_on_emit_fail();
     test_stmt_driver_backwards_tick();
     test_m4_mini_sample_counting();
-    test_m4_mini_sample_v5_stub();
+    test_m4_mini_sample_v5_wire();
 
     if (failures != 0) {
         fprintf(stderr, "test_fake_clock: %d failure(s)\n", failures);
         return 1;
     }
-    printf("OK: test_fake_clock (TEST-003 scaffold + M4 mini sample)\n");
+    printf("OK: test_fake_clock (TEST-003 + M4 mini via v5 wire)\n");
     return 0;
 }

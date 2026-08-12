@@ -1,9 +1,9 @@
-# Collector overlay (ADR-0004 B0-A) — COL-001..005 + fake-clock scaffold
+# Collector overlay (ADR-0004 B0-A) — COL-001..006 + fake-clock scaffold
 
-**Status:** scaffolding (PR-B02 COL-001 + PR-B03 COL-002/003/TEST-003 + **PR-B04 COL-004/005**)  
+**Status:** scaffolding (PR-B02..**B05 COL-006 real v5 wire**)  
 **Layout decision:** [ADR-0004](https://github.com/hilather/nytprof-modernization/blob/main/docs/adrs/0004-collector-packaging-source-tree.md)  
 **Logical events:** [COMPAT-001](https://github.com/hilather/nytprof-modernization/blob/main/docs/contracts/COMPAT-001_LOGICAL_EVENT_CONTRACT.md)  
-**Schemas:** [collector-sink-api-mvp-v0.md](https://github.com/hilather/nytprof-modernization/blob/main/docs/schemas/collector-sink-api-mvp-v0.md), [collector-lifecycle-seq-fake-clock-mvp-v0.md](https://github.com/hilather/nytprof-modernization/blob/main/docs/schemas/collector-lifecycle-seq-fake-clock-mvp-v0.md), [collector-batch-fast-mvp-v0.md](https://github.com/hilather/nytprof-modernization/blob/main/docs/schemas/collector-batch-fast-mvp-v0.md)  
+**Schemas:** [collector-sink-api-mvp-v0.md](https://github.com/hilather/nytprof-modernization/blob/main/docs/schemas/collector-sink-api-mvp-v0.md), [collector-lifecycle-seq-fake-clock-mvp-v0.md](https://github.com/hilather/nytprof-modernization/blob/main/docs/schemas/collector-lifecycle-seq-fake-clock-mvp-v0.md), [collector-batch-fast-mvp-v0.md](https://github.com/hilather/nytprof-modernization/blob/main/docs/schemas/collector-batch-fast-mvp-v0.md), [collector-v5-wire-mvp-v0.md](https://github.com/hilather/nytprof-modernization/blob/main/docs/schemas/collector-v5-wire-mvp-v0.md)  
 **Timing notes:** [BASE-003](https://github.com/hilather/nytprof-modernization/blob/main/baseline/inventories/timing-lifecycle-notes.md)
 
 Modernization C sources for the **semantic event sink** live here — **not** under `baseline/6.15/` (oracle pin remains immutable).
@@ -12,12 +12,12 @@ Modernization C sources for the **semantic event sink** live here — **not** un
 
 ```text
 collector/
-  include/     public C headers (sink API, types, clock, batch/event, counting + stub v5)
-  src/         sink wrappers + backends + fake-clock + batch/fast path
-  t/           unit tests (no Perl; pure C)
+  include/     public C headers (sink API, types, clock, batch/event, counting + v5 wire)
+  src/         sink wrappers + backends + fake-clock + batch/fast path + v5 wire writer
+  t/           unit tests (no Perl; pure C; zlib for wire)
   xs/          reserved for future XS glue (empty)
-  Makefile     opt-in C build
-  build/       gitignored objects / test binaries
+  Makefile     opt-in C build (links -lz for COL-006)
+  build/       gitignored objects / test binaries / sample .nytprof
   README.md    this file
 ```
 
@@ -28,29 +28,30 @@ collector/
 | `nytp_sink` + `nytp_sink_ops` | Canonical vtable sink interface |
 | `nytp_emit_*` | Semantic emit surface (COMPAT-001 + `start_deflate` control) |
 | **COL-002 lifecycle** | `OPEN/ACTIVE/STOPPED/FINALIZING/CLOSED/FAILED/FORK_SPLIT` + legal transitions + emit gates |
-| **COL-003 sequence** | Gapless logical `nytp_seq` on successful emits (not for `START_DEFLATE`); backends record via post-commit `on_logical_committed` |
+| **COL-003 sequence** | Gapless logical `nytp_seq` on successful emits (not for `START_DEFLATE`); **not** on default v5 wire |
 | **COL-004 fast path** | `nytp_fast_emit_time_line` / `_time_block` + POD batch append — no malloc after create |
 | **COL-005 batching** | Fixed event buffer + side arena; high-water / full flush; emergency oversized path; batch sink facade |
 | Counting sink | Test dual companion — multiplicities, seq ring, last src/sub fingerprints |
-| Stub v5 adapter | Conceptual route for legacy v5 writes (**no wire encode yet**) |
+| **COL-006 v5 wire** | Real FileHandle.xs protocol encode + optional zlib after `START_DEFLATE`; path and/or in-memory buffer |
 | **Fake-clock harness** | Scripted ticks + BASE-003 stmt driver + M4 **mini** sample |
-| `make -C collector test` | `test_sink_api` + `test_lifecycle_seq` + `test_fake_clock` + `test_batch_fast` |
+| `make -C collector test` | `test_sink_api` + `test_lifecycle_seq` + `test_fake_clock` + `test_batch_fast` + **`test_v5_wire`** |
 
 ## Explicit non-claims
 
-- **Not COL-006** — real v5 wire encoding / oracle writer adaptation  
+- **Not full M4 oracle corpus** — mini sample only; full `fixtures/v5/*` v5-via-sink equality needs complete TEST-003  
 - **Not COL-007** — C v6 writer  
-- **Not full M4 oracle gate** — mini sample only; full `fixtures/v5/*` v5-via-sink equality needs COL-006 + complete TEST-003  
 - **Not COL-015** — full fork buffer ownership / signal-safe finalization matrix  
 - **Not** hooked into live Perl opcode profiler yet  
 - **Not** a default dependency of `make legacy-smoke` or dual-path legacy half  
 - Fake-clock is **test/dev only** — must not be production default  
 - Light microbench in `test_batch_fast` is **engineering only** — not BENCH-003/006 certification  
-- Flush/compression **discount timing** vs BASE-003 remains open (timing ADR residual)
+- Flush/compression **discount timing** vs BASE-003 remains open (timing ADR residual)  
+- `nytp_ticks` outside I32 fails closed (OI-003-01 composition residual)  
+- Byte-identical oracle files not required (canonical stream equality is the bar)
 
 ## Build / test
 
-Requires a C toolchain (`cc` / `gcc` / `clang`). Honest skip in CI when absent.
+Requires a C toolchain (`cc` / `gcc` / `clang`) and **zlib** (`-lz`). Honest skip in CI when CC absent.
 
 ```sh
 # from repo root
@@ -58,6 +59,11 @@ make -C collector
 make -C collector test
 # or packaging smoke (isolation asserts + build/test when CC present):
 ./scripts/packaging/collector_sink_smoke.sh
+
+# optional: independent Rust v5 decoder on mini wire artifact
+cargo build -p nytprof-cli
+./target/debug/nytprof-dump verify collector/build/m4_mini_wire.nytprof
+./target/debug/nytprof-dump dump  collector/build/m4_mini_wire.nytprof
 ```
 
 Candidate install prefixes (when added later) **must** be `collector/install/` or `prefix/collector/` — **never** `baseline/6.15/install`. Never put `collector/` on oracle `PERL5LIB`.
@@ -79,7 +85,7 @@ Emit: all kinds in `OPEN`/`ACTIVE`; finalization subset in `FINALIZING`; none in
 
 - Assigned by public emit wrappers on success; starts at 0; gapless per process stream.  
 - `START_DEFLATE` is control — **no** seq.  
-- Default v5 path does **not** write seq on wire (COL-006 must preserve).  
+- Default v5 path does **not** write seq on wire (COL-006 preserves).  
 - Batch flush replays to child ops with the **batch-stamped** seq (no double assign).  
 - Comparators: `nytp_seq_check_gapless`, counting seq ring.
 
@@ -90,7 +96,7 @@ nytp_emit_* / nytp_fast_emit_*  -->  batch (fixed headers + arena)
                                          |
                                     high-water / full / explicit flush
                                          v
-                                   child sink ops (counting / stub-v5 / later real v5)
+                                   child sink ops (counting / v5 wire / later dual)
 ```
 
 | Rule | Detail |
@@ -101,37 +107,57 @@ nytp_emit_* / nytp_fast_emit_*  -->  batch (fixed headers + arena)
 | Failure | Failed flush retains pending events; no phantom logical commits on child |
 | Oversized | Emergency direct child emit after flush attempt |
 
+## v5 wire (COL-006 summary)
+
+```text
+nytp_emit_*  -->  v5 sink (packed tags / strings / NV)
+                      |
+                 optional START_DEFLATE ('z') --> zlib body
+                      |
+                 in-memory buffer (+ optional path write on flush/close)
+                      v
+           nytprof-format-v5 / 6.15 tools (when wire is complete)
+```
+
+| Rule | Detail |
+|------|--------|
+| Header | `NYTProf 5 0\n` on create |
+| Protocol | Matches 6.15 `FileHandle.xs` (packed u32/i32, string tags, LE NV) |
+| Deflate | `emit_start_deflate` writes `z` then compresses subsequent bytes (level default 6) |
+| Ticks | Must fit I32; else `NYTP_ERR_OVERFLOW` (sticky) |
+| Seq | Internal only — not on wire |
+| API | `nytp_v5_sink_wire` / `file_written` for tests and handoff |
+
 ## Event mapping (semantic → COMPAT-001 / v5 tag)
 
-| Emit API | Logical event | v5 tag (conceptual) | Stub v5 action today |
-|----------|---------------|---------------------|----------------------|
-| `nytp_emit_attribute` | `attribute` | `ATTRIBUTE` `:` | count + seq |
-| `nytp_emit_option` | `option` | `OPTION` `!` | count + seq |
-| `nytp_emit_comment` | `comment` | `COMMENT` `#` | count + seq |
-| `nytp_emit_time_line` | `time_line` | `TIME_LINE` `+` | count + seq + last fields |
-| `nytp_emit_time_block` | `time_block` | `TIME_BLOCK` `*` | count + seq + last fields |
-| `nytp_emit_discount` | `discount` | `DISCOUNT` `-` | count + seq |
-| `nytp_emit_new_fid` | `new_fid` | `NEW_FID` `@` | count + seq |
-| `nytp_emit_src_line` | `src_line` | `SRC_LINE` `S` | count + seq + last text |
-| `nytp_emit_sub_info` | `sub_info` | `SUB_INFO` `s` | count + seq |
-| `nytp_emit_sub_callers` | `sub_callers` | `SUB_CALLERS` `c` | count + seq |
-| `nytp_emit_pid_start` | `pid_start` | `PID_START` `P` | count + seq |
-| `nytp_emit_pid_end` | `pid_end` | `PID_END` `p` | count + seq |
-| `nytp_emit_sub_entry` | `sub_entry` | `SUB_ENTRY` `>` | count + seq |
-| `nytp_emit_sub_return` | `sub_return` | `SUB_RETURN` `<` | count + seq |
-| `nytp_emit_start_deflate` | *(control)* | `START_DEFLATE` `z` | count, **no** seq |
+| Emit API | Logical event | v5 tag | COL-006 action |
+|----------|---------------|--------|----------------|
+| `nytp_emit_attribute` | `attribute` | `ATTRIBUTE` `:` | wire + count + seq |
+| `nytp_emit_option` | `option` | `OPTION` `!` | wire + count + seq |
+| `nytp_emit_comment` | `comment` | `COMMENT` `#` | wire + count + seq |
+| `nytp_emit_time_line` | `time_line` | `TIME_LINE` `+` | wire + count + seq |
+| `nytp_emit_time_block` | `time_block` | `TIME_BLOCK` `*` | wire + count + seq |
+| `nytp_emit_discount` | `discount` | `DISCOUNT` `-` | wire + count + seq |
+| `nytp_emit_new_fid` | `new_fid` | `NEW_FID` `@` | wire + count + seq |
+| `nytp_emit_src_line` | `src_line` | `SRC_LINE` `S` | wire + count + seq |
+| `nytp_emit_sub_info` | `sub_info` | `SUB_INFO` `s` | wire + count + seq |
+| `nytp_emit_sub_callers` | `sub_callers` | `SUB_CALLERS` `c` | wire + count + seq |
+| `nytp_emit_pid_start` | `pid_start` | `PID_START` `P` | wire + count + seq |
+| `nytp_emit_pid_end` | `pid_end` | `PID_END` `p` | wire + count + seq |
+| `nytp_emit_sub_entry` | `sub_entry` | `SUB_ENTRY` `>` | wire + count + seq |
+| `nytp_emit_sub_return` | `sub_return` | `SUB_RETURN` `<` | wire + count + seq |
+| `nytp_emit_start_deflate` | *(control)* | `START_DEFLATE` `z` | wire + zlib switch, **no** seq |
 
-Hooks will call **emit**, never v5 bytes, once integrated. Dual/v6 sinks plug the same vtable.
+Hooks will call **emit**, never raw v5 bytes, once integrated. Dual/v6 sinks plug the same vtable.
 
 ## Follow-on work
 
 | Task / PR | Continues |
 |-----------|-----------|
-| COL-006 | Real v5 writer behind this API + full M4 stream neutrality |
 | Complete TEST-003 | Full corpus fake-clock oracle match |
 | COL-007 | C v6 writer (separate) |
 | COL-015 | Full fork / signal lifecycle matrix with batch ownership |
-| BENCH-003 | Certified statement-path performance gates |
+| BENCH-003 / BENCH-004 | Certified statement-path / writer component gates |
 
 ## Isolation
 

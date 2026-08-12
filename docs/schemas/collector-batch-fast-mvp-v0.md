@@ -68,7 +68,7 @@ If a string payload cannot fit the empty arena after flush → **emergency direc
 
 | Residual | Owner |
 |----------|-------|
-| Real v5 wire encode | COL-006 |
+| Real v5 wire encode | **COL-006 landed** — see collector-v5-wire-mvp-v0; full corpus residual |
 | C v6 writer | COL-007 |
 | Flush / compression **discount timing** vs BASE-003 oracle | dedicated timing ADR + complete TEST-003 |
 | Production microbench certification | BENCH-003 / BENCH-006 (light bench here is **engineering only**) |

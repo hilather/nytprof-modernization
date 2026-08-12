@@ -1,5 +1,6 @@
-# COL-001..005 collector overlay build (ADR-0004 B0-A).
+# COL-001..006 collector overlay build (ADR-0004 B0-A).
 # Compiles when a C toolchain is present. Not required for legacy-only packaging.
+# COL-006 v5 wire writer links zlib (-lz).
 #
 # Usage (from repo root or collector/):
 #   make -C collector
@@ -13,6 +14,7 @@ CC      ?= cc
 CFLAGS  ?= -std=c11 -Wall -Wextra -Wpedantic -O2 -g
 CPPFLAGS += -Iinclude
 LDFLAGS ?=
+LDLIBS  ?= -lz
 AR      ?= ar
 
 BUILD   := build
@@ -21,7 +23,8 @@ TESTBINS := \
 	$(BUILD)/test_sink_api \
 	$(BUILD)/test_lifecycle_seq \
 	$(BUILD)/test_fake_clock \
-	$(BUILD)/test_batch_fast
+	$(BUILD)/test_batch_fast \
+	$(BUILD)/test_v5_wire
 
 SRC := \
 	src/nytp_sink.c \
@@ -49,22 +52,26 @@ $(LIB): $(OBJ) | dirs
 	$(AR) rcs $@ $^
 
 $(BUILD)/test_sink_api: t/test_sink_api.c $(LIB) | dirs
-	$(CC) $(CPPFLAGS) $(CFLAGS) -o $@ t/test_sink_api.c $(LIB) $(LDFLAGS)
+	$(CC) $(CPPFLAGS) $(CFLAGS) -o $@ t/test_sink_api.c $(LIB) $(LDFLAGS) $(LDLIBS)
 
 $(BUILD)/test_lifecycle_seq: t/test_lifecycle_seq.c $(LIB) | dirs
-	$(CC) $(CPPFLAGS) $(CFLAGS) -o $@ t/test_lifecycle_seq.c $(LIB) $(LDFLAGS)
+	$(CC) $(CPPFLAGS) $(CFLAGS) -o $@ t/test_lifecycle_seq.c $(LIB) $(LDFLAGS) $(LDLIBS)
 
 $(BUILD)/test_fake_clock: t/test_fake_clock.c $(LIB) | dirs
-	$(CC) $(CPPFLAGS) $(CFLAGS) -o $@ t/test_fake_clock.c $(LIB) $(LDFLAGS)
+	$(CC) $(CPPFLAGS) $(CFLAGS) -o $@ t/test_fake_clock.c $(LIB) $(LDFLAGS) $(LDLIBS)
 
 $(BUILD)/test_batch_fast: t/test_batch_fast.c $(LIB) | dirs
-	$(CC) $(CPPFLAGS) $(CFLAGS) -o $@ t/test_batch_fast.c $(LIB) $(LDFLAGS)
+	$(CC) $(CPPFLAGS) $(CFLAGS) -o $@ t/test_batch_fast.c $(LIB) $(LDFLAGS) $(LDLIBS)
+
+$(BUILD)/test_v5_wire: t/test_v5_wire.c $(LIB) | dirs
+	$(CC) $(CPPFLAGS) $(CFLAGS) -o $@ t/test_v5_wire.c $(LIB) $(LDFLAGS) $(LDLIBS)
 
 test: all
 	./$(BUILD)/test_sink_api
 	./$(BUILD)/test_lifecycle_seq
 	./$(BUILD)/test_fake_clock
 	./$(BUILD)/test_batch_fast
+	./$(BUILD)/test_v5_wire
 
 clean:
 	rm -rf $(BUILD)

@@ -11,8 +11,9 @@
  *   - Stream-neutral: same API fans out to v5 / dual / test sinks.
  *   - No heap allocation required on the common TIME_LINE / TIME_BLOCK path.
  *
- * Not COL-007 (v6 writer). Not COL-006 (real v5 wire). Full M4 oracle
- * v5-via-sink equality remains residual until COL-006 + complete TEST-003.
+ * Not COL-007 (v6 writer). COL-006 real v5 wire is in nytp_sink_v5.
+ * Full M4 oracle v5-via-sink corpus equality remains residual until
+ * complete TEST-003.
  */
 #ifndef NYTP_SINK_H
 #define NYTP_SINK_H
