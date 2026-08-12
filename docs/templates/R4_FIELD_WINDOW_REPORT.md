@@ -1,11 +1,12 @@
 # R4 field-window report — `format=v6` (template)
 
 **Status to fill:** draft | in-window | accepted | rejected  
-**Template version:** v0 (PR-E01)  
-**Does not flip defaults.** Promotion requires a separate default-change ADR (REL-008 / ADR-Q025).
+**Template version:** v0 (PR-E01; promote path updated PR-E02)  
+**Does not flip defaults.** Promotion policy: [ADR-0008](https://github.com/hilather/nytprof-modernization/blob/main/docs/adrs/0008-r4-v6-output-default-promotion.md) (PR-E02). Runtime flip only via [docs/R4_DEFAULT_FLIP.md](https://github.com/hilather/nytprof-modernization/blob/main/docs/R4_DEFAULT_FLIP.md) after this report is **accepted** with recommendation **Promote**. Incomplete evidence → do not flip.
 
 Guide: [docs/R4_FIELD_WINDOW.md](https://github.com/hilather/nytprof-modernization/blob/main/docs/R4_FIELD_WINDOW.md)  
 Pack schema: [docs/schemas/r4-field-window-mvp-v0.md](https://github.com/hilather/nytprof-modernization/blob/main/docs/schemas/r4-field-window-mvp-v0.md)  
+Flip procedure: [docs/R4_DEFAULT_FLIP.md](https://github.com/hilather/nytprof-modernization/blob/main/docs/R4_DEFAULT_FLIP.md)  
 Generic evidence bundle: [docs/plan/templates/EVIDENCE_BUNDLE_TEMPLATE.md](https://github.com/hilather/nytprof-modernization/blob/main/docs/plan/templates/EVIDENCE_BUNDLE_TEMPLATE.md)  
 R2-stable baseline: [docs/RELEASE_NOTES_R2_STABLE.md](https://github.com/hilather/nytprof-modernization/blob/main/docs/RELEASE_NOTES_R2_STABLE.md)
 
@@ -158,9 +159,9 @@ Confirm each remains **true** for this report:
 
 | Option | Select one |
 |--------|------------|
-| **Promote** — draft default-format ADR (ADR-Q025 / REL-008) | |
+| **Promote** — run flip checklist in [R4_DEFAULT_FLIP.md](https://github.com/hilather/nytprof-modernization/blob/main/docs/R4_DEFAULT_FLIP.md) under [ADR-0008](https://github.com/hilather/nytprof-modernization/blob/main/docs/adrs/0008-r4-v6-output-default-promotion.md) (policy already landed; runtime flip is a separate change set) | |
 | **Extend window** — more sites / duration / fixes required | |
-| **Do not promote** — blockers listed above | |
+| **Do not promote** — blockers listed above; **do not** execute flip | |
 
 **Rationale (short):**
 

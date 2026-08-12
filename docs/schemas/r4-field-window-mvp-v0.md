@@ -2,7 +2,7 @@
 
 **Board ID:** `R4-FIELD-WINDOW-PACK`  
 **Status:** implemented (instrumentation + template only — **PR-E01**)  
-**Not:** charter R4 product format default flip, ADR-Q025 / REL-008 default-change ADR, R3 engine field window completion, external telemetry, public perf certification, lossy convert
+**Not:** charter R4 product format **runtime** default flip (policy [ADR-0008](https://github.com/hilather/nytprof-modernization/blob/main/docs/adrs/0008-r4-v6-output-default-promotion.md) / PR-E02 is separate and still flip-not-executed), R3 engine field window completion, external telemetry, public perf certification, lossy convert
 
 ## Goal
 
@@ -11,13 +11,15 @@ Define a **local, inspectable** directory layout and machine-readable summary fo
 Collector: [`scripts/field/r4_field_window_collect.sh`](https://github.com/hilather/nytprof-modernization/blob/main/scripts/field/r4_field_window_collect.sh)  
 Smoke: [`scripts/field/r4_field_window_smoke.sh`](https://github.com/hilather/nytprof-modernization/blob/main/scripts/field/r4_field_window_smoke.sh)  
 Human report: [`docs/templates/R4_FIELD_WINDOW_REPORT.md`](https://github.com/hilather/nytprof-modernization/blob/main/docs/templates/R4_FIELD_WINDOW_REPORT.md)  
-Guide: [`docs/R4_FIELD_WINDOW.md`](https://github.com/hilather/nytprof-modernization/blob/main/docs/R4_FIELD_WINDOW.md)
+Guide: [`docs/R4_FIELD_WINDOW.md`](https://github.com/hilather/nytprof-modernization/blob/main/docs/R4_FIELD_WINDOW.md)  
+Promotion policy: [`docs/adrs/0008-r4-v6-output-default-promotion.md`](https://github.com/hilather/nytprof-modernization/blob/main/docs/adrs/0008-r4-v6-output-default-promotion.md)  
+Flip checklist: [`docs/R4_DEFAULT_FLIP.md`](https://github.com/hilather/nytprof-modernization/blob/main/docs/R4_DEFAULT_FLIP.md)
 
 ## Non-goals
 
 | Non-goal | Notes |
 |----------|-------|
-| Flip default engine/format | Product defaults unchanged; `summary.json` must record `no_default_flip: true` and `collection_default: "v5"` |
+| Flip default engine/format | Product defaults unchanged while this collector MVP ships; `summary.json` must record `no_default_flip: true` and `collection_default: "v5"`. Runtime flip is gated by [ADR-0008](https://github.com/hilather/nytprof-modernization/blob/main/docs/adrs/0008-r4-v6-output-default-promotion.md) + [R4_DEFAULT_FLIP.md](https://github.com/hilather/nytprof-modernization/blob/main/docs/R4_DEFAULT_FLIP.md) |
 | Network telemetry | Packs stay on local disk; no upload by the collector |
 | Replace offline_gate | Lab smokes remain separate; collector is field/lab evidence |
 | Claim R4 complete / wire redesign | Explicit residual honesty |

@@ -246,12 +246,12 @@ Record decisions that affect stable semantics, wire bytes, platform support, pac
 
 ### ADR-Q025 - v6 output default promotion criteria/field window
 
-- **Status:** deferred until opt-in release
-- **Blocks:** BUILD-014, BUILD-015, BENCH-013, TEST-020
-- **Question:** What evidence is sufficient to change default profile format from v5 to v6?
-- **Evidence required:** R2 field data, old-tool conversion usage, corruption/fork/long-run results, format stability, P1/P2.
-- **Recommended direction:** multiple opt-in releases/stability window and separate tier policy; retain `format=v5`.
-- **Decision must specify:** eligible tiers, compatibility window, rollback.
+- **Status:** **criteria answered** by [ADR-0008](https://github.com/hilather/nytprof-modernization/blob/main/docs/adrs/0008-r4-v6-output-default-promotion.md) (**PR-E02**); **product flip still gated** (not executed) until accepted field report recommends promote
+- **Blocks:** BUILD-014, BUILD-015, BENCH-013, TEST-020 (flip execution still blocked without field promote)
+- **Question:** What evidence is sufficient to change default profile format from v5 to v6 on eligible tiers?
+- **Evidence required:** R2 field data, old-tool conversion usage, corruption/fork/long-run results, format stability, P1/P2 — pack via [R4_FIELD_WINDOW.md](https://github.com/hilather/nytprof-modernization/blob/main/docs/R4_FIELD_WINDOW.md); flip checklist [R4_DEFAULT_FLIP.md](https://github.com/hilather/nytprof-modernization/blob/main/docs/R4_DEFAULT_FLIP.md)
+- **Recommended direction:** multiple opt-in releases/stability window and separate tier policy; retain `format=v5` — **accepted in ADR-0008**.
+- **Decision must specify:** eligible tiers, compatibility window, rollback — **specified in ADR-0008**; flip procedure + force-v5 rollback in `docs/R4_DEFAULT_FLIP.md`.
 
 ### ADR-Q026 - Legacy code retirement policy
 

@@ -1,8 +1,7 @@
 # CLI E5 — v6 opt-in product surfaces (MVP v0)
 
 **Board ID:** `CLI-E5-V6-OPT-IN-MVP`  
-**Status:** implemented (PR-B12) — **not** collection default flip (R4); convert/merge **true** after PR-C01/C02 on R2-stable stack; E4 product offline_gate: **E4-PRODUCT-CLI-SMOKE-MVP** (PR-B12b)  
-**History:** At PR-B12 ship, capability advertised `convert`/`merge` **false**. Superseded on this branch by PR-C01/C02 — markers true; lossy convert residual remains.  
+**Status:** implemented (PR-B12) — **not** collection default **runtime** flip (R4; policy [ADR-0008](https://github.com/hilather/nytprof-modernization/blob/main/docs/adrs/0008-r4-v6-output-default-promotion.md) / PR-E02 still flip-not-executed); convert/merge landed PR-C01/C02 on R2-stable; E4 product offline_gate: **E4-PRODUCT-CLI-SMOKE-MVP** (PR-B12b)  
 **Depends on:** product v6→ProfileModel ingest ([`product-v6-profilemodel-ingest-mvp-v0.md`](https://github.com/hilather/nytprof-modernization/blob/main/docs/schemas/product-v6-profilemodel-ingest-mvp-v0.md)); wire freeze ADR-0006; capability self-test MVP  
 **Evidence:** `cargo test -p nytprof-cli --test cli_e5_v6`; `cargo test -p nytprof-cli --test capability_selftest`; `./scripts/packaging/capability_selftest_smoke.sh`
 
@@ -28,21 +27,19 @@ No extra `--format=v6` flag is required for offline tools: detection is magic-ba
 
 | Item | Value |
 |------|-------|
-| Product collection default | **v5** until R4 ADR + field window |
-| Opt-in collection | `format=v6` / collector product naming (REL docs) — **not** claimed ready as operator UX in this PR beyond writer harness |
-| Capability field | `collection_default: "v5"` (human `collection_default: v5`) — tests assert **no** default flip |
+| Product collection default | **v5** until gated R4 flip execution ([ADR-0008](https://github.com/hilather/nytprof-modernization/blob/main/docs/adrs/0008-r4-v6-output-default-promotion.md) + [R4_DEFAULT_FLIP.md](https://github.com/hilather/nytprof-modernization/blob/main/docs/R4_DEFAULT_FLIP.md) after accepted field **Promote**) |
+| Opt-in collection | `format=v6` / collector product naming (REL docs) — not product default until flip |
+| Capability field | `collection_default: "v5"` (human `collection_default: v5`) — tests assert **no** default flip while flip not executed |
 
 ## Capability honesty (E5)
 
-Human markers (stable order after `verify: yes`). **Current (R2-stable / PR-C01+C02):**
+Human markers (stable order after `verify: yes`):
 
 ```text
 v6_decode: yes
 v6_report: yes
-convert: yes
-merge: yes
-repack: yes
-salvage: yes
+convert: no
+merge: no
 collection_default: v5
 profile_ok: <path|skip>
 v6_profile_ok: <path|skip>
@@ -54,11 +51,9 @@ JSON fields (in addition to CAPABILITY-JSON-MVP `ok`/`decode`/`report`/`verify`/
 |-------|------|---------|
 | `v6_decode` | boolean `true` | Product v6 always-inflate decode is linked |
 | `v6_report` | boolean `true` | Product report/html/csv/… path accepts v6 via dual-dispatch model |
-| `convert` | boolean `true` | Strict v5↔v6 convert linked (PR-C01); was `false` at PR-B12 E5 ship |
-| `merge` | boolean `true` | Stream-concat merge linked (PR-C02); was `false` at PR-B12 E5 ship |
-| `repack` | boolean `true` | Repack tooling linked (PR-C02) |
-| `salvage` | boolean `true` | Salvage tooling linked (PR-C02) |
-| `collection_default` | string `"v5"` | Collection format default; R4 residual to flip |
+| `convert` | boolean `false` | **Must not** claim until PR-C01 |
+| `merge` | boolean `false` | **Must not** claim until merge tooling ships |
+| `collection_default` | string `"v5"` | Collection format default; R4 policy ready (ADR-0008) but **runtime flip gated** |
 | `v6_profile_ok` | string path **or** `null` | Optional v6 golden verify probe |
 
 Primary v5 probe order unchanged (`--profile` / `NYTPROF_CAPABILITY_FIXTURE` / default-calls1).  
@@ -77,8 +72,8 @@ Fail-closed truncated / CRC-corrupt v6 remains under `fail_closed.rs` (PR-B11a).
 
 ## Non-claims / residuals
 
-- **Not** collection `format=v6` as product default (R4)
-- Convert / merge / repack / salvage tooling: **done** (PR-C01/C02); capability markers **true**. Residual: **lossy** convert modes / packing fidelity (not advertised as lossless for all inputs)
+- **Not** collection `format=v6` as product **runtime** default (R4; ADR-0008 policy only until flip)
+- **Not** convert / merge / salvage tooling in the original E5 PR (PR-C01+; on R2-stable capability is `true` — see capability self-test)
 - E4 product CLI smoke: [`e4-product-cli-smoke-mvp-v0.md`](https://github.com/hilather/nytprof-modernization/blob/main/docs/schemas/e4-product-cli-smoke-mvp-v0.md)
 - **Not** full oracle dual pairs (TEST-003/TEST-008)
 - **Not** E3-mixed multi-kind product path

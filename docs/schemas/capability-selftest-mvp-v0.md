@@ -78,7 +78,7 @@ v6_profile_ok: skip
 | `merge: yes` | Stream-concat merge is linked (PR-C02); dual-sink probe when fixtures present |
 | `repack: yes` | Full re-encode repack is linked (PR-C02) |
 | `salvage: yes` | Longest-prefix salvage is linked (PR-C02); mid-zlib cut probe when fixtures present |
-| `collection_default: v5` | Collection format default; no R4 flip |
+| `collection_default: v5` | Collection format default; R4 policy ADR-0008 accepted but **runtime flip not executed** |
 | `profile_ok: <path>` | Optional probe: `verify` succeeded on that profile |
 | `profile_ok: skip` | No v5 probe path resolved (still exit 0) |
 | `v6_profile_ok: <path>` | Optional v6 golden `verify` succeeded |
@@ -106,7 +106,7 @@ Stdout is a single JSON object (one line, no leading greppable `OK:` block). Req
 | `merge` | boolean `true` | Stream-concat merge is linked (PR-C02) |
 | `repack` | boolean `true` | Repack is linked (PR-C02) |
 | `salvage` | boolean `true` | Salvage is linked (PR-C02) |
-| `collection_default` | string `"v5"` | Collection default; no R4 flip |
+| `collection_default` | string `"v5"` | Collection default; R4 flip gated ([ADR-0008](https://github.com/hilather/nytprof-modernization/blob/main/docs/adrs/0008-r4-v6-output-default-promotion.md)) |
 | `profile_ok` | string path **or** `null` | Probe path that verified; `null` when no probe (human `skip`) |
 | `v6_profile_ok` | string path **or** `null` | Optional v6 golden probe; `null` when skip |
 

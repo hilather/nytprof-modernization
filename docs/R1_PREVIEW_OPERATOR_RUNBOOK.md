@@ -411,13 +411,13 @@ R2-stable is the Phase C certification cut on the **integrated** stack (PR-C01..
 | COL-015 fork/PID MVP | **yes** (stress suite; oracle TEST-018 residual) |
 | SEC-FUZZ offline package | **yes** (not full SEC-002 continuous) |
 | P1/P2 public performance SLOs | **waived** (methodology + light harness only) |
-| Collection / engine defaults (R3/R4) | **not claimed** (`collection_default: v5`) |
+| Collection / engine defaults (R3/R4) | **runtime not claimed** (`collection_default: v5`; R4 policy ADR-0008 / flip checklist only) |
 | E3-mixed / full oracle E4 | **residual** |
 | CPAN upload | **not claimed** |
 
-### 7c.1 R4 field window (post R2-stable; no default flip)
+### 7c.1 R4 field window + default policy (post R2-stable; runtime flip gated)
 
-After the R2-stable cut, operators may collect **local** field evidence for a future `format=v6` product default decision **without** changing defaults:
+After the R2-stable cut, operators may collect **local** field evidence for `format=v6` product default promotion **without** changing defaults:
 
 ```sh
 ./scripts/field/r4_field_window_collect.sh --out /tmp/r4-field-pack
@@ -429,8 +429,10 @@ After the R2-stable cut, operators may collect **local** field evidence for a fu
 | Guide | [R4_FIELD_WINDOW.md](https://github.com/hilather/nytprof-modernization/blob/main/docs/R4_FIELD_WINDOW.md) |
 | Report template | [templates/R4_FIELD_WINDOW_REPORT.md](https://github.com/hilather/nytprof-modernization/blob/main/docs/templates/R4_FIELD_WINDOW_REPORT.md) |
 | Pack schema | [schemas/r4-field-window-mvp-v0.md](https://github.com/hilather/nytprof-modernization/blob/main/docs/schemas/r4-field-window-mvp-v0.md) |
+| Promotion policy ADR | [0008-r4-v6-output-default-promotion.md](https://github.com/hilather/nytprof-modernization/blob/main/docs/adrs/0008-r4-v6-output-default-promotion.md) (**accepted policy**; flip not executed) |
+| Flip + rollback checklist | [R4_DEFAULT_FLIP.md](https://github.com/hilather/nytprof-modernization/blob/main/docs/R4_DEFAULT_FLIP.md) |
 
-**Not** charter R4 completion; promotion is a separate default-change ADR (ADR-Q025 / REL-008) after an accepted field report. Packs must keep `collection_default: v5` and `no_default_flip: true`.
+**Not** charter R4 completion. Product collection default remains **v5** (`collection_default: v5`) until an accepted field report recommends **Promote** and the flip checklist is executed. Packs must keep `collection_default: v5` and `no_default_flip: true`. Operator escape hatch (always retained after any future flip): force `format=v5` / convert `--to=v5`.
 
 ### `fixtures/v5/default-calls1` (leaf / mid)
 

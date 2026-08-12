@@ -119,9 +119,9 @@ Authoritative checklist: [`docs/contracts/DUAL_EQUALITY_READINESS_v0.md`](https:
 
 Do **not** advertise under this cut:
 
-1. **R3** `engine=auto` product default flip (Track D).
-2. **R4** collection / format default flip to v6 (Track E).
-3. **CLI v6 collection default** — capability must keep `collection_default: v5`.
+1. **R3** `engine=auto` product default **runtime** flip (Track D; policy ADR when present still gated).
+2. **R4** collection / format default **runtime** flip to v6 (Track E) — **PR-E02** lands [ADR-0008](https://github.com/hilather/nytprof-modernization/blob/main/docs/adrs/0008-r4-v6-output-default-promotion.md) **policy** + [`docs/R4_DEFAULT_FLIP.md`](https://github.com/hilather/nytprof-modernization/blob/main/docs/R4_DEFAULT_FLIP.md); **flip not executed**; incomplete field evidence → do not flip.
+3. **CLI v6 collection default** — capability must keep `collection_default: v5` until a future flip PR completes the R4 checklist.
 4. **Lossy convert** (`--allow-lossy`) or packing/string-dict v6 convert targets.
 5. **Full `nytprofmerge`** aggregate-sum / option parity (stream-concat MVP only).
 6. **COL-008** batched Rust writer as baseline.
@@ -144,7 +144,7 @@ Do **not** advertise under this cut:
 | Convert users | Prefer integer-tick dual-sink / representable streams. Fractional wall-clock PID times and non-zero `TIME_BLOCK.sub_line` refuse v5→v6 (strict). |
 | Recovery | Use `salvage` for truncated profiles; never expect verify/report to auto-salvage incomplete streams. |
 | Embedders / collectors | Production v6 writer backend remains **C** (ADR-0007). COL-015 protocol available for fork; product option wiring residual. |
-| Release engineers | This is an **R2-stable honesty cut** on the integrated Phase C stack. R3/R4 remain separate ADRs + field windows. |
+| Release engineers | This is an **R2-stable honesty cut** on the integrated Phase C stack. R3/R4 **runtime** default flips remain separate; R4 **policy** is ADR-0008 (flip gated on accepted field **Promote**). |
 | Perf claimants | Do **not** publish “% faster” / SLOs from light harness alone. |
 
 ### Quick commands

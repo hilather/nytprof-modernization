@@ -1,9 +1,11 @@
 # Evidence Bundle - TASK/WP/Release ID
 
-For the charter **R4** `format=v6` **field window** (opt-in evidence only; **no product default flip**), prefer the specialized pack and report:
+For the charter **R4** `format=v6` **field window** (opt-in evidence only; **no product runtime default flip**), prefer the specialized pack and report:
 
 - Guide: [docs/R4_FIELD_WINDOW.md](https://github.com/hilather/nytprof-modernization/blob/main/docs/R4_FIELD_WINDOW.md)
 - Report template: [docs/templates/R4_FIELD_WINDOW_REPORT.md](https://github.com/hilather/nytprof-modernization/blob/main/docs/templates/R4_FIELD_WINDOW_REPORT.md)
+- Promotion policy (flip gated): [docs/adrs/0008-r4-v6-output-default-promotion.md](https://github.com/hilather/nytprof-modernization/blob/main/docs/adrs/0008-r4-v6-output-default-promotion.md)
+- Flip checklist: [docs/R4_DEFAULT_FLIP.md](https://github.com/hilather/nytprof-modernization/blob/main/docs/R4_DEFAULT_FLIP.md)
 - Collector: `./scripts/field/r4_field_window_collect.sh`
 - Schema: [docs/schemas/r4-field-window-mvp-v0.md](https://github.com/hilather/nytprof-modernization/blob/main/docs/schemas/r4-field-window-mvp-v0.md)
 

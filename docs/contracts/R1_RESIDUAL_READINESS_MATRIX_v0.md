@@ -183,7 +183,7 @@ These items are **not** advertised as ready under offline R0 / R1-preview. Do no
 | No multi-OS CI matrix | **BUILD-006** | Single-host offline gate only | `offline_gate.sh` is not multi-OS CI |
 | No performance certification claims | WP-13 / BENCH-001; plan P1/P2 | **Public claims waived** until R2-stable gates green. Methodology + light harness only (PR-C04). | [`docs/BENCH_NOTES.md`](https://github.com/hilather/nytprof-modernization/blob/main/docs/BENCH_NOTES.md) (P1/P2 methodology), `tools/bench/light_bench.sh` (`size`, `collector_micro`, dump/report proxies) — **no public SLOs / “% faster”** |
 | `engine=auto` full product policy / default flip | charter **R3**; ENGINE-AUTO-FALLBACK done for **Perl facade** | Perl `nytprof-engine`: prefer-native / fall-back-legacy is shipped. Residual: R3 product **default** flip + field window/ADR; pure-Rust `nytprof-cli` still maps `auto`→`native` (no in-process legacy) | Facade smokes prove dual-path auto; **not** “auto is the product default” |
-| Default engine/format flips | charter R3/R4 | Explicitly out of first slice and out of R2-preview / R2-stable. **R4 field-window instrumentation only (PR-E01):** [`docs/R4_FIELD_WINDOW.md`](https://github.com/hilather/nytprof-modernization/blob/main/docs/R4_FIELD_WINDOW.md) + collect/smoke scripts — **does not** flip defaults; promotion requires ADR-Q025 / REL-008 after accepted field report | Native remains opt-in; `collection_default: v5` |
+| Default engine/format flips | charter R3/R4 | Explicitly out of first slice and out of R2-preview / R2-stable **runtime** flips. **R4 field-window instrumentation (PR-E01):** [`docs/R4_FIELD_WINDOW.md`](https://github.com/hilather/nytprof-modernization/blob/main/docs/R4_FIELD_WINDOW.md) + collect/smoke scripts — **does not** flip defaults. **R4 policy (PR-E02):** [ADR-0008](https://github.com/hilather/nytprof-modernization/blob/main/docs/adrs/0008-r4-v6-output-default-promotion.md) + flip/rollback [`docs/R4_DEFAULT_FLIP.md`](https://github.com/hilather/nytprof-modernization/blob/main/docs/R4_DEFAULT_FLIP.md) — **accepted (policy)**; **flip not executed**; require accepted field report recommendation **Promote** before any runtime change | Native remains opt-in; `collection_default: v5` until flip |
 
 ---
 
@@ -194,7 +194,7 @@ Charter **R2-preview** after Track B (PR-B13 packaging honesty). **Not** R2-stab
 | Surface / gate | Status | Evidence |
 |----------------|--------|----------|
 | CLI E5 v6 opt-in report/html/csv/… | **ready** | PR-B12; capability `v6_decode`/`v6_report` |
-| Collection default | **v5** (no flip) | capability `collection_default: v5` |
+| Collection default | **v5** (runtime flip **not** executed; ADR-0008 policy ready) | capability `collection_default: v5` |
 | COL-007 C writer E3-EVENT | **done** (since PR-B09) | `fixtures/v6/from-c/**`; offline_gate step 11 |
 | Wire freeze major=6 IDs | **done** | ADR-0006; golden vectors |
 | COL-009 writer backend | **C reaffirmed** | ADR-0007 |
@@ -228,8 +228,9 @@ Historical R2-preview cut (PR-B13) residuals. On **this integrated R2-stable bra
 | **R2-preview ready (opt-in)** | v6 offline CLI surfaces + COL-007 E3-EVENT + wire freeze + dual-equality E3-EVENT/E4 product/E5 as listed; collection default still v5. **At PR-B13 cut:** convert/merge not claimed. **On this integrated branch (PR-C01/C02):** convert/merge/repack/salvage **claimed true**; lossy residual remains |
 | **Full R1 ready** | Residual table closed (or explicitly waived by ADR) with product packaging, API materializers, report completeness, and certification policy as required by the plan DoD |
 | **R2-stable ready** | **done (PR-C05 honesty cut)** — convert/merge/salvage, COL-015 MVP, SEC-FUZZ offline, P1/P2 methodology; residuals: E3-mixed, full oracle E4, public perf, R3/R4 |
-| **R4 field-window pack (PR-E01)** | **instrumentation only** — [`docs/R4_FIELD_WINDOW.md`](https://github.com/hilather/nytprof-modernization/blob/main/docs/R4_FIELD_WINDOW.md) + [`scripts/field/r4_field_window_collect.sh`](https://github.com/hilather/nytprof-modernization/blob/main/scripts/field/r4_field_window_collect.sh) + report template; **does not** flip `collection_default` (stays **v5**); promotion requires ADR-Q025 / REL-008 after accepted field report |
-| **Not claimed** | CPAN upload, performance SLOs / **P1–P4 certification**, R3/R4 default flips, lossy convert, COL-008 baseline |
+| **R4 field-window pack (PR-E01)** | **instrumentation only** — [`docs/R4_FIELD_WINDOW.md`](https://github.com/hilather/nytprof-modernization/blob/main/docs/R4_FIELD_WINDOW.md) + [`scripts/field/r4_field_window_collect.sh`](https://github.com/hilather/nytprof-modernization/blob/main/scripts/field/r4_field_window_collect.sh) + report template; **does not** flip `collection_default` (stays **v5**) |
+| **R4 default policy (PR-E02 / ADR-0008)** | **policy accepted**; flip **not executed** — [ADR-0008](https://github.com/hilather/nytprof-modernization/blob/main/docs/adrs/0008-r4-v6-output-default-promotion.md) + [`docs/R4_DEFAULT_FLIP.md`](https://github.com/hilather/nytprof-modernization/blob/main/docs/R4_DEFAULT_FLIP.md); eligible-tier `format=v6` default only after accepted field **Promote**; **`format=v5` retained**; do not claim R4 complete or `collection_default: v6` until flip checklist runs |
+| **Not claimed** | CPAN upload, performance SLOs / **P1–P4 certification**, R3/R4 **runtime** default flips, lossy convert, COL-008 baseline |
 
 ### Operator re-verify (preview)
 
