@@ -1,0 +1,14 @@
+{
+  "mode": "test_dev_only",
+  "oq4": "COL-014 dual-sink not product UX",
+  "primary": "v5",
+  "secondary": "v6",
+  "fanout_ok": 35,
+  "fanout_fail_primary": 0,
+  "fanout_fail_secondary": 0,
+  "logical_equal_checks": 1,
+  "logical_equal_ok": 1,
+  "last_equal": 1,
+  "primary_logical_emits": 35,
+  "secondary_logical_emits": 35
+}

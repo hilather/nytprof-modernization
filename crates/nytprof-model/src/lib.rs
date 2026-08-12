@@ -538,6 +538,186 @@ pub fn f64_close(a: f64, b: f64) -> bool {
     diff / scale <= 1e-9
 }
 
+/// E4-v0 model-level semantic equality (advertised A1–A9 aggregates).
+///
+/// Compares two [`ProfileModel`]s built from **same-workload** v5 vs v6 profiles
+/// (or absolute vs packing v6 of the same logical stream). Wire bytes and event
+/// order are **not** compared — only decoded aggregates after product ingest.
+///
+/// Surfaces (see [`docs/contracts/E4_V5_V6_SEMANTIC_EQUALITY_POLICY_v0.md`] and
+/// aggregate-comparison A1–A9):
+/// - Event multiplicities: TIME_LINE/BLOCK, DISCOUNT, SUB_ENTRY/RETURN/CALLERS,
+///   NEW_FID, SRC_LINE, SUB_INFO, PID_START/END
+/// - A4 / A4b maps, A5 returns (+ incl/excl within [`f64_close`]), A7 edges,
+///   A8 source lines, A9 sub_defs, files/attributes/options
+/// - Stream completeness flags
+///
+/// `total_events` is compared only when `compare_total_events` is true (auto-VERSION
+/// inject can differ across encode paths; dual-sink same-run pairs should match).
+///
+/// **Not** full oracle fixture counts, CLI E5 product smoke, or wire freeze.
+pub fn e4_v0_aggregates_equal(
+    a: &ProfileModel,
+    b: &ProfileModel,
+    compare_total_events: bool,
+) -> std::result::Result<(), String> {
+    let mut mismatches = Vec::new();
+    macro_rules! check_eq {
+        ($field:ident, $label:expr) => {
+            if a.$field != b.$field {
+                mismatches.push(format!(
+                    "{}: left={} right={}",
+                    $label, a.$field, b.$field
+                ));
+            }
+        };
+    }
+    check_eq!(time_line_events, "TIME_LINE");
+    check_eq!(time_block_events, "TIME_BLOCK");
+    check_eq!(discount_events, "DISCOUNT");
+    check_eq!(sub_entry_events, "SUB_ENTRY");
+    check_eq!(sub_return_events, "SUB_RETURN");
+    check_eq!(sub_callers_events, "SUB_CALLERS");
+    check_eq!(new_fid_events, "NEW_FID");
+    check_eq!(src_line_events, "SRC_LINE");
+    check_eq!(sub_info_events, "SUB_INFO");
+    check_eq!(pid_start_events, "PID_START");
+    check_eq!(pid_end_events, "PID_END");
+    if compare_total_events && a.total_events != b.total_events {
+        mismatches.push(format!(
+            "total_events: left={} right={}",
+            a.total_events, b.total_events
+        ));
+    }
+    if a.line_totals != b.line_totals {
+        mismatches.push(format!(
+            "A4 line_totals: left_len={} right_len={}",
+            a.line_totals.len(),
+            b.line_totals.len()
+        ));
+        for (k, t) in &a.line_totals {
+            match b.line_totals.get(k) {
+                None => mismatches.push(format!("A4 missing right {k:?}")),
+                Some(o) if o != t => {
+                    mismatches.push(format!("A4 {k:?}: left={t:?} right={o:?}"))
+                }
+                _ => {}
+            }
+        }
+        for k in b.line_totals.keys() {
+            if !a.line_totals.contains_key(k) {
+                mismatches.push(format!("A4 missing left {k:?}"));
+            }
+        }
+    }
+    if a.block_line_totals != b.block_line_totals {
+        mismatches.push(format!(
+            "A4b block_line_totals: left_len={} right_len={}",
+            a.block_line_totals.len(),
+            b.block_line_totals.len()
+        ));
+        for (k, t) in &a.block_line_totals {
+            match b.block_line_totals.get(k) {
+                None => mismatches.push(format!("A4b missing right {k:?}")),
+                Some(o) if o != t => {
+                    mismatches.push(format!("A4b {k:?}: left={t:?} right={o:?}"))
+                }
+                _ => {}
+            }
+        }
+    }
+    if a.sub_return_totals.len() != b.sub_return_totals.len() {
+        mismatches.push(format!(
+            "A5 sub_return_totals size: left={} right={}",
+            a.sub_return_totals.len(),
+            b.sub_return_totals.len()
+        ));
+    }
+    for (name, t) in &a.sub_return_totals {
+        match b.sub_return_totals.get(name) {
+            None => mismatches.push(format!("A5 missing right sub {name}")),
+            Some(o) => {
+                if t.returns != o.returns {
+                    mismatches.push(format!(
+                        "A5 {name} returns: left={} right={}",
+                        t.returns, o.returns
+                    ));
+                }
+                if !f64_close(t.incl, o.incl) {
+                    mismatches.push(format!(
+                        "A5 {name} incl: left={} right={}",
+                        t.incl, o.incl
+                    ));
+                }
+                if !f64_close(t.excl, o.excl) {
+                    mismatches.push(format!(
+                        "A5 {name} excl: left={} right={}",
+                        t.excl, o.excl
+                    ));
+                }
+            }
+        }
+    }
+    for name in b.sub_return_totals.keys() {
+        if !a.sub_return_totals.contains_key(name) {
+            mismatches.push(format!("A5 missing left sub {name}"));
+        }
+    }
+    if a.call_edges.len() != b.call_edges.len() {
+        mismatches.push(format!(
+            "A7 call_edges size: left={} right={}",
+            a.call_edges.len(),
+            b.call_edges.len()
+        ));
+    }
+    for (key, e) in &a.call_edges {
+        match b.call_edges.get(key) {
+            None => mismatches.push(format!("A7 missing right edge {key:?}")),
+            Some(o) => {
+                if e.count != o.count || e.sites != o.sites || e.max_rec_depth != o.max_rec_depth {
+                    mismatches.push(format!(
+                        "A7 {key:?} count/sites/depth: left=({},{},{}) right=({},{},{})",
+                        e.count, e.sites, e.max_rec_depth, o.count, o.sites, o.max_rec_depth
+                    ));
+                }
+                if !f64_close(e.incl, o.incl)
+                    || !f64_close(e.excl, o.excl)
+                    || !f64_close(e.reci, o.reci)
+                {
+                    mismatches.push(format!("A7 {key:?} times differ"));
+                }
+            }
+        }
+    }
+    if a.sub_defs != b.sub_defs {
+        mismatches.push("A9 sub_defs differ".into());
+    }
+    if a.source_lines != b.source_lines {
+        mismatches.push("A8 source_lines differ".into());
+    }
+    if a.files != b.files {
+        mismatches.push("files map differs".into());
+    }
+    if a.attributes != b.attributes {
+        mismatches.push("attributes map differs".into());
+    }
+    if a.options != b.options {
+        mismatches.push("options map differs".into());
+    }
+    if a.is_stream_complete() != b.is_stream_complete() {
+        mismatches.push(format!(
+            "is_stream_complete: left={} right={}",
+            a.is_stream_complete(),
+            b.is_stream_complete()
+        ));
+    }
+    if mismatches.is_empty() {
+        Ok(())
+    } else {
+        Err(mismatches.join("; "))
+    }
+}
+
 fn arg_err(tag: &str, seq: u64, detail: impl Into<String>) -> ModelError {
     ModelError::InvalidArgs {
         tag: tag.to_string(),
@@ -619,3 +799,5 @@ fn as_str(args: &[Value], idx: usize, tag: &str, seq: u64) -> Result<String> {
 mod model_tests;
 #[cfg(test)]
 mod v6_model_tests;
+#[cfg(test)]
+mod e4_model_tests;

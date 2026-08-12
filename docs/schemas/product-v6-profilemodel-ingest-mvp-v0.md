@@ -1,7 +1,7 @@
 # Product v6 → ProfileModel ingest MVP (v0)
 
 **Board ID:** `PRODUCT-V6-MODEL-INGEST-MVP`  
-**Status:** implemented (PR-B11a) — **not** wire freeze; **not** full CLI E5 claim; **not** E4 enforcement  
+**Status:** implemented (PR-B11a) — **not** wire freeze; **not** full CLI E5 claim; E4-v0 uses this ingest path (PR-B10)  
 **Depends on:** COL-007 E3-EVENT (`fixtures/v6/from-c/**`); A1–A9 aggregation (`aggregate-comparison-v0.md`); dual-equality readiness  
 **Evidence:** `cargo test -p nytprof-model` (`v6_*`); `cargo test -p nytprof-format-v6 --lib dual_equality`; CLI `dump`/`verify` on `fixtures/v6/from-c/absolute.nytprof`
 
@@ -66,7 +66,7 @@ Auto-VERSION inject when body omits VERSION (header major/minor).
 | Stand-in FOOTER missing `string_id` | `from_bytes` / product decode `Err` |
 | Trunc / trailing / CRC-corrupt v6 | model + CLI dump/verify/report fail closed |
 
-Full **E4** same-workload v5+v6 fixture pairs and offline_gate product smoke remain residual (PR-B10 / B12b).
+**E4-v0** model-level enforcement on dual-sink scaled pairs is ready (PR-B10; `fixtures/e4/dual-sink/`). Full oracle same-workload pairs + offline_gate product CLI smoke remain residual (PR-B12b / TEST-008).
 
 ## Non-claims
 

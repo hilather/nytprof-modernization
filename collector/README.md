@@ -46,9 +46,8 @@ collector/
 ## Explicit non-claims
 
 - **Not full M4 oracle corpus** — mini sample only; full `fixtures/v5/*` v5-via-sink equality needs complete TEST-003  
-- **Board COL-007 is done for product E3-EVENT** (`fixtures/v6/from-c/`, `e3_c_*`, `tools/oracle/e3_c_writer_parity.sh`; schema [collector-v6-e3-c-fixtures-mvp-v0.md](https://github.com/hilather/nytprof-modernization/blob/main/docs/schemas/collector-v6-e3-c-fixtures-mvp-v0.md)). **Residuals:** **E3-mixed** multi-kind C fixtures; wire freeze; CLI v6 default; E4 enforcement; live XS hooks; COL-008  
-- **Not COL-015** — full fork buffer ownership / signal-safe finalization matrix (fork **state** MVP + batch `notify_*` are covered; see security package [`SECURITY_FUZZ_HARDENING_PACKAGE_v0.md`](https://github.com/hilather/nytprof-modernization/blob/main/docs/contracts/SECURITY_FUZZ_HARDENING_PACKAGE_v0.md) for threat catalogue; not continuous ASAN/fuzz)  
-- **Not full SEC-002 continuous fuzz** — offline deterministic v6 decode-fuzz + `test_batch_fast` SV lifetime are package evidence only 
+- **Board COL-007 is done for product E3-EVENT** (`fixtures/v6/from-c/`, `e3_c_*`, `tools/oracle/e3_c_writer_parity.sh`; schema [collector-v6-e3-c-fixtures-mvp-v0.md](https://github.com/hilather/nytprof-modernization/blob/main/docs/schemas/collector-v6-e3-c-fixtures-mvp-v0.md)). **Residuals:** **E3-mixed** multi-kind C fixtures; wire freeze; CLI v6 default; full oracle E4 / E4 product smoke (E4-v0 model on dual-sink pairs is ready); live XS hooks; COL-008  
+- **Not COL-015** — full fork buffer ownership / signal-safe finalization matrix  
 - **Not** hooked into live Perl opcode profiler yet  
 - **Not** a default dependency of `make legacy-smoke` or dual-path legacy half  
 - Dual-sink (COL-014) is **test/dev only** (OQ-4) — not advertised product `format=dual`; full fixtures dual equality residual  

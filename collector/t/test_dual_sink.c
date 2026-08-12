@@ -108,6 +108,10 @@ static nytp_status emit_finalize_tail(nytp_sink *s)
  *   mid→leaf edges via SUB_CALLERS, DISCOUNT present.
  * Scaled mini (not full oracle 818 discounts / 916 TL) — multiplicity
  * patterns only for dual equality.
+ *
+ * incl/excl/reci use **integer tick** values (not fractional wall NV) so
+ * v5 NV wire and v6 u64 tick truncation yield equal E4-v0 model aggregates
+ * (see E4_V5_V6_SEMANTIC_EQUALITY_POLICY_v0 / PR-B10).
  */
 static nytp_status run_default_calls1_shape(nytp_sink *s)
 {
@@ -127,11 +131,11 @@ static nytp_status run_default_calls1_shape(nytp_sink *s)
         if (st != NYTP_OK) {
             return st;
         }
-        st = nytp_emit_sub_return(s, 1, 0.01, 0.005, nytp_sv_cstr("main::leaf"));
+        st = nytp_emit_sub_return(s, 1, 100.0, 40.0, nytp_sv_cstr("main::leaf"));
         if (st != NYTP_OK) {
             return st;
         }
-        st = nytp_emit_sub_callers(s, 1, 10, 1, 0.01, 0.005, 0.0, 1,
+        st = nytp_emit_sub_callers(s, 1, 10, 1, 200.0, 100.0, 0.0, 1,
                                    nytp_sv_cstr("main::leaf"),
                                    nytp_sv_cstr("main::mid"));
         if (st != NYTP_OK) {
@@ -143,7 +147,7 @@ static nytp_status run_default_calls1_shape(nytp_sink *s)
         if (st != NYTP_OK) {
             return st;
         }
-        st = nytp_emit_sub_return(s, 1, 0.03, 0.01, nytp_sv_cstr("main::mid"));
+        st = nytp_emit_sub_return(s, 1, 300.0, 50.0, nytp_sv_cstr("main::mid"));
         if (st != NYTP_OK) {
             return st;
         }
@@ -166,7 +170,7 @@ static nytp_status run_blocks_calls1_shape(nytp_sink *s)
             return st;
         }
     }
-    st = nytp_emit_sub_return(s, 1, 0.01, 0.005, nytp_sv_cstr("main::leaf"));
+    st = nytp_emit_sub_return(s, 1, 100.0, 40.0, nytp_sv_cstr("main::leaf"));
     if (st != NYTP_OK) {
         return st;
     }
@@ -191,7 +195,7 @@ static nytp_status run_calls2_default_shape(nytp_sink *s)
         if (st != NYTP_OK) {
             return st;
         }
-        st = nytp_emit_sub_return(s, 1, 0.01, 0.005, nytp_sv_cstr("main::leaf"));
+        st = nytp_emit_sub_return(s, 1, 100.0, 40.0, nytp_sv_cstr("main::leaf"));
         if (st != NYTP_OK) {
             return st;
         }

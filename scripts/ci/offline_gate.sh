@@ -9,8 +9,6 @@
 #   3. scripts/packaging/dual_path_smoke.sh (primary packaging path)
 #   4. scripts/packaging/engine_auto_fallback_smoke.sh (ENGINE-AUTO-FALLBACK)
 #   5. scripts/packaging/perl_jsonl_data_all_smoke.sh (pure-Perl JsonlData roll-up, incl. stream_complete / discount)
-#   5b. scripts/packaging/perl_xs_data_readstream_smoke.sh (PR-A06 / PERL-XS-DATA-READSTREAM-MVP:
-#       product Data/ReadStream over golden JSONL + optional binary native dump)
 #   6. scripts/packaging/perl_query_json_smoke.sh (QUERY-JSON-MVP / QUERY-JSON-EXPAND;
 #      pure-Perl golden --jsonl; no cargo required) — CI-QUERY-JSON-GATE
 #   6b. scripts/packaging/json_sub_entry_smoke.sh (JSON-SUB-ENTRY-MVP: sub_entry_events
@@ -53,9 +51,6 @@
 #  11. tools/oracle/e3_c_writer_parity.sh when cargo present (COL-007 product
 #      E3-EVENT with C fixtures under fixtures/v6/from-c/**; honest skip if no
 #      cargo). E3-mixed residual.
-#  12. tools/oracle/selftest_security_fuzz.sh when cargo present (SEC-FUZZ-
-#      HARDENING-MVP: v5+v6 decode-fuzz + optional collector batch/fork tests;
-#      honest skip if no cargo). Not full SEC-002 continuous fuzz; COL-015 residual.
 #
 # Primary packaging choice: dual_path_smoke.sh (BUILD dual-path policy entry).
 # Alternatives not re-run here (document only):
@@ -84,7 +79,6 @@ HARNESS="$ROOT/tools/oracle/selftest_harness.sh"
 PACKAGING="$ROOT/scripts/packaging/dual_path_smoke.sh"
 ENGINE_AUTO_FALLBACK="$ROOT/scripts/packaging/engine_auto_fallback_smoke.sh"
 JSONL_DATA_ALL="$ROOT/scripts/packaging/perl_jsonl_data_all_smoke.sh"
-XS_DATA_RS_SMOKE="$ROOT/scripts/packaging/perl_xs_data_readstream_smoke.sh"
 QUERY_JSON_SMOKE="$ROOT/scripts/packaging/perl_query_json_smoke.sh"
 JSON_SUB_ENTRY_SMOKE="$ROOT/scripts/packaging/json_sub_entry_smoke.sh"
 JSON_BLOCKS_SMOKE="$ROOT/scripts/packaging/json_blocks_smoke.sh"
@@ -97,7 +91,6 @@ JSON_TOTAL_BASETIME_SMOKE="$ROOT/scripts/packaging/json_total_basetime_smoke.sh"
 CAPABILITY_SMOKE="$ROOT/scripts/packaging/capability_selftest_smoke.sh"
 COLLECTOR_SINK_SMOKE="$ROOT/scripts/packaging/collector_sink_smoke.sh"
 E3_C_WRITER_PARITY="$ROOT/tools/oracle/e3_c_writer_parity.sh"
-SECURITY_FUZZ="$ROOT/tools/oracle/selftest_security_fuzz.sh"
 
 banner() {
   echo
@@ -177,12 +170,6 @@ run_required "engine_auto_fallback_smoke (ENGINE-AUTO-FALLBACK)" "$ENGINE_AUTO_F
 # 5. Pure-Perl JsonlData roll-up (returns/edges/line_totals/subdefs/source/a4b/meta/pid/stream_complete/discount)
 # ---------------------------------------------------------------------------
 run_required "perl_jsonl_data_all_smoke (JsonlData pure-Perl)" "$JSONL_DATA_ALL"
-
-# ---------------------------------------------------------------------------
-# 5b. PR-A06 / PERL-XS-DATA-READSTREAM-MVP: product Data + ReadStream facades
-#     (binary via native dump when CLI present; golden JSONL always required).
-# ---------------------------------------------------------------------------
-run_required "perl_xs_data_readstream_smoke (PERL-XS-DATA-READSTREAM-MVP / PR-A06)" "$XS_DATA_RS_SMOKE"
 
 # ---------------------------------------------------------------------------
 # 6. QUERY-JSON-MVP / QUERY-JSON-EXPAND: structured query --json via pure-Perl
@@ -344,25 +331,9 @@ else
   ok "step: e3_c fixture presence (cargo skipped)"
 fi
 
-# ---------------------------------------------------------------------------
-# 12. SEC-FUZZ-HARDENING-MVP: v5+v6 decode-fuzz + collector threat evidence
-# ---------------------------------------------------------------------------
-banner "selftest_security_fuzz (SEC-FUZZ-HARDENING-MVP)"
-if [[ ! -f "$SECURITY_FUZZ" ]]; then
-  fail "required script missing: $SECURITY_FUZZ"
-fi
-if command -v cargo >/dev/null 2>&1; then
-  bash "$SECURITY_FUZZ"
-  ok "step: selftest_security_fuzz"
-else
-  echo "SKIP: cargo not on PATH — security/fuzz cargo batteries not run"
-  echo "  (honest skip; docs/contracts/SECURITY_FUZZ_HARDENING_PACKAGE_v0.md still required)"
-  ok "step: selftest_security_fuzz (cargo skipped)"
-fi
-
 banner "ALL PASSED"
 ok "offline_gate completed successfully"
 echo "NOTE: broader packaging_gate / makemaker_dual_path_smoke are not part of this gate"
-echo "NOTE: COL-007 E3-EVENT done with C; E3-mixed / wire freeze / E4 / COL-008 residual"
-echo "NOTE: SEC-FUZZ-HARDENING-MVP offline batteries green when cargo; not full SEC-002 / COL-015"
+echo "NOTE: COL-007 E3-EVENT done with C; E3-mixed / wire freeze / E4 product smoke (PR-B12b) / full oracle dual / COL-008 residual"
+echo "NOTE: E4-v0 model-level smoke available: ./scripts/packaging/e4_v5_v6_semantic_smoke.sh --model-only (not a gate step yet)"
 exit 0

@@ -68,7 +68,8 @@ Explicit `nytp_dual_sink_create*` is already opt-in; env probe is for harness ga
 | Product dual-write UX / advertised `format=dual` | **rejected** by OQ-4 |
 | COL-015 fork buffer ownership under dual | COL-015 |
 | Secondary-fail after primary wire write (no rollback of primary bytes/stats) | COL-018 residual; dual parent **is** sticky-failed for all secondary non-OK |
-| E4 aggregate enforcement on oracle fixture pairs | PR-B10 / E4-v0 after model ingest |
+| E4-v0 model aggregates on dual-sink scaled pairs | **done** (PR-B10; `fixtures/e4/dual-sink/` + `e4_v0_*`) |
+| Full oracle dual aggregate pairs + E4 product CLI smoke | TEST-008 / PR-B12b residual |
 | Wire freeze / CLI v6 default | after E3/E4 |
 
 ## Tests

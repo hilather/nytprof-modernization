@@ -409,7 +409,8 @@ nytp_status nytp_m4_mini_sample_run(nytp_sink *sink, nytp_m4_harness_result *out
         return NYTP_ERR_STATE;
     }
 
-    STEP(nytp_emit_sub_return(sink, 1, 0.01, 0.005, nytp_sv_cstr("main::leaf")));
+    /* Integer ticks so v5 NV + v6 u64 truncation stay E4-equal (PR-B10). */
+    STEP(nytp_emit_sub_return(sink, 1, 100.0, 40.0, nytp_sv_cstr("main::leaf")));
     STEP(nytp_sink_begin_finalize(sink));
 
     /* Hot-path must fail in FINALIZING. */

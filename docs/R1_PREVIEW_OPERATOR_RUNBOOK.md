@@ -594,7 +594,8 @@ Also on blocks-calls1 when asserted: leaf returns **15**, mid returns **3** (sam
 | `FMT-V6-EVENT-BODY-UNKNOWN-OPTIONAL-SKIP-PROVISIONAL` | **done** | Unknown optional length-framed skip preflight (`FLAG_BODY_LENGTH`). Not permanent flag freeze. Default `parse_chunk_frame` stays non-inflating. **Before full COL-007.** |
 | `FMT-V6-EVENT-BODY-UNKNOWN-OPTIONAL-SKIP-MVP` | **done** | Length-framed unknown-optional skip + always-inflate EVENT/mixed tests (order+fields; SOURCE co-kind). **Before full COL-007.** |
 | `COL-001-SINK-MVP` | **done (scaffold)** | Overlay `collector/` semantic sink + counting + v5 wire; smoke offline_gate step 10; **not** live hooks |
-| `COL-014-DUAL-SINK-MVP` | **done (test/dev-only)** | Same-run dual fan-out v5+v6 (OQ-4 not product UX); `test_dual_sink`; schema `collector-dual-sink-mvp-v0.md`; full oracle dual residual |
+| `COL-014-DUAL-SINK-MVP` | **done (test/dev-only)** | Same-run dual fan-out v5+v6 (OQ-4 not product UX); `test_dual_sink`; schema `collector-dual-sink-mvp-v0.md`; full oracle dual residual; feeds E4-v0 model pairs |
+| `E4-V0-MODEL-SEMANTIC-MVP` | **done** | E4-v0 model-level v5↔v6 aggregates on dual-sink pairs; `e4_v0_*` tests + `e4_v5_v6_semantic_smoke.sh --model-only`; full oracle + product CLI residual (PR-B12b) |
 | `COL-002-LIFECYCLE-MVP` | **done (scaffold)** | Explicit sink lifecycle + emit gates; **not** COL-015 full fork/signal matrix |
 | `COL-003-SEQ-MVP` | **done (scaffold)** | Internal gapless logical seq; not on default v5 wire |
 | `COL-004-FAST-PATH-MVP` | **done (scaffold)** | No-alloc TIME_LINE/TIME_BLOCK batch append + `nytp_fast_emit_*`; light microbench engineering only — **not** BENCH cert |
@@ -646,8 +647,8 @@ Also on blocks-calls1 when asserted: leaf returns **15**, mid returns **3** (sam
 | `DUAL-EQUALITY-READINESS-MVP` | **done** | Honesty sync; first-slice complete, full R1 residual, R2 runway only. **Before full COL-007.** |
 | `ADR-0002-V6-STRING-POOL-CANDIDATE` | **done** (proposed) | FOOTER string-pool ADR candidate. Not global pool; not COL-007. **Before full COL-007.** |
 | `E3-DUAL-EQUALITY-HARNESS-MVP` | **done** | E3 harness writer-bytes→decode equality (stand-in absolute/packing/string-dict/mid-stream). Stand-in **not** product dual-equality evidence. Not COL-007 C writer. **Before full COL-007.** |
-| `E4-V5-V6-SEMANTIC-EQUALITY-POLICY-PROVISIONAL` | **done** | E4 v5↔v6 semantic equality policy draft. Enforcement open. **Before full COL-007.** |
-| `E4-V5-V6-SEMANTIC-EQUALITY-POLICY-MVP` | **done** | E4 policy honesty sync. COL-007 deferred. **Before full COL-007.** |
+| `E4-V5-V6-SEMANTIC-EQUALITY-POLICY-PROVISIONAL` | **done** | E4 v5↔v6 semantic equality policy draft. E4-v0 model enforcement ready (PR-B10). |
+| `E4-V5-V6-SEMANTIC-EQUALITY-POLICY-MVP` | **done** | E4 policy honesty sync. E4-v0 model ready; full oracle + product CLI residual. |
 | `COL-007` | deferred | C v6 writer — unblocked for *start* after report-side evidence; not implemented by this runbook |
 
 ## Revision rule
