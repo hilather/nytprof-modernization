@@ -66,7 +66,7 @@ Explicit `nytp_dual_sink_create*` is already opt-in; env probe is for harness ga
 |----------|-------|
 | Full `fixtures/v5/` oracle stream dual equality | complete TEST-003 + TEST-008 M6 suite + live hooks |
 | Product dual-write UX / advertised `format=dual` | **rejected** by OQ-4 |
-| COL-015 fork buffer ownership under dual | COL-015 |
+| Full TEST-018 oracle fork under dual (beyond unit stress) | TEST-018 / COL-015 residual (MVP protocol in collector-fork-pid-mvp-v0) |
 | Secondary-fail after primary wire write (no rollback of primary bytes/stats) | COL-018 residual; dual parent **is** sticky-failed for all secondary non-OK |
 | E4-v0 model aggregates on dual-sink scaled pairs | **done** (PR-B10; `fixtures/e4/dual-sink/` + `e4_v0_*`) |
 | Full oracle dual aggregate pairs + E4 product CLI smoke | TEST-008 / PR-B12b residual |
