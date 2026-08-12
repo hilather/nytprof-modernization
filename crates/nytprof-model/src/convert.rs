@@ -14,8 +14,10 @@
 //! # Residuals
 //!
 //! - v6 output is **absolute EVENT** only (NONE codec); not packing / string-dict / multi-kind
-//! - v5→v6 drops non-zero extended `NEW_FID` fields and non-zero `TIME_BLOCK.sub_line` (fail closed)
-//! - Not full oracle dual equality; not merge/salvage (PR-C02)
+//! - Non-zero extended `NEW_FID` fields and non-zero `TIME_BLOCK.sub_line` **refuse** on v5→v6
+//!   (absolute body cannot represent them; no silent zeroing)
+//! - Fractional / non-mantissa-exact NV→u64 / f64 refuse (no silent truncate or round)
+//! - Not full oracle dual equality; not merge/salvage (PR-C02); no `--allow-lossy`
 
 use std::path::Path;
 
@@ -301,14 +303,19 @@ fn encode_to_v6(events: &[Event]) -> ConvertResult<Vec<u8>> {
                 let fid = arg_u64(&ev.args, 1, "TIME_BLOCK", "fid", ev.seq)?;
                 let line = arg_u64(&ev.args, 2, "TIME_BLOCK", "line", ev.seq)?;
                 let block_line = arg_u64(&ev.args, 3, "TIME_BLOCK", "block_line", ev.seq)?;
-                // v6 absolute body has no sub_line; product reverse map pads 0 (v6_ingest).
-                // Dropping sub_line is the established absolute-body projection (dual-sink C
-                // path), not silent aggregate loss — A4/A4b use line/block_line only.
-                let _sub_line = if ev.args.len() > 4 {
-                    arg_u64(&ev.args, 4, "TIME_BLOCK", "sub_line", ev.seq)?
-                } else {
-                    0
-                };
+                // v6 absolute body has no sub_line. Strict: refuse non-zero (no silent zero).
+                // Zero sub_line (or absent arg) is representable and projects cleanly.
+                if ev.args.len() > 4 {
+                    let sub_line = arg_u64(&ev.args, 4, "TIME_BLOCK", "sub_line", ev.seq)?;
+                    if sub_line != 0 {
+                        return Err(ConvertError::Strict {
+                            detail: format!(
+                                "seq {}: TIME_BLOCK.sub_line={sub_line} not representable on v6 absolute body (strict refuse non-zero; no silent zeroing)",
+                                ev.seq
+                            ),
+                        });
+                    }
+                }
                 ops.push(Op::TimeBlock {
                     fid,
                     line,
@@ -721,20 +728,147 @@ mod tests {
     }
 
     #[test]
-    fn blocks_and_calls2_dual_both_directions() {
-        for stem in ["blocks_calls1", "calls2_default"] {
-            for (side, target) in [("v5", ConvertTarget::V6), ("v6", ConvertTarget::V5)] {
-                let path = dual(stem, side);
-                let bytes = std::fs::read(&path).unwrap();
-                let (out, src, dst) =
-                    convert_and_models(&bytes, target).unwrap_or_else(|e| {
-                        panic!("{stem}/{side}→{:?}: {e}", target);
-                    });
-                assert!(!out.is_empty());
-                e4_v0_aggregates_equal(&src, &dst, false)
-                    .unwrap_or_else(|e| panic!("{stem}/{side}: {e}"));
-            }
+    fn calls2_dual_both_directions() {
+        // calls2 has zero sub_line; both directions are representable on strict path.
+        for (side, target) in [("v5", ConvertTarget::V6), ("v6", ConvertTarget::V5)] {
+            let path = dual("calls2_default", side);
+            let bytes = std::fs::read(&path).unwrap();
+            let (out, src, dst) = convert_and_models(&bytes, target).unwrap_or_else(|e| {
+                panic!("calls2_default/{side}→{target:?}: {e}");
+            });
+            assert!(!out.is_empty());
+            e4_v0_aggregates_equal(&src, &dst, false)
+                .unwrap_or_else(|e| panic!("calls2_default/{side}: {e}"));
         }
+    }
+
+    #[test]
+    fn blocks_v6_to_v5_ok_v5_to_v6_refuses_nonzero_sub_line() {
+        // v6 side has no sub_line → v5 is fine.
+        let v6_path = dual("blocks_calls1", "v6");
+        let bytes = std::fs::read(&v6_path).unwrap();
+        let (out, src, dst) =
+            convert_and_models(&bytes, ConvertTarget::V5).expect("blocks v6→v5");
+        assert!(out.starts_with(b"NYTProf 5 0\n"));
+        e4_v0_aggregates_equal(&src, &dst, false).expect("blocks v6→v5 aggregates");
+
+        // v5 dual-sink blocks has non-zero sub_line → strict refuse (no silent zero).
+        let v5_path = dual("blocks_calls1", "v5");
+        let v5_bytes = std::fs::read(&v5_path).unwrap();
+        let err = convert_bytes(&v5_bytes, ConvertTarget::V6)
+            .expect_err("blocks v5→v6 must refuse non-zero sub_line");
+        let msg = err.to_string();
+        assert!(
+            msg.contains("sub_line") && (msg.contains("strict") || msg.contains("refuse")),
+            "expected sub_line refuse, got: {msg}"
+        );
+    }
+
+    #[test]
+    fn strict_refuse_nonzero_sub_line_to_v6() {
+        use serde_json::json;
+        let events = vec![
+            Event::new(0, tags::VERSION, vec![json!(5), json!(0)]),
+            Event::new(
+                1,
+                tags::TIME_BLOCK,
+                // ticks, fid, line, block_line, sub_line=3
+                vec![json!(5), json!(1), json!(5), json!(4), json!(3)],
+            ),
+        ];
+        let err = encode_events(&events, ConvertTarget::V6).unwrap_err();
+        let msg = err.to_string();
+        assert!(
+            msg.contains("sub_line"),
+            "expected sub_line refuse, got: {msg}"
+        );
+    }
+
+    #[test]
+    fn strict_refuse_nonzero_new_fid_eval_to_v6() {
+        use serde_json::json;
+        let events = vec![
+            Event::new(0, tags::VERSION, vec![json!(5), json!(0)]),
+            Event::new(
+                1,
+                tags::NEW_FID,
+                // fid, eval_fid=1 (non-zero), eval_line, flags, size, mtime, name
+                vec![
+                    json!(1),
+                    json!(1),
+                    json!(0),
+                    json!(0),
+                    json!(0),
+                    json!(0),
+                    json!("workload.pl"),
+                ],
+            ),
+        ];
+        let err = encode_events(&events, ConvertTarget::V6).unwrap_err();
+        let msg = err.to_string();
+        assert!(
+            msg.contains("eval_fid") || msg.contains("NEW_FID"),
+            "expected NEW_FID refuse, got: {msg}"
+        );
+    }
+
+    #[test]
+    fn strict_refuse_unknown_tag() {
+        use serde_json::json;
+        let events = vec![
+            Event::new(0, tags::VERSION, vec![json!(5), json!(0)]),
+            Event::new(1, "NOT_A_TAG", vec![json!(1)]),
+        ];
+        let err = encode_events(&events, ConvertTarget::V6).unwrap_err();
+        let msg = err.to_string();
+        assert!(
+            msg.contains("NOT_A_TAG") || msg.contains("no strict"),
+            "expected unknown tag refuse, got: {msg}"
+        );
+        let err5 = encode_events(&events, ConvertTarget::V5).unwrap_err();
+        let msg5 = err5.to_string();
+        assert!(
+            msg5.contains("NOT_A_TAG") || msg5.contains("unsupported"),
+            "expected v5 unknown tag refuse, got: {msg5}"
+        );
+    }
+
+    #[test]
+    fn strict_refuse_nv_mantissa_to_v5() {
+        use serde_json::json;
+        let bad = (1u64 << 53) + 1;
+        let events = vec![
+            Event::new(0, tags::VERSION, vec![json!(6), json!(0)]),
+            Event::new(
+                1,
+                tags::SUB_RETURN,
+                vec![json!(1), json!(bad), json!(0u64), json!("main::x")],
+            ),
+        ];
+        let err = encode_events(&events, ConvertTarget::V5).unwrap_err();
+        let msg = err.to_string();
+        assert!(
+            msg.contains("exactly representable")
+                || msg.contains("mantissa")
+                || msg.contains("v5 encode"),
+            "expected mantissa refuse, got: {msg}"
+        );
+    }
+
+    #[test]
+    fn zero_sub_line_time_block_to_v6_ok() {
+        use serde_json::json;
+        let events = vec![
+            Event::new(0, tags::VERSION, vec![json!(5), json!(0)]),
+            Event::new(
+                1,
+                tags::TIME_BLOCK,
+                vec![json!(5), json!(1), json!(5), json!(4), json!(0)],
+            ),
+            Event::new(2, tags::PID_END, vec![json!(1), json!(0)]),
+        ];
+        let wire = encode_events(&events, ConvertTarget::V6).expect("zero sub_line ok");
+        assert!(wire.starts_with(b"NYTPROF6"));
     }
 
     #[test]

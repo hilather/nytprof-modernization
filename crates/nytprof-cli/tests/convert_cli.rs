@@ -176,12 +176,43 @@ fn convert_strict_refuse_fractional_is_cli_error() {
 
 #[test]
 fn convert_help_mentions_strict() {
-    let (code, _stdout, stderr) = run(&["convert", "--help"]);
-    // help may exit 0 via print_usage to stderr
+    let (code, stdout, stderr) = run(&["convert", "--help"]);
+    assert_eq!(code, 0, "convert --help should exit 0\n{stdout}\n{stderr}");
+    let text = format!("{stdout}{stderr}");
     assert!(
-        code == 0 || stderr.contains("convert") || _stdout.contains("convert"),
-        "help should mention convert"
+        text.contains("convert"),
+        "help should mention convert\n{text}"
     );
+    assert!(
+        text.to_ascii_lowercase().contains("strict")
+            || text.contains("no lossy")
+            || text.contains("lossy"),
+        "help/usage must mention strict path and/or no lossy mode\n{text}"
+    );
+}
+
+#[test]
+fn convert_blocks_v5_to_v6_refuses_nonzero_sub_line() {
+    let input = dual("blocks_calls1", "v5");
+    assert!(input.is_file(), "missing {}", input.display());
+    let out = tmp_out("blocks.v6");
+    let (code, stdout, stderr) = run(&[
+        "convert",
+        "--to=v6",
+        input.to_str().unwrap(),
+        "-o",
+        out.to_str().unwrap(),
+    ]);
+    assert_ne!(code, 0, "blocks v5→v6 must refuse non-zero sub_line");
+    assert!(
+        !stdout.lines().any(|l| l.starts_with("OK: convert")),
+        "must not print OK on sub_line refuse\n{stdout}"
+    );
+    assert!(
+        stderr.contains("sub_line") || stderr.contains("strict"),
+        "stderr should diagnose sub_line\n{stderr}"
+    );
+    let _ = std::fs::remove_file(&out);
 }
 
 /// Ensure Path is used (suppress unused if any helper path only).

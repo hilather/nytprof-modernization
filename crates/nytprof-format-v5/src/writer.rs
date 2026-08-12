@@ -49,18 +49,21 @@ mod wire {
 ///   `START_DEFLATE`, one is **auto-injected** so common 6.15 tools see a
 ///   normal compressed body.
 pub fn encode_all(events: &[Event]) -> Result<Vec<u8>> {
-    encode_all_inner(events, /*require_version_major_5=*/ true)
+    // Strict v5-only: VERSION major must be 5 (not projection of 6).
+    encode_all_inner(events, /*project_v5_or_v6=*/ false)
 }
 
-/// Like [`encode_all`], but accepts any source `VERSION` major and always
+/// Like [`encode_all`], but accepts source `VERSION` major **5 or 6** and always
 /// writes header `NYTProf 5 0\n` (strict v6→v5 projection path).
 ///
-/// Non-version events are encoded under the same representability checks.
+/// Other majors (4, 7, …) are **refused** — no silent re-header of unknown
+/// streams. Non-version events use the same representability checks as
+/// [`encode_all`], including exact f64 NV mantissa checks.
 pub fn encode_all_as_v5(events: &[Event]) -> Result<Vec<u8>> {
-    encode_all_inner(events, /*require_version_major_5=*/ false)
+    encode_all_inner(events, /*project_v5_or_v6=*/ true)
 }
 
-fn encode_all_inner(events: &[Event], require_version_major_5: bool) -> Result<Vec<u8>> {
+fn encode_all_inner(events: &[Event], project_v5_or_v6: bool) -> Result<Vec<u8>> {
     let mut out: Vec<u8> = Vec::with_capacity(4096);
     out.extend_from_slice(b"NYTProf 5 0\n");
 
@@ -70,7 +73,14 @@ fn encode_all_inner(events: &[Event], require_version_major_5: bool) -> Result<V
         if ev.tag == tags::VERSION {
             let major = arg_u64(&ev.args, 0, tags::VERSION, "major")?;
             let _minor = arg_u64(&ev.args, 1, tags::VERSION, "minor")?;
-            if require_version_major_5 && major != 5 {
+            if project_v5_or_v6 {
+                // Projection path: only majors 5 and 6 are known product families.
+                if major != 5 && major != 6 {
+                    return Err(Error::format(format!(
+                        "strict v5 encode: VERSION major {major} not projectable (only 5 or 6)"
+                    )));
+                }
+            } else if major != 5 {
                 return Err(Error::format(format!(
                     "strict v5 encode: VERSION major {major} is not 5 (use encode_all_as_v5 for projection)"
                 )));
@@ -440,10 +450,23 @@ fn arg_i32_ticks(args: &[Value], i: usize, tag: &str, field: &str) -> Result<i32
     )))
 }
 
+/// Parse NV for v5 wire as finite LE `f64`, with **exact** integer mantissa checks.
+///
+/// - Non-finite → refuse
+/// - Values that arrived as integer JSON (`u64` / `i64`) must survive
+///   `as f64` → back without rounding (refuses `|n| > 2^53` non-exact integers)
+/// - Fractional numbers already representable as f64 (oracle wall-clock PID) pass
 fn arg_nv(args: &[Value], i: usize, tag: &str, field: &str) -> Result<f64> {
     let v = arg_at(args, i, tag, field)?;
     match v {
         Value::Number(n) => {
+            // Prefer exact integer paths first (serde may expose both).
+            if let Some(u) = n.as_u64() {
+                return exact_u64_as_f64_nv(u, tag, field);
+            }
+            if let Some(i64v) = n.as_i64() {
+                return exact_i64_as_f64_nv(i64v, tag, field);
+            }
             let f = n.as_f64().ok_or_else(|| {
                 Error::format(format!(
                     "strict v5 encode: {tag}.{field} not representable as f64 ({v})"
@@ -454,12 +477,62 @@ fn arg_nv(args: &[Value], i: usize, tag: &str, field: &str) -> Result<f64> {
                     "strict v5 encode: {tag}.{field} is non-finite"
                 )));
             }
+            // Fractional (or non-integer JSON number): require the f64 image is exact
+            // for any whole-number magnitude that would have been an integer path.
+            if f.fract() == 0.0 && f.is_sign_positive() && f <= u64::MAX as f64 {
+                let as_u = f as u64;
+                if (as_u as f64) != f {
+                    return Err(Error::format(format!(
+                        "strict v5 encode: {tag}.{field}={f} not exactly representable as f64 NV"
+                    )));
+                }
+            } else if f.fract() == 0.0
+                && f >= i64::MIN as f64
+                && f <= i64::MAX as f64
+            {
+                let as_i = f as i64;
+                if (as_i as f64) != f {
+                    return Err(Error::format(format!(
+                        "strict v5 encode: {tag}.{field}={f} not exactly representable as f64 NV"
+                    )));
+                }
+            }
             Ok(f)
         }
         _ => Err(Error::format(format!(
             "strict v5 encode: {tag}.{field} not a number ({v})"
         ))),
     }
+}
+
+fn exact_u64_as_f64_nv(u: u64, tag: &str, field: &str) -> Result<f64> {
+    let f = u as f64;
+    if f as u64 != u {
+        return Err(Error::format(format!(
+            "strict v5 encode: {tag}.{field}={u} not exactly representable as f64 NV (mantissa)"
+        )));
+    }
+    if !f.is_finite() {
+        return Err(Error::format(format!(
+            "strict v5 encode: {tag}.{field} is non-finite"
+        )));
+    }
+    Ok(f)
+}
+
+fn exact_i64_as_f64_nv(i: i64, tag: &str, field: &str) -> Result<f64> {
+    let f = i as f64;
+    if f as i64 != i {
+        return Err(Error::format(format!(
+            "strict v5 encode: {tag}.{field}={i} not exactly representable as f64 NV (mantissa)"
+        )));
+    }
+    if !f.is_finite() {
+        return Err(Error::format(format!(
+            "strict v5 encode: {tag}.{field} is non-finite"
+        )));
+    }
+    Ok(f)
 }
 
 fn arg_str<'a>(args: &'a [Value], i: usize, tag: &str, field: &str) -> Result<&'a str> {
@@ -568,5 +641,56 @@ mod tests {
             ev(1, tags::DISCOUNT, vec![]),
         ];
         assert!(encode_all(&events).is_err());
+    }
+
+    #[test]
+    fn encode_as_v5_refuses_unknown_major() {
+        let events = vec![
+            ev(0, tags::VERSION, vec![json!(7), json!(0)]),
+            ev(1, tags::DISCOUNT, vec![]),
+        ];
+        let err = encode_all_as_v5(&events).unwrap_err();
+        let msg = err.to_string();
+        assert!(
+            msg.contains("not projectable") || msg.contains("major"),
+            "unexpected: {msg}"
+        );
+    }
+
+    #[test]
+    fn strict_nv_mantissa_overflow_refuses() {
+        // 2^53 + 1 is not exactly representable as f64.
+        let bad = (1u64 << 53) + 1;
+        let events = vec![
+            ev(0, tags::VERSION, vec![json!(5), json!(0)]),
+            ev(
+                1,
+                tags::SUB_RETURN,
+                vec![json!(1), json!(bad), json!(0u64), json!("main::x")],
+            ),
+        ];
+        let err = encode_all(&events).unwrap_err();
+        let msg = err.to_string();
+        assert!(
+            msg.contains("exactly representable") || msg.contains("mantissa"),
+            "unexpected: {msg}"
+        );
+    }
+
+    #[test]
+    fn strict_nv_exact_small_integer_ok() {
+        let events = vec![
+            ev(0, tags::VERSION, vec![json!(5), json!(0)]),
+            ev(
+                1,
+                tags::SUB_RETURN,
+                vec![json!(1), json!(100u64), json!(40u64), json!("main::leaf")],
+            ),
+        ];
+        let wire = encode_all(&events).expect("small integer NV must encode");
+        let back = decode_all(&wire).expect("decode");
+        let sr = back.iter().find(|e| e.tag == tags::SUB_RETURN).unwrap();
+        assert_eq!(sr.args[1], json!(100));
+        assert_eq!(sr.args[2], json!(40));
     }
 }

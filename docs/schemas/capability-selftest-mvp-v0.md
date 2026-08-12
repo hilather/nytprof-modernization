@@ -107,9 +107,12 @@ If a probe path is resolved (including forced), **verify must succeed** or the s
 
 - Forced or resolved probe path fails decode/model/verify  
 - Probe produces a summary without an `OK:` line  
+- Dual-sink convert probe is **present** (`fixtures/e4/dual-sink/m4_v5.nytprof` / `m4_v6.nytprof`) but `convert` / follow-up `verify` fails  
 - Unknown option / unknown `--format` value  
 
 Print error to stderr; exit status ≠ 0. Do not print a leading `OK: native capability self-test` success block (human) or an `ok: true` JSON object on failure (failure goes through the CLI error path).
+
+When dual-sink fixtures are **absent**, `convert: yes` still means the convert path is **linked** in this binary; live convert exercise is skipped (not a silent green for a broken convert).
 
 Corrupt / incomplete fixtures follow the same fail-closed rules as `verify` (see [`verify-cli-mvp-v0.md`](verify-cli-mvp-v0.md), [`COMPAT-010_ERROR_FAIL_CLOSED.md`](../contracts/COMPAT-010_ERROR_FAIL_CLOSED.md)).
 

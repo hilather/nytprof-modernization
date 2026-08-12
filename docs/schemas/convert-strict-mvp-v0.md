@@ -47,13 +47,14 @@ Library API: `nytprof_model::{convert_bytes, convert_path, encode_events, Conver
 |-------|--------|----------|
 | I32 ticks | v5 | `TIME_LINE` / `TIME_BLOCK` ticks outside `i32` → error |
 | U32 fields | v5 | fields above `u32::MAX` → error |
-| Finite NV | v5 | non-finite `SUB_RETURN` / `SUB_CALLERS` / `PID_*` times → error |
+| Finite + exact NV | v5 | non-finite → error; integer values must be **exactly** representable as f64 (mantissa; e.g. `2^53+1` refuses — no silent round) |
 | Exact integer ticks/times | v6 | fractional NV (e.g. oracle wall-clock `PID_START`) → error (no silent truncate) |
 | Unknown tags | both | error |
-| Non-zero extended `NEW_FID` | v6 | `eval_fid` / `eval_line` / `flags` / `size` / `mtime` ≠ 0 → error |
-| `TIME_BLOCK.sub_line` | v6 | **projected away** (absolute body has no field; same as dual-sink / `v6_ingest` pad-0) |
+| Non-zero extended `NEW_FID` | v6 | `eval_fid` / `eval_line` / `flags` / `size` / `mtime` ≠ 0 → **error** (no silent zero) |
+| Non-zero `TIME_BLOCK.sub_line` | v6 | **error** (absolute body has no field; no silent zeroing). Zero `sub_line` is representable. |
+| VERSION major | v5 projection | only majors **5** or **6** accepted; other majors refuse |
 
-**No `--allow-lossy`** in this MVP (explicit residual).
+**No `--allow-lossy`** in this MVP (explicit residual). Lossy absolute-body projection of non-zero `sub_line` / extended `NEW_FID` is **not** the default and is not available.
 
 ## Old-tool acceptance (v5 outputs)
 
@@ -93,7 +94,8 @@ Capability **exercises** dual-sink `m4_v5` → v6 → verify and `m4_v6` → v5 
 
 | Residual | Notes |
 |----------|--------|
-| Lossy / `--allow-lossy` | Not shipped; fractional wall PID times refuse v5→v6 |
+| Lossy / `--allow-lossy` | Not shipped; non-zero `sub_line` / extended `NEW_FID` / fractional wall PID / non-mantissa-exact NV all **refuse** (no silent path) |
+| Dual-sink `blocks_calls1` v5→v6 | Refuses until lossy mode or v6 body carries `sub_line` (v6→v5 still green) |
 | Packing / string-dict / multi-kind v6 output | Absolute EVENT only |
 | Merge / repack / salvage | PR-C02 |
 | Full oracle dual convert matrix | Integer-tick dual-sink + v5 identity; oracle v5→v6 residual on wall NV |
