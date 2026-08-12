@@ -41,6 +41,7 @@ Aligned with Rust provisional helpers (`payload_codec`, `crc`, `multi_chunk_comp
 2. Empty body → zero EVENT chunks.
 3. Else partition committed records by `max_records_per_chunk`.
 4. Each partition: compress (if needed) → CRC payload → frame with `sequence` 0..k-1, `logical_event_count` = partition size, `uncompressed_len` = plain length.
+5. **Atomic multi-chunk seal:** snapshot `wire_len` (prefix) at seal entry; on any mid-loop failure rewind wire to that mark, leave `sealed=0` / `event_chunk_count=0` so retry cannot append a second sequence stream.
 
 ### Codec notes
 
@@ -63,8 +64,10 @@ Matches [`v6-crc-provisional-v0.md`](https://github.com/hilather/nytprof-moderni
 |-------|----------|
 | Header + payload CRC sealed | `collector/t/test_v6_codec_chunk_crc.c` |
 | Multi-chunk NONE / ZLIB / ZSTD / LZ4 | same |
+| Uneven last window (`max=2`, 3 records) | same |
+| Atomic mid-seal rewind + retry (no duplicate chunks) | same (`test_fail_seal_after_chunks` + `test_try_seal`) |
 | Inflate roundtrip in C | same |
-| Rust always-inflate accepts C artifacts | `cargo run -p nytprof-format-v6 --example decode_abs_c_mini -- <path> --require-crc` |
+| Rust always-inflate accepts C artifacts | `cargo run -p nytprof-format-v6 --example decode_abs_c_mini -- <path> --require-crc` (header + payload CRC) |
 | Default create still codec NONE | `test_v6_abs_wire` green |
 | Smoke | `scripts/packaging/collector_sink_smoke.sh` builds/runs both v6 suites |
 

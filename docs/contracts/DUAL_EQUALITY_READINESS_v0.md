@@ -70,7 +70,7 @@ Plan COL-007 lists dependencies **FMT-002 through FMT-010**. This program **inte
 |---------|----------------------------|
 | First-slice / offline R0 + R1-preview | **Complete** for advertised surfaces; COL-007/008 deferred |
 | Full product R1 | **Not complete** — residual: FFI/XS Data, full nytprofhtml DOM, multi-OS CI, perf cert, R3 engine default |
-| R2 v6 collection opt-in | **Runway** — ADR-0001/0002 **accepted**; provisional ID lockfile shipped; absolute C MVP scaffold only (PR-B06); product COL-007 / E3-C open (PR-B09) |
+| R2 v6 collection opt-in | **Runway** — ADR-0001/0002 **accepted**; provisional ID lockfile shipped; ABS+CODEC scaffold (PR-B06/B07); packing/dict B08; product COL-007 / E3-C open (PR-B09) |
 | R3–R5 defaults / retirement | **Not started** |
 
 ## Non-claims

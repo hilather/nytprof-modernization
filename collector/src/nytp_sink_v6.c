@@ -49,6 +49,8 @@ typedef struct v6_impl {
     int sealed;
     int file_written;
     int header_ok;
+    /* Test hook: fail seal after successfully framing this many chunks (0=off). */
+    uint32_t test_fail_seal_after_chunks;
 } v6_impl;
 
 /* ---- buffer helpers ---- */
@@ -604,20 +606,38 @@ static nytp_status encode_chunk_frame(v6_impl *vi, uint8_t kind, uint8_t codec,
     return NYTP_OK;
 }
 
+/*
+ * Abort an in-progress seal: restore wire to pre-seal prefix length so no
+ * partial EVENT frames remain. Leaves sealed=0 and event_chunk_count=0 so a
+ * later successful seal cannot append duplicate sequences mid-stream.
+ */
+static nytp_status seal_abort(v6_impl *vi, size_t wire_mark, nytp_status st)
+{
+    if (vi->wire_len > wire_mark) {
+        vi->wire_len = wire_mark;
+    }
+    vi->event_chunk_count = 0;
+    /* sealed remains 0 */
+    return st;
+}
+
 static nytp_status seal_event_chunk(v6_impl *vi, const nytp_sink *sink)
 {
     nytp_status st;
     uint32_t nrec;
     size_t start;
     uint64_t seq;
+    size_t wire_mark;
     if (vi->sealed) {
         return NYTP_OK;
     }
     /*
-     * Sticky FAILED (OVERFLOW/IO after emit): do **not** seal a product
-     * profile. Emit paths checkpoint/rollback so open body has no
-     * truncated record; discard remaining complete-but-failed-stream body
-     * so close cannot report OK with a sealed EVENT after sticky fail.
+     * Sticky FAILED (OVERFLOW/IO after emit, or failed seal that left
+     * lifecycle FAILED): do **not** seal a product profile. Emit paths
+     * checkpoint/rollback so open body has no truncated record; discard
+     * remaining body so close cannot report OK with a sealed EVENT after
+     * sticky fail. Wire is already prefix-only if a prior seal aborted, or
+     * was never extended beyond prefix.
      * Lifecycle close-from-FAILED still returns OK (prefix-only wire).
      */
     if (sink && sink->state == NYTP_SINK_FAILED) {
@@ -646,6 +666,8 @@ static nytp_status seal_event_chunk(v6_impl *vi, const nytp_sink *sink)
         return NYTP_OK;
     }
 
+    /* Atomic multi-chunk seal: any failure rewinds wire to this mark. */
+    wire_mark = vi->wire_len;
     start = 0;
     seq = 0;
     while (start < (size_t)nrec) {
@@ -666,24 +688,24 @@ static nytp_status seal_event_chunk(v6_impl *vi, const nytp_sink *sink)
                                                    : vi->max_records_per_chunk;
         }
         if (count == 0 || count > (size_t)UINT32_MAX) {
-            return NYTP_ERR_OVERFLOW;
+            return seal_abort(vi, wire_mark, NYTP_ERR_OVERFLOW);
         }
         off0 = vi->rec_off[start];
         off1 = (start + count < (size_t)nrec) ? vi->rec_off[start + count]
                                               : vi->body_len;
         if (off1 < off0 || off1 > vi->body_len) {
-            return NYTP_ERR_IO;
+            return seal_abort(vi, wire_mark, NYTP_ERR_IO);
         }
         plain = vi->body + off0;
         plain_len = off1 - off0;
         if (plain_len > NYTPROF_V6_MAX_CHUNK_PAYLOAD) {
-            return NYTP_ERR_OVERFLOW;
+            return seal_abort(vi, wire_mark, NYTP_ERR_OVERFLOW);
         }
         st = compress_payload(vi->event_codec, plain, plain_len, &payload,
                               &payload_len);
         if (st != NYTP_OK) {
             free(payload);
-            return st;
+            return seal_abort(vi, wire_mark, st);
         }
         checksum = v6_crc32_ieee(payload, payload_len);
         st = encode_chunk_frame(vi, (uint8_t)NYTPROF_V6_KIND_EVENT,
@@ -693,12 +715,17 @@ static nytp_status seal_event_chunk(v6_impl *vi, const nytp_sink *sink)
                                 checksum);
         free(payload);
         if (st != NYTP_OK) {
-            return st;
+            return seal_abort(vi, wire_mark, st);
         }
         seq++;
         start += count;
         if (seq > (uint64_t)UINT32_MAX) {
-            return NYTP_ERR_OVERFLOW;
+            return seal_abort(vi, wire_mark, NYTP_ERR_OVERFLOW);
+        }
+        /* Test hook: inject mid-seal failure after N successfully framed chunks. */
+        if (vi->test_fail_seal_after_chunks > 0 &&
+            (uint32_t)seq == vi->test_fail_seal_after_chunks) {
+            return seal_abort(vi, wire_mark, NYTP_ERR_IO);
         }
     }
     vi->event_chunk_count = (uint32_t)seq;
@@ -1631,6 +1658,32 @@ nytp_status nytp_v6_sink_test_force_body_len(nytp_sink *sink, size_t len)
     }
     vi->body_len = len;
     return NYTP_OK;
+}
+
+/*
+ * Test hook: after successfully framing N EVENT chunks during seal, abort and
+ * rewind wire to pre-seal prefix (simulates mid-multi-chunk OOM/IO). 0 disables.
+ * No-op if not a v6 sink.
+ */
+void nytp_v6_sink_test_fail_seal_after_chunks(nytp_sink *sink, uint32_t n)
+{
+    v6_impl *vi;
+    if (!nytp_v6_sink_is_v6(sink) || !sink->impl) {
+        return;
+    }
+    vi = (v6_impl *)sink->impl;
+    if (vi->sealed) {
+        return;
+    }
+    vi->test_fail_seal_after_chunks = n;
+}
+
+nytp_status nytp_v6_sink_test_try_seal(nytp_sink *sink)
+{
+    if (!nytp_v6_sink_is_v6(sink) || !sink->impl) {
+        return NYTP_ERR_NULL;
+    }
+    return seal_event_chunk((v6_impl *)sink->impl, sink);
 }
 
 

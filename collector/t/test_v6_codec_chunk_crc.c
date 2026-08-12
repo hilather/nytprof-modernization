@@ -412,11 +412,102 @@ static void test_multi_chunk_zlib(void)
                          "build/v6_zlib_multi.nytprof", 1);
 }
 
+/* Uneven last window: 3 records, max=2 → chunks logical 2 + 1. */
+static void test_multi_chunk_uneven_partition(void)
+{
+    nytp_sink *s =
+        nytp_v6_sink_create_codec(NULL, (uint8_t)NYTPROF_V6_CODEC_NONE, 2);
+    const uint8_t *wire;
+    size_t wlen = 0, pos = 0;
+    chunk_view ch0, ch1;
+    uint8_t *plain = NULL;
+    size_t plain_len = 0;
+
+    EXPECT(s != NULL, "create max=2");
+    emit_three_lines(s);
+    EXPECT(nytp_sink_close(s) == NYTP_OK, "close uneven");
+    EXPECT(nytp_v6_sink_event_chunk_count(s) == 2, "2 chunks");
+    wire = nytp_v6_sink_wire(s, &wlen);
+    EXPECT(wire && skip_prefix(wire, wlen, &pos, NULL), "prefix");
+    EXPECT(parse_chunk_at(wire, wlen, &pos, &ch0), "chunk0");
+    EXPECT(ch0.sequence == 0 && ch0.logical_count == 2, "first window 2");
+    EXPECT(ch0.checksum == ref_crc32(ch0.payload, ch0.compressed_len), "crc0");
+    EXPECT(inflate_payload(&ch0, &plain, &plain_len) && plain_len > 0, "inf0");
+    free(plain);
+    plain = NULL;
+    EXPECT(parse_chunk_at(wire, wlen, &pos, &ch1), "chunk1");
+    EXPECT(ch1.sequence == 1 && ch1.logical_count == 1, "last window 1");
+    EXPECT(ch1.checksum == ref_crc32(ch1.payload, ch1.compressed_len), "crc1");
+    EXPECT(inflate_payload(&ch1, &plain, &plain_len) && plain_len > 0, "inf1");
+    free(plain);
+    EXPECT(pos == wlen, "consume all uneven");
+    nytp_sink_destroy(s);
+}
+
+/*
+ * Mid multi-chunk seal failure must rewind wire to prefix (no partial EVENT
+ * frames). A successful retry must seal exactly once (no duplicated records).
+ */
+static void test_seal_atomic_rewind_and_retry(void)
+{
+    nytp_sink *s =
+        nytp_v6_sink_create_codec(NULL, (uint8_t)NYTPROF_V6_CODEC_NONE, 1);
+    const uint8_t *wire;
+    size_t wlen = 0, pos = 0, prefix_len = 0;
+    uint32_t nchunks = 0;
+    uint32_t total_logical = 0;
+    size_t wire_after_fail = 0;
+
+    EXPECT(s != NULL, "create");
+    emit_three_lines(s);
+    /* Capture prefix length before any seal attempt (wire is prefix-only). */
+    wire = nytp_v6_sink_wire(s, &wlen);
+    EXPECT(wire && skip_prefix(wire, wlen, &pos, NULL), "prefix pre-seal");
+    EXPECT(pos == wlen, "no chunks yet");
+    prefix_len = wlen;
+
+    /* Fail after first EVENT frame is written — must not leave it on wire. */
+    nytp_v6_sink_test_fail_seal_after_chunks(s, 1);
+    EXPECT(nytp_v6_sink_test_try_seal(s) == NYTP_ERR_IO, "injected seal fail");
+    EXPECT(!nytp_v6_sink_is_sealed(s), "not sealed after fail");
+    EXPECT(nytp_v6_sink_event_chunk_count(s) == 0, "chunk count 0 after fail");
+    wire = nytp_v6_sink_wire(s, &wire_after_fail);
+    EXPECT(wire && wire_after_fail == prefix_len,
+           "wire rewound to prefix after mid-seal fail");
+    pos = 0;
+    EXPECT(skip_prefix(wire, wire_after_fail, &pos, NULL) && pos == wire_after_fail,
+           "prefix-only after fail");
+
+    /* Clear hook and seal successfully — exactly 3 chunks, no duplicates. */
+    nytp_v6_sink_test_fail_seal_after_chunks(s, 0);
+    EXPECT(nytp_v6_sink_test_try_seal(s) == NYTP_OK, "retry seal ok");
+    EXPECT(nytp_v6_sink_is_sealed(s), "sealed after retry");
+    EXPECT(nytp_v6_sink_event_chunk_count(s) == 3, "3 chunks after retry");
+    wire = nytp_v6_sink_wire(s, &wlen);
+    pos = 0;
+    EXPECT(wire && skip_prefix(wire, wlen, &pos, NULL), "prefix after retry");
+    while (pos < wlen) {
+        chunk_view ch;
+        EXPECT(parse_chunk_at(wire, wlen, &pos, &ch), "parse after retry");
+        EXPECT(ch.sequence == nchunks, "seq no dup restart mid-stream");
+        EXPECT(ch.logical_count == 1, "one rec per chunk");
+        total_logical += ch.logical_count;
+        nchunks++;
+    }
+    EXPECT(nchunks == 3 && total_logical == 3, "no duplicated records");
+    /* Second seal is idempotent (already sealed). */
+    EXPECT(nytp_v6_sink_test_try_seal(s) == NYTP_OK, "idempotent seal");
+    EXPECT(nytp_v6_sink_event_chunk_count(s) == 3, "still 3 chunks");
+    nytp_sink_destroy(s);
+}
+
 int main(void)
 {
     test_header_crc_sealed();
     test_default_none_payload_crc();
     test_multi_chunk_none();
+    test_multi_chunk_uneven_partition();
+    test_seal_atomic_rewind_and_retry();
     test_codec_roundtrip((uint8_t)NYTPROF_V6_CODEC_NONE, NULL, 0);
     test_codec_roundtrip((uint8_t)NYTPROF_V6_CODEC_ZLIB,
                          "build/v6_zlib_one.nytprof", 0);

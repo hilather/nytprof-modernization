@@ -174,7 +174,8 @@ ok "absolute v6 mini artifact present with NYTPROF6 magic ($WIRE6)"
 
 
 # Codec / multi-chunk artifacts from test_v6_codec_chunk_crc
-for art in v6_zlib_one.nytprof v6_zstd_one.nytprof v6_lz4_one.nytprof v6_zlib_multi.nytprof; do
+for art in v6_zlib_one.nytprof v6_zstd_one.nytprof v6_lz4_one.nytprof \
+           v6_zlib_multi.nytprof v6_zstd_multi.nytprof v6_lz4_multi.nytprof; do
   ART="$COLLECTOR/build/$art"
   [[ -f "$ART" ]] || fail "expected codec artifact $ART after test_v6_codec_chunk_crc"
   printf 'NYTPROF6' | cmp -n 8 - "$ART" >/dev/null 2>&1 \
@@ -185,7 +186,9 @@ ok "v6 codec/multi-chunk artifacts present with NYTPROF6 magic"
 # Optional: Rust always-inflate decode on C absolute + compressed artifacts.
 if command -v cargo >/dev/null 2>&1; then
   banner "Rust v6 always-inflate decode (COL-007 dual-path check)"
-  for art in m4_mini_v6.nytprof v6_zlib_one.nytprof v6_zstd_one.nytprof v6_lz4_one.nytprof v6_zlib_multi.nytprof; do
+  for art in m4_mini_v6.nytprof \
+             v6_zlib_one.nytprof v6_zstd_one.nytprof v6_lz4_one.nytprof \
+             v6_zlib_multi.nytprof v6_zstd_multi.nytprof v6_lz4_multi.nytprof; do
     ART="$COLLECTOR/build/$art"
     if (cd "$ROOT" && cargo run -q -p nytprof-format-v6 --example decode_abs_c_mini -- "$ART" --require-crc); then
       ok "Rust decode accepted C artifact $art"

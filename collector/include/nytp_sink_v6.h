@@ -136,6 +136,18 @@ const uint8_t *nytp_v6_sink_event_body(const nytp_sink *sink, size_t *out_len);
  */
 nytp_status nytp_v6_sink_test_force_body_len(nytp_sink *sink, size_t len);
 
+/*
+ * Test hook: fail seal after successfully framing N EVENT chunks, rewinding
+ * wire to the pre-seal prefix (atomic multi-chunk seal regression). 0 disables.
+ */
+void nytp_v6_sink_test_fail_seal_after_chunks(nytp_sink *sink, uint32_t n);
+
+/*
+ * Test hook: run EVENT seal without lifecycle close transition.
+ * Used to exercise mid-seal abort + successful retry (public close sticky-fails).
+ */
+nytp_status nytp_v6_sink_test_try_seal(nytp_sink *sink);
+
 #ifdef __cplusplus
 }
 #endif

@@ -2,6 +2,7 @@
 //!
 //! - codec NONE single-chunk: `decode_mini_profile` + always-inflate path
 //! - ZLIB/ZSTD/LZ4 and multi-chunk: `decode_decoded_event_profile` (always-inflate)
+//! - `--require-crc`: payload CRC verify (always-inflate) **and** header CRC
 //!
 //! Not a product CLI surface.
 use std::env;
@@ -10,8 +11,10 @@ use std::process;
 
 use nytprof_format_v6::chunk::codec;
 use nytprof_format_v6::compressed_profile::OwnedEventRecord;
+use nytprof_format_v6::crc::verify_header_crc;
 use nytprof_format_v6::decoded_event::decode_decoded_event_profile;
 use nytprof_format_v6::mini_profile::decode_mini_profile;
+use nytprof_format_v6::HEADER_LEN_FULL;
 
 fn main() {
     let path = match env::args().nth(1) {
@@ -30,7 +33,19 @@ fn main() {
         }
     };
 
+    if verify_crc {
+        if bytes.len() < HEADER_LEN_FULL as usize {
+            eprintln!("truncated for header CRC verify");
+            process::exit(1);
+        }
+        if let Err(e) = verify_header_crc(&bytes[..HEADER_LEN_FULL as usize]) {
+            eprintln!("verify_header_crc: {e}");
+            process::exit(1);
+        }
+    }
+
     // Always-inflate consumer (handles NONE/ZLIB/ZSTD/LZ4 + multi-chunk).
+    // verify_crc here is **payload** CRC per chunk (decode_chunk_frame_plain).
     let (prof, n) = match decode_decoded_event_profile(&bytes, verify_crc) {
         Ok(v) => v,
         Err(e) => {
@@ -79,7 +94,7 @@ fn main() {
     }
 
     println!(
-        "OK: v6 decode path={path} bytes={} records={} time_line={tl} codec={} chunks={} crc_verify={verify_crc}",
+        "OK: v6 decode path={path} bytes={} records={} time_line={tl} codec={} chunks={} crc_verify={verify_crc} (header+payload)",
         bytes.len(),
         prof.records.len(),
         prof.event_codec,

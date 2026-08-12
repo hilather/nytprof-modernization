@@ -18,7 +18,9 @@ Implement a **C absolute v6 writer** behind the semantic sink API:
 - Single **codec NONE** EVENT chunk sealed on `close`
 - Fail-closed length / string / tick / NV projections
 
-This is the **absolute-first** COL-007 stage. Packing (ADR-0001), FOOTER dict (ADR-0002), multi-chunk, and payload codecs are **later PRs**.
+This is the **absolute-first** COL-007 stage (EVENT bodies + file-prefix).  
+**Codecs / multi-chunk / CRC** landed in PR-B07 — see [`collector-v6-codecs-multi-chunk-crc-mvp-v0.md`](https://github.com/hilather/nytprof-modernization/blob/main/docs/schemas/collector-v6-codecs-multi-chunk-crc-mvp-v0.md).  
+Packing (ADR-0001) and FOOTER dict (ADR-0002) remain **later** (PR-B08).
 
 ## Surface (v0)
 
