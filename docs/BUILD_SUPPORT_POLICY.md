@@ -182,6 +182,9 @@ make offline-gate
 | 7 | `./scripts/packaging/native_agg_json_smoke.sh` | **Optional when native:** NATIVE-AGG-JSON structured aggregates JSON (**15/3/15**) |
 | 8 | `./scripts/packaging/native_query_json_cross_smoke.sh` | **Optional when native:** NATIVE-QUERY-JSON-CROSS — native `report --json` vs Perl `query --json` shared fields (**15/3/15** + discount **818**); pure-Perl query alone is step 6 |
 | 9 | `./scripts/packaging/capability_selftest_smoke.sh` | **CI-CAPABILITY-GATE:** run when cargo **or** `prefix`/`target` native CLI (or `$NYTPROF_NATIVE_CLI`) present; **honest skip** otherwise (same condition as `packaging_gate`) |
+| 10 | `./scripts/packaging/collector_sink_smoke.sh` | **COL-001..007 + COL-014 dual (test/dev-only OQ-4)** — isolation always; `make -C collector test` when CC; honest skip without C |
+| 11 | `./tools/oracle/e3_c_writer_parity.sh` | **COL-007 product E3-EVENT** when cargo: C fixtures `fixtures/v6/from-c/**` + `e3_c_*`; E3-mixed residual; honest skip without cargo (fixture presence still checked) |
+| 12 | `./scripts/packaging/e4_v5_v6_semantic_smoke.sh --full` | **E4 product CLI** when native: real CLIs on dual-sink v5+v6 pairs; honest skip otherwise; dual-sink fixture presence still required; full oracle dual residual (TEST-008) |
 
 Rules:
 
@@ -195,6 +198,7 @@ Rules:
 - **JSON-SUB-ENTRY-MVP / JSON-BLOCKS-MVP:** steps 6b–6c required pure-Perl (golden `--jsonl`); native half optional when CLI present.
 - **Native aggregates / cross (NATIVE-AGG-JSON / NATIVE-QUERY-JSON-CROSS):** steps 7–8 when native CLI available; cross asserts shared fields equal between `report --json` and `query --json`.
 - **Capability (CI-CAPABILITY-GATE):** step 9 wires `capability_selftest_smoke.sh` into the offline gate with packaging_gate’s native-available condition (fail-fast when native can be exercised).
+- **Collector / E3-C / E4 product:** step 10 collector scaffold (honest CC skip); step 11 E3-C product when cargo; step 12 E4 product CLI smoke when native (dual-sink scaled pairs; full oracle dual residual).
 
 ### Dual-path entry (BUILD policy packaging half)
 

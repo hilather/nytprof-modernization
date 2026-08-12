@@ -60,6 +60,7 @@ Policy: [BUILD_SUPPORT_POLICY.md](https://github.com/hilather/nytprof-modernizat
 | 9 | `./scripts/packaging/capability_selftest_smoke.sh` | Run when cargo **or** `prefix`/`target` native CLI (or `$NYTPROF_NATIVE_CLI`); **honest skip** otherwise (**CI-CAPABILITY-GATE**) |
 | 10 | `./scripts/packaging/collector_sink_smoke.sh` | **COL-001..007 + COL-014 dual (test/dev-only OQ-4)** — isolation always; `make -C collector test` when CC; honest skip without C. |
 | 11 | `./tools/oracle/e3_c_writer_parity.sh` | **COL-007 product E3-EVENT** (when cargo): C fixtures `fixtures/v6/from-c/**` + `e3_c_*`; E3-mixed residual; honest skip without cargo (fixture presence still checked). |
+| 12 | `./scripts/packaging/e4_v5_v6_semantic_smoke.sh --full` | When native CLI available (**E4 product CLI** on dual-sink pairs); honest skip otherwise; dual-sink fixture presence still required; full oracle dual residual (TEST-008) |
 
 Not part of this gate (document only): broader `./scripts/packaging/packaging_gate.sh`, `./scripts/packaging/makemaker_dual_path_smoke.sh`. Not multi-OS CI (**BUILD-006**).
 
@@ -649,7 +650,7 @@ Also on blocks-calls1 when asserted: leaf returns **15**, mid returns **3** (sam
 | `ADR-0002-V6-STRING-POOL-CANDIDATE` | **done** (proposed) | FOOTER string-pool ADR candidate. Not global pool; not COL-007. **Before full COL-007.** |
 | `E3-DUAL-EQUALITY-HARNESS-MVP` | **done** | E3 harness writer-bytes→decode equality (stand-in absolute/packing/string-dict/mid-stream). Stand-in **not** product dual-equality evidence. Not COL-007 C writer. **Before full COL-007.** |
 | `E4-V5-V6-SEMANTIC-EQUALITY-POLICY-PROVISIONAL` | **done** | E4 v5↔v6 semantic equality policy draft. E4-v0 model enforcement ready (PR-B10). |
-| `E4-V5-V6-SEMANTIC-EQUALITY-POLICY-MVP` | **done** | E4 policy honesty sync. E4-v0 model ready; full oracle + product CLI residual. |
+| `E4-V5-V6-SEMANTIC-EQUALITY-POLICY-MVP` | **done** | E4 policy honesty sync. E4-v0 model + E4 product CLI ready (PR-B12b / **E4-PRODUCT-CLI-SMOKE-MVP**); full oracle dual residual (TEST-008). |
 | `COL-007` | deferred | C v6 writer — unblocked for *start* after report-side evidence; not implemented by this runbook |
 
 ## Revision rule
