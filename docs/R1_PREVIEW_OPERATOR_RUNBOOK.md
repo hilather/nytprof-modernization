@@ -60,6 +60,7 @@ Policy: [BUILD_SUPPORT_POLICY.md](https://github.com/hilather/nytprof-modernizat
 | 9 | `./scripts/packaging/capability_selftest_smoke.sh` | Run when cargo **or** `prefix`/`target` native CLI (or `$NYTPROF_NATIVE_CLI`); **honest skip** otherwise (**CI-CAPABILITY-GATE**) |
 | 10 | `./scripts/packaging/collector_sink_smoke.sh` | **COL-001..007 + COL-014 dual (test/dev-only OQ-4)** — isolation always; `make -C collector test` when CC; honest skip without C. |
 | 11 | `./tools/oracle/e3_c_writer_parity.sh` | **COL-007 product E3-EVENT** (when cargo): C fixtures `fixtures/v6/from-c/**` + `e3_c_*`; E3-mixed residual; honest skip without cargo (fixture presence still checked). |
+| 12 | `./tools/oracle/selftest_security_fuzz.sh` | **SEC-FUZZ-HARDENING-MVP** (when cargo): v5+v6 decode-fuzz batteries + optional collector batch/fork unit suite; honest skip without cargo. **Not** full SEC-002 continuous fuzz; COL-015 residual. |
 
 Not part of this gate (document only): broader `./scripts/packaging/packaging_gate.sh`, `./scripts/packaging/makemaker_dual_path_smoke.sh`. Not multi-OS CI (**BUILD-006**).
 
@@ -336,6 +337,8 @@ Do **not** claim these under offline R0 / R1-preview (full-R1 residuals; `R1-HON
 | **No full MakeMaker XS CPAN dual-build** | Candidate `Makefile.PL` facade only (**BUILD-MAKEMAKER-OPT**), not BUILD-003 full. |
 | **No multi-OS CI matrix** | Single-host `offline_gate.sh` only (**BUILD-006** open). |
 | **No product default flip** | Native remains opt-in; Perl `engine=auto` is facade behavior, not charter R3 product default. |
+| **No full continuous fuzz / SEC-012** | Offline package **SEC-FUZZ-HARDENING-MVP** (PR-C03) covers deterministic v5+v6 batteries + batch/fork threat catalogue — **not** SEC-002 continuous fuzz jobs, sanitizer matrices, or independent SEC-012 release sign-off. Contract: [`SECURITY_FUZZ_HARDENING_PACKAGE_v0.md`](https://github.com/hilather/nytprof-modernization/blob/main/docs/contracts/SECURITY_FUZZ_HARDENING_PACKAGE_v0.md). |
+| **No full COL-015 fork suite** | Lifecycle fork-state MVP + batch notify only; shared-FD / compressor inheritance stress residual (PR-C02b). |
 
 Advertised preview **does** include native aggregates JSON (incl. **SUB_ENTRY**, stream/PID, A2 `time_block_events` **0**/**916**, A9/A8 samples, ATTRIBUTE/OPTION/file samples, and blocks A4/A4b greppable ints), pure-Perl query JSON, **JSON report incomplete fail-closed** (COMPAT-010), **native↔query JSON cross-parity** with **CROSS-EXPAND** / **CROSS-BLOCKS** / **CROSS-META** / **CROSS-TIMEBLOCK** (`sub_entry` on default-calls1 **0** + calls2 **27** + blocks **780**/**810** + `time_block_events` **0**/**916** + stream/PID + A9/A8 + greppable meta when native CLI present), and pure-Perl **SUB_ENTRY** event multiplicity — without promoting those to full R1 / CPAN / FFI readiness.
 
