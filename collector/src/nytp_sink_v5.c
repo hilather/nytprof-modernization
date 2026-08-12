@@ -10,11 +10,8 @@
 
 typedef struct v5_impl {
     nytp_counting_stats stats;
-    char *path; /* owned copy; may be NULL */
-    int magic;
+    char *path; /* sink-owned copy; may be NULL */
 } v5_impl;
-
-#define V5_MAGIC 0x4e595456 /* 'NYTV' */
 
 static void note_kind(v5_impl *vi, nytp_event_kind kind)
 {
@@ -309,7 +306,6 @@ nytp_sink *nytp_v5_sink_create(const char *path)
         free(vi);
         return NULL;
     }
-    vi->magic = V5_MAGIC;
     if (path) {
         size_t n = strlen(path);
         vi->path = (char *)malloc(n + 1);
@@ -328,18 +324,14 @@ nytp_sink *nytp_v5_sink_create(const char *path)
 
 int nytp_v5_sink_is_v5(const nytp_sink *sink)
 {
-    v5_impl *vi;
-    if (!sink || !sink->impl) {
-        return 0;
-    }
-    vi = (v5_impl *)sink->impl;
-    return vi->magic == V5_MAGIC;
+    /* Ops-pointer identity: safe for any sink backend (no impl cast / OOB). */
+    return sink != NULL && sink->ops == &v5_ops;
 }
 
 const nytp_counting_stats *nytp_v5_sink_stats(const nytp_sink *sink)
 {
     v5_impl *vi;
-    if (!nytp_v5_sink_is_v5(sink)) {
+    if (!nytp_v5_sink_is_v5(sink) || !sink->impl) {
         return NULL;
     }
     vi = (v5_impl *)sink->impl;
@@ -349,7 +341,7 @@ const nytp_counting_stats *nytp_v5_sink_stats(const nytp_sink *sink)
 const char *nytp_v5_sink_path(const nytp_sink *sink)
 {
     v5_impl *vi;
-    if (!nytp_v5_sink_is_v5(sink)) {
+    if (!nytp_v5_sink_is_v5(sink) || !sink->impl) {
         return NULL;
     }
     vi = (v5_impl *)sink->impl;

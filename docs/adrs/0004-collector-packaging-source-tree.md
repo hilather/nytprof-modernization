@@ -108,15 +108,20 @@ Stand-in / Rust preflight encoders may continue to produce **non-product** vecto
 
 ### 5. Offline gate / CI neutrality proof
 
-**Today (pre-sink):** `./scripts/ci/offline_gate.sh` remains the offline R1 fail-fast gate (cargo tests optional; oracle harness + dual-path packaging + expand steps required). It must stay **neutral** to the future collector overlay: absence of `collector/` sources must not fail the gate.
+**Pre-sink:** `./scripts/ci/offline_gate.sh` remained the offline R1 fail-fast gate (cargo tests optional; oracle harness + dual-path packaging + expand steps required). It stayed **neutral** to a missing `collector/` tree: absence of overlay sources must not fail the gate.
 
-**When COL-001+ lands**, sink PRs **MUST** extend CI so that, when a C toolchain is available to build the overlay:
+**COL-001 scaffold (PR-B02) — merge bar (landed):**
 
-1. **v5-via-sink neutrality** — profiles (or canonical dumps) from the overlay v5 sink match oracle expectations on the agreed sample corpus (stream order/multiplicity; fake-clock gate lands with COL-002/003 work);
-2. **Isolation asserts** — no oracle `PERL5LIB` entry under `crates/`, `perl/`, or overlay install paths;
-3. **Honest skip** — if no C toolchain / overlay not built, collector neutrality steps skip with a clear banner (same honesty pattern as cargo-absent native steps); legacy half of dual-path and pure-Perl steps still run.
+| Requirement | Status |
+|-------------|--------|
+| Isolation asserts — no oracle `PERL5LIB` entry under `crates/`, `perl/`, or overlay `collector/` / install paths | **Required** — `scripts/packaging/collector_sink_smoke.sh` (offline_gate step 10) |
+| Honest skip when no C toolchain / overlay not built | **Required** — same smoke; legacy dual-path half independent |
+| Compile + unit-test sink scaffold when CC present | **Required for scaffold** — `make -C collector test` |
+| **v5-via-sink stream neutrality** (oracle-aligned profiles/dumps on corpus; stream order/multiplicity) | **Deferred** to **COL-006** (real v5 writer behind the sink API) with lifecycle/seq support from **COL-002** / **COL-003**; fake-clock corpus gates land with **TEST-003** / PR-B03 |
 
-Wiring may live in `offline_gate.sh` and/or packaging smokes; exact script names are implementation detail of sink PRs, but **proof of neutrality is merge-blocking for COL-001** (PR-B02+).
+**Rationale:** COL-001 introduces the semantic sink boundary and B0-A tree; the stub v5 adapter counts events only and does **not** encode wire bytes. Requiring oracle stream equality before COL-006 would force a false product claim. Full “proof of neutrality” for production collection remains merge-blocking for **COL-006** (and dual when applicable), not the interface-only scaffold.
+
+Wiring: `offline_gate.sh` step 10 + `collector_sink_smoke.sh` (implementation detail may evolve).
 
 ### 6. Dual-path packaging (legacy without C writer)
 
@@ -166,7 +171,7 @@ This packaging decision is **ADR-0004** so it does not collide with packing ADRs
 | Separate candidate install prefix; never `baseline/6.15/install` | All collector build scripts |
 | Preserve `scripts/baseline/*` Cargo-free and archive-immutable | BUILD / BASE-001 |
 | Fixture harness → `fixtures/v6/from-c/**` without pin mutation | COL-007 / dual-equality when C bytes exist |
-| offline_gate: remain green without `collector/`; add honest skip / neutrality steps when sink builds | CI + COL-001 |
+| offline_gate: remain green without hard CC dep; COL-001 scaffold = isolation + honest skip + unit tests; oracle stream equality with COL-006 | CI + COL-001 scaffold / COL-006 |
 | Update BUILD policy cross-links (this change set) | PR-B00 |
 | Regression: legacy_only_smoke + offline_gate must pass on a host without overlay build | merge gate |
 

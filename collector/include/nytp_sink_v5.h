@@ -33,7 +33,10 @@ int nytp_v5_sink_is_v5(const nytp_sink *sink);
 /* Stats share the counting layout so tests can compare routing. */
 const nytp_counting_stats *nytp_v5_sink_stats(const nytp_sink *sink);
 
-/* Stored path pointer (may be NULL); not a copy of caller memory beyond create. */
+/*
+ * Returns sink-owned path copy (or NULL if create had no path).
+ * Valid until nytp_sink_destroy; do not free.
+ */
 const char *nytp_v5_sink_path(const nytp_sink *sink);
 
 #ifdef __cplusplus

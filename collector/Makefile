@@ -5,6 +5,7 @@
 #   make -C collector
 #   make -C collector test
 #   make -C collector clean
+#   make -C collector -j$(nproc) test   # parallel-safe via order-only | dirs
 #
 # Outputs stay under collector/build/ (gitignored). Never writes baseline/6.15/.
 
@@ -27,19 +28,20 @@ OBJ := $(patsubst src/%.c,$(BUILD)/%.o,$(SRC))
 
 .PHONY: all test clean dirs
 
-all: dirs $(LIB) $(TESTBIN)
+all: $(LIB) $(TESTBIN)
 
 dirs:
 	@mkdir -p $(BUILD)
 
+# Order-only | dirs so -j never races mkdir with cc -o build/*.o
 $(BUILD)/%.o: src/%.c include/nytp_sink.h include/nytp_types.h \
-		include/nytp_sink_counting.h include/nytp_sink_v5.h
+		include/nytp_sink_counting.h include/nytp_sink_v5.h | dirs
 	$(CC) $(CPPFLAGS) $(CFLAGS) -c -o $@ $<
 
-$(LIB): $(OBJ)
+$(LIB): $(OBJ) | dirs
 	$(AR) rcs $@ $^
 
-$(TESTBIN): t/test_sink_api.c $(LIB)
+$(TESTBIN): t/test_sink_api.c $(LIB) | dirs
 	$(CC) $(CPPFLAGS) $(CFLAGS) -o $@ t/test_sink_api.c $(LIB) $(LDFLAGS)
 
 test: all

@@ -46,7 +46,7 @@ assert_no_bad_perl5lib() {
   # Path-component asserts for collector/ (ADR-0004 §3 / COL-001).
   if [[ -n "$p5" ]]; then
     local IFS=':'
-    local part
+    local part base
     for part in $p5; do
       [[ -n "$part" ]] || continue
       case "$part" in
@@ -54,7 +54,11 @@ assert_no_bad_perl5lib() {
           fail "$label PERL5LIB must not contain collector overlay path: $part"
           ;;
       esac
-      # Also reject bare component named collector anywhere in the path.
+      # Bare relative entry (PERL5LIB=collector) and basename component.
+      base="$(basename -- "$part")"
+      if [[ "$part" == "collector" ]] || [[ "$base" == "collector" ]]; then
+        fail "$label PERL5LIB must not contain collector path component: $part"
+      fi
       if [[ "$part" == *"/collector/"* ]] || [[ "$part" == *"/collector" ]]; then
         fail "$label PERL5LIB contains collector path component: $part"
       fi

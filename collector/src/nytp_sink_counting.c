@@ -9,10 +9,7 @@
 
 typedef struct counting_impl {
     nytp_counting_stats stats;
-    int magic;
 } counting_impl;
-
-#define COUNTING_MAGIC 0x4e595443 /* 'NYTC' */
 
 static void note_kind(counting_impl *ci, nytp_event_kind kind)
 {
@@ -301,7 +298,6 @@ nytp_sink *nytp_counting_sink_create(void)
         free(ci);
         return NULL;
     }
-    ci->magic = COUNTING_MAGIC;
     sink->ops = &counting_ops;
     sink->state = NYTP_SINK_OPEN;
     sink->impl = ci;
@@ -311,12 +307,10 @@ nytp_sink *nytp_counting_sink_create(void)
 const nytp_counting_stats *nytp_counting_sink_stats(const nytp_sink *sink)
 {
     counting_impl *ci;
-    if (!sink || !sink->impl) {
+    /* Ops-pointer identity: safe when sink is v5 or any other backend. */
+    if (!sink || sink->ops != &counting_ops || !sink->impl) {
         return NULL;
     }
     ci = (counting_impl *)sink->impl;
-    if (ci->magic != COUNTING_MAGIC) {
-        return NULL;
-    }
     return &ci->stats;
 }

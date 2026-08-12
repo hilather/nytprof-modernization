@@ -51,6 +51,16 @@ static void test_counting_hot_path(void)
     EXPECT(nytp_emit_sub_return(s, 2, 1.0, 0.5, nytp_sv_cstr("main::leaf")) ==
                NYTP_OK,
            "sub_return");
+    /* Fingerprint immediately after sub_return (before later emits overwrite). */
+    st = nytp_counting_sink_stats(s);
+    EXPECT(st != NULL, "stats after sub_return");
+    if (st) {
+        EXPECT(st->last_kind == NYTP_EVT_SUB_RETURN, "sub_return kind");
+        EXPECT(st->last_depth == 2, "sub_return depth");
+        EXPECT(st->last_subname_len == 10, "sub_return subname len");
+        EXPECT(strcmp(st->last_subname, "main::leaf") == 0, "sub_return subname");
+    }
+
     EXPECT(nytp_emit_sub_entry(s, 1, 10) == NYTP_OK, "sub_entry");
     EXPECT(nytp_emit_pid_start(s, 100, 1, 0.0) == NYTP_OK, "pid_start");
     EXPECT(nytp_emit_pid_end(s, 100, 1.0) == NYTP_OK, "pid_end");
@@ -79,10 +89,6 @@ static void test_counting_hot_path(void)
         EXPECT(st->by_kind[NYTP_EVT_START_DEFLATE] == 1, "deflate count");
         EXPECT(st->total_emits == 11, "total emits");
         EXPECT(st->last_kind == NYTP_EVT_START_DEFLATE, "last kind");
-        /* Last sub_return fingerprint before later events overwrote name. */
-        EXPECT(st->last_depth == 2 || st->last_subname_len == 0 ||
-                   st->last_subname[0] != '\0',
-               "subname path exercised");
     }
 
     /* Field routing on time_block last-write. */
@@ -157,6 +163,39 @@ static void test_v5_stub_routing(void)
     nytp_sink_destroy(s);
 }
 
+/*
+ * Regression: type checks must use ops-pointer identity, never cast
+ * counting_impl as v5_impl (ASAN OOB when magic lived at different offsets).
+ */
+static void test_type_safe_backend_identity(void)
+{
+    nytp_sink *c = nytp_counting_sink_create();
+    nytp_sink *v = nytp_v5_sink_create("nytprof.out");
+    EXPECT(c != NULL, "counting create");
+    EXPECT(v != NULL, "v5 create");
+    if (!c || !v) {
+        if (c) {
+            nytp_sink_destroy(c);
+        }
+        if (v) {
+            nytp_sink_destroy(v);
+        }
+        return;
+    }
+
+    EXPECT(nytp_v5_sink_is_v5(v), "is_v5 accepts v5");
+    EXPECT(!nytp_v5_sink_is_v5(c), "is_v5 rejects counting (no OOB)");
+    EXPECT(!nytp_v5_sink_is_v5(NULL), "is_v5 rejects null");
+    EXPECT(nytp_v5_sink_stats(c) == NULL, "v5 stats rejects counting");
+    EXPECT(nytp_v5_sink_path(c) == NULL, "v5 path rejects counting");
+    EXPECT(nytp_v5_sink_stats(v) != NULL, "v5 stats accepts v5");
+    EXPECT(nytp_counting_sink_stats(c) != NULL, "counting stats accepts counting");
+    EXPECT(nytp_counting_sink_stats(v) == NULL, "counting stats rejects v5");
+
+    nytp_sink_destroy(c);
+    nytp_sink_destroy(v);
+}
+
 static void test_event_kind_names(void)
 {
     EXPECT(strcmp(nytp_event_kind_name(NYTP_EVT_TIME_LINE), "time_line") == 0,
@@ -186,6 +225,7 @@ int main(void)
     test_null_sink_guards();
     test_counting_hot_path();
     test_v5_stub_routing();
+    test_type_safe_backend_identity();
     test_event_kind_names();
     test_inactive_before_activate();
 
