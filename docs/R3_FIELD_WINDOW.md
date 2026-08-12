@@ -1,9 +1,9 @@
-# R3 field window — `engine=auto` evidence (no default flip)
+# R3 field window — `engine=auto` evidence (no runtime default flip)
 
-**Status:** instrumentation + report package only (**PR-D01**)  
+**Status:** instrumentation + report package (**PR-D01**); promotion policy [ADR-0005](https://github.com/hilather/nytprof-modernization/blob/main/docs/adrs/0005-r3-engine-auto-default-promotion.md) landed (**PR-D02**, flip **not** executed)  
 **Board ID:** `R3-FIELD-WINDOW-PACK`  
 **Charter level:** [R3](https://github.com/hilather/nytprof-modernization/blob/main/docs/PROGRAM_CHARTER.md) — *`engine=auto` prefers native reports* — **only after field window + ADR**  
-**Does not:** flip product defaults, ship PR-D02 default-change ADR, claim R3 complete, transmit telemetry, or change offline_gate defaults
+**Does not:** flip product **runtime** defaults, claim charter R3 complete, transmit telemetry, or change offline_gate defaults. **ADR-0005** is **policy only** (criteria + flip/rollback procedure); runtime omit→`auto` remains gated on an accepted field report — see [`docs/R3_DEFAULT_FLIP.md`](https://github.com/hilather/nytprof-modernization/blob/main/docs/R3_DEFAULT_FLIP.md).
 
 ---
 
@@ -13,13 +13,13 @@ Collect **local, operator-controlled** field evidence that native report paths a
 
 This package is the **field-window half** of Phase D:
 
-| Piece | Role | This PR |
-|-------|------|---------|
-| Evidence collector | Local pack under an output directory | **yes** — [`scripts/field/r3_field_window_collect.sh`](https://github.com/hilather/nytprof-modernization/blob/main/scripts/field/r3_field_window_collect.sh) |
-| Smoke | Fixture-backed check that the collector works | **yes** — [`scripts/field/r3_field_window_smoke.sh`](https://github.com/hilather/nytprof-modernization/blob/main/scripts/field/r3_field_window_smoke.sh) |
-| Report template | Human pack for multi-site review | **yes** — [`docs/templates/R3_FIELD_WINDOW_REPORT.md`](https://github.com/hilather/nytprof-modernization/blob/main/docs/templates/R3_FIELD_WINDOW_REPORT.md) |
-| Pack schema | Layout + machine-readable summary | **yes** — [`docs/schemas/r3-field-window-mvp-v0.md`](https://github.com/hilather/nytprof-modernization/blob/main/docs/schemas/r3-field-window-mvp-v0.md) |
-| Default-change ADR + flip procedure | PR-D02 / ADR-Q024 / [ADR-0005](https://github.com/hilather/nytprof-modernization/blob/main/docs/adrs/0005-r3-engine-auto-default-promotion.md) | **policy landed** — flip **not** executed; see [`docs/R3_DEFAULT_FLIP.md`](https://github.com/hilather/nytprof-modernization/blob/main/docs/R3_DEFAULT_FLIP.md) |
+| Piece | Role | Status |
+|-------|------|--------|
+| Evidence collector | Local pack under an output directory | **ready (PR-D01)** — [`scripts/field/r3_field_window_collect.sh`](https://github.com/hilather/nytprof-modernization/blob/main/scripts/field/r3_field_window_collect.sh) |
+| Smoke | Fixture-backed check that the collector works | **ready (PR-D01)** — [`scripts/field/r3_field_window_smoke.sh`](https://github.com/hilather/nytprof-modernization/blob/main/scripts/field/r3_field_window_smoke.sh) |
+| Report template | Human pack for multi-site review | **ready (PR-D01)** — [`docs/templates/R3_FIELD_WINDOW_REPORT.md`](https://github.com/hilather/nytprof-modernization/blob/main/docs/templates/R3_FIELD_WINDOW_REPORT.md) |
+| Pack schema | Layout + machine-readable summary | **ready (PR-D01)** — [`docs/schemas/r3-field-window-mvp-v0.md`](https://github.com/hilather/nytprof-modernization/blob/main/docs/schemas/r3-field-window-mvp-v0.md) |
+| Default-change ADR + flip procedure | PR-D02 / ADR-Q024 / [ADR-0005](https://github.com/hilather/nytprof-modernization/blob/main/docs/adrs/0005-r3-engine-auto-default-promotion.md) | **policy landed (PR-D02)** — flip **not** executed; see [`docs/R3_DEFAULT_FLIP.md`](https://github.com/hilather/nytprof-modernization/blob/main/docs/R3_DEFAULT_FLIP.md) |
 
 **Binding non-claims**
 
