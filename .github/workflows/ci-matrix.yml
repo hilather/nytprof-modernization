@@ -140,13 +140,11 @@ jobs:
         if: runner.os == 'macOS'
         run: |
           set -euo pipefail
-          # Homebrew is preinstalled; zstd/lz4 needed when collector links codecs.
+          # Homebrew is preinstalled; zstd/lz4/zlib for collector + oracle.
           brew list zstd >/dev/null 2>&1 || brew install zstd
           brew list lz4 >/dev/null 2>&1 || brew install lz4
-          # zlib: macOS SDK usually has zlib.h; brew zlib is a fallback when
-          # Makefile.PL cannot see the SDK include tree (oracle HAS_ZLIB).
           brew list zlib >/dev/null 2>&1 || brew install zlib
-          # Export SDK include so host-local oracle rebuild enables compression.
+          # Export SDK include so host-local oracle rebuild enables HAS_ZLIB.
           if command -v xcrun >/dev/null 2>&1; then
             SDKROOT="$(xcrun --show-sdk-path)"
             export SDKROOT
@@ -155,17 +153,29 @@ jobs:
               echo "macOS SDK zlib.h: $SDKROOT/usr/include/zlib.h"
             fi
           fi
-          BZ="$(brew --prefix zlib)"
-          if [[ -f "$BZ/include/zlib.h" ]]; then
-            export INCLUDE="${INCLUDE:+$INCLUDE:}$BZ/include"
-            export LIBRARY_PATH="${LIBRARY_PATH:+$LIBRARY_PATH:}$BZ/lib"
-            echo "brew zlib: $BZ"
-          fi
-          # Persist for subsequent steps (oracle rebuild in matrix_gate).
+          # Keg-only / non-default brew libs: pass -I/-L for collector_sink_smoke.
+          CPPFLAGS="${CPPFLAGS-}"
+          LDFLAGS="${LDFLAGS-}"
+          for pkg in zlib zstd lz4; do
+            pref="$(brew --prefix "$pkg")"
+            if [[ -d "$pref/include" ]]; then
+              CPPFLAGS="$CPPFLAGS -I$pref/include"
+              export INCLUDE="${INCLUDE:+$INCLUDE:}$pref/include"
+            fi
+            if [[ -d "$pref/lib" ]]; then
+              LDFLAGS="$LDFLAGS -L$pref/lib"
+              export LIBRARY_PATH="${LIBRARY_PATH:+$LIBRARY_PATH:}$pref/lib"
+            fi
+            echo "brew $pkg: $pref"
+          done
+          export CPPFLAGS LDFLAGS
+          # Persist for subsequent steps (oracle rebuild + collector smoke).
           {
             echo "SDKROOT=${SDKROOT:-}"
             echo "INCLUDE=${INCLUDE:-}"
             echo "LIBRARY_PATH=${LIBRARY_PATH:-}"
+            echo "CPPFLAGS=${CPPFLAGS:-}"
+            echo "LDFLAGS=${LDFLAGS:-}"
           } >> "$GITHUB_ENV"
           command -v clang
           command -v perl

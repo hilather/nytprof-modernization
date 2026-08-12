@@ -133,9 +133,40 @@ if ! CC_BIN="$(resolve_cc)"; then
 fi
 ok "C toolchain: $CC_BIN"
 
+# On macOS, brew zlib/zstd/lz4 are often keg-only or outside default -L paths.
+# Export -I/-L so the link probe and collector Makefile can find them.
+CODEC_CFLAGS=()
+CODEC_LDFLAGS=()
+if [[ "$(uname -s 2>/dev/null || true)" == "Darwin" ]] && command -v brew >/dev/null 2>&1; then
+  for pkg in zlib zstd lz4; do
+    pref="$(brew --prefix "$pkg" 2>/dev/null || true)"
+    if [[ -n "$pref" && -d "$pref/include" ]]; then
+      CODEC_CFLAGS+=("-I$pref/include")
+    fi
+    if [[ -n "$pref" && -d "$pref/lib" ]]; then
+      CODEC_LDFLAGS+=("-L$pref/lib")
+    fi
+  done
+  if [[ ${#CODEC_LDFLAGS[@]} -gt 0 ]]; then
+    ok "Darwin brew codec paths: ${CODEC_LDFLAGS[*]}"
+  fi
+fi
+# Also honor caller-provided LDFLAGS/CPPFLAGS (e.g. GHA GITHUB_ENV).
+EXTRA_CFLAGS=()
+EXTRA_LDFLAGS=()
+# shellcheck disable=SC2206
+[[ -n "${CPPFLAGS-}" ]] && EXTRA_CFLAGS+=($CPPFLAGS)
+# shellcheck disable=SC2206
+[[ -n "${CFLAGS-}" ]] && EXTRA_CFLAGS+=($CFLAGS)
+# shellcheck disable=SC2206
+[[ -n "${LDFLAGS-}" ]] && EXTRA_LDFLAGS+=($LDFLAGS)
+
 # zlib/zstd/lz4 required for COL-006 v5 + COL-007 v6 codecs
-if ! echo 'int main(void){return 0;}' | "$CC_BIN" -x c - -lz -lzstd -llz4 -o /tmp/nytp_zcheck_$$ 2>/dev/null; then
-  fail "zlib+zstd+lz4 (-lz -lzstd -llz4) required for COL-006/007 wire writers; install zlib/zstd/lz4 dev packages"
+if ! echo 'int main(void){return 0;}' | "$CC_BIN" -x c - \
+    "${EXTRA_CFLAGS[@]}" "${CODEC_CFLAGS[@]}" \
+    "${EXTRA_LDFLAGS[@]}" "${CODEC_LDFLAGS[@]}" \
+    -lz -lzstd -llz4 -o /tmp/nytp_zcheck_$$ 2>/dev/null; then
+  fail "zlib+zstd+lz4 (-lz -lzstd -llz4) required for COL-006/007 wire writers; install zlib/zstd/lz4 dev packages (macOS: brew install zlib zstd lz4)"
 fi
 rm -f /tmp/nytp_zcheck_$$
 ok "zlib/zstd/lz4 link available"
@@ -144,8 +175,11 @@ ok "zlib/zstd/lz4 link available"
 # Build + unit test (real entry: collector/Makefile)
 # ---------------------------------------------------------------------------
 banner "make -C collector clean test"
+# Pass discovered brew -I/-L into make so LDLIBS resolve on Darwin runners.
+export CPPFLAGS="${CPPFLAGS-} ${CODEC_CFLAGS[*]-}"
+export LDFLAGS="${LDFLAGS-} ${CODEC_LDFLAGS[*]-}"
 make -C "$COLLECTOR" clean
-make -C "$COLLECTOR" test CC="$CC_BIN"
+make -C "$COLLECTOR" test CC="$CC_BIN" CPPFLAGS="$CPPFLAGS" LDFLAGS="$LDFLAGS"
 
 [[ -x "$COLLECTOR/build/test_sink_api" ]] || fail "test binary missing after make test"
 [[ -x "$COLLECTOR/build/test_lifecycle_seq" ]] || fail "test_lifecycle_seq missing"
