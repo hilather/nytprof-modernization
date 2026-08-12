@@ -47,9 +47,10 @@
 #   9. scripts/packaging/capability_selftest_smoke.sh when cargo or prefix/target
 #      native CLI exists (honest skip when native unavailable; same pattern as
 #      packaging_gate). dual_path with cargo usually installs prefix/bin first.
-#  10. scripts/packaging/collector_sink_smoke.sh (COL-001..003 + fake-clock:
+#  10. scripts/packaging/collector_sink_smoke.sh (COL-001..006 + fake-clock:
 #      isolation asserts always; make -C collector test when CC present;
-#      honest skip without C toolchain). Not COL-007; stub v5 is not wire encode.
+#      honest skip without C toolchain). Real v5 wire MVP (COL-006); full
+#      fixtures/v5 corpus = complete TEST-003 residual. Not COL-007.
 #
 # Primary packaging choice: dual_path_smoke.sh (BUILD dual-path policy entry).
 # Alternatives not re-run here (document only):

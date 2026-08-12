@@ -60,8 +60,9 @@ const char *nytp_v5_sink_path(const nytp_sink *sink);
  * START_DEFLATE). Valid until next emit/flush that grows the buffer or destroy.
  * *out_len receives byte length. Returns NULL if not a v5 sink.
  *
- * After close, the buffer is finalized (deflate finished if active). Prefer
- * reading after nytp_sink_close for a complete profile stream.
+ * Decoder-ready: only after nytp_sink_close (deflate finished if active).
+ * Mid-stream flush while deflating writes an unfinished zlib snapshot to
+ * path — not a complete profile for nytprof-dump / 6.15 readers.
  */
 const uint8_t *nytp_v5_sink_wire(const nytp_sink *sink, size_t *out_len);
 

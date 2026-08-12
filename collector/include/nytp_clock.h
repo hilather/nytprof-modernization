@@ -4,7 +4,7 @@
  *
  * Development/test only. Production collectors must not enable this by
  * default. Full M4 oracle v5-via-sink equality under fake-clock remains
- * residual until COL-006 (real v5 wire) + complete TEST-003 corpus.
+ * residual until complete TEST-003 corpus (COL-006 real wire is mini-only).
  *
  * BASE-003 model (statement attribution):
  *   on statement entry: now = clock_read(); attribute (now - last) to previous;
@@ -108,14 +108,15 @@ typedef struct nytp_m4_step {
  *   OPEN header attrs -> activate -> PID_START -> statements under fake-clock
  *   -> DISCOUNT -> SUB_RETURN -> begin_finalize -> SRC/SUB_INFO -> PID_END
  *   -> close
- * against a counting or stub-v5 sink. Verifies gapless seq + kind/ticks
+ * against a counting or v5 wire sink. Verifies gapless seq + kind/ticks
  * order for the *logical* stream (control START_DEFLATE may appear without seq).
  *
- * This is **not** full fixture/v5/default-calls1 oracle equality (COL-006).
+ * This is **not** full fixture/v5/default-calls1 oracle equality
+ * (complete TEST-003 residual; COL-006 real wire is mini-only here).
  * Returns NYTP_OK on match; NYTP_ERR_STATE on mismatch (details via *out).
  * When `out` is non-NULL it is always written (partial progress on early fail).
  *
- * Verification (counting / stub-v5 with stats):
+ * Verification (counting / v5 wire with stats):
  *   - observed seq ring is gapless 0..n-1
  *   - observed kind ring matches m4_expected[] order
  *   - TIME_LINE ticks match expected steps (via attributed + kind ring)

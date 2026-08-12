@@ -277,13 +277,28 @@ static nytp_status write_nv(v5_impl *vi, double nv)
     return buf_write(vi, &nv, sizeof(nv));
 }
 
+/*
+ * Fail-closed string-view check *before* any wire bytes are written.
+ * Contract: ptr may be NULL only when len == 0 (see nytp_string_view).
+ */
+static nytp_status check_str_view(nytp_string_view sv)
+{
+    if (sv.len > 0 && !sv.ptr) {
+        return NYTP_ERR_NULL;
+    }
+    if (sv.len > 0xFFFFFFFFu) {
+        return NYTP_ERR_OVERFLOW;
+    }
+    return NYTP_OK;
+}
+
 static nytp_status write_str(v5_impl *vi, nytp_string_view sv)
 {
     unsigned char tag = sv.is_utf8 ? NYTP_TAG_STRING_UTF8 : NYTP_TAG_STRING;
     uint32_t len;
-    nytp_status st;
-    if (sv.len > 0xFFFFFFFFu) {
-        return NYTP_ERR_OVERFLOW;
+    nytp_status st = check_str_view(sv);
+    if (st != NYTP_OK) {
+        return st;
     }
     len = (uint32_t)sv.len;
     st = write_tag_u32(vi, tag, len);
@@ -292,9 +307,6 @@ static nytp_status write_str(v5_impl *vi, nytp_string_view sv)
     }
     if (len == 0) {
         return NYTP_OK;
-    }
-    if (!sv.ptr) {
-        return NYTP_ERR_NULL;
     }
     return buf_write(vi, sv.ptr, (size_t)len);
 }
@@ -305,11 +317,19 @@ static nytp_status write_plain_kv(v5_impl *vi, unsigned char prefix,
     nytp_status st;
     const char eq = '=';
     const char nl = '\n';
+    st = check_str_view(key);
+    if (st != NYTP_OK) {
+        return st;
+    }
+    st = check_str_view(value);
+    if (st != NYTP_OK) {
+        return st;
+    }
     st = buf_write(vi, &prefix, 1);
     if (st != NYTP_OK) {
         return st;
     }
-    if (key.len && key.ptr) {
+    if (key.len) {
         st = buf_write(vi, key.ptr, key.len);
         if (st != NYTP_OK) {
             return st;
@@ -319,7 +339,7 @@ static nytp_status write_plain_kv(v5_impl *vi, unsigned char prefix,
     if (st != NYTP_OK) {
         return st;
     }
-    if (value.len && value.ptr) {
+    if (value.len) {
         st = buf_write(vi, value.ptr, value.len);
         if (st != NYTP_OK) {
             return st;
@@ -338,7 +358,7 @@ static nytp_status ticks_to_i32(nytp_ticks t, int32_t *out)
     return NYTP_OK;
 }
 
-/* ---- stats helpers (shared with stub-era tests) ---- */
+/* ---- stats helpers (shared with counting-layout tests) ---- */
 
 static void note_kind(v5_impl *vi, nytp_event_kind kind)
 {
@@ -446,9 +466,11 @@ static nytp_status v5_flush(nytp_sink *sink)
 {
     v5_impl *vi = vi_of(sink);
     nytp_status st;
-    /* Do not finish deflate on flush mid-stream — only push file snapshot of
-     * currently buffered (possibly partial zlib) bytes. Finalization is close.
-     * For non-deflating streams, buffer is complete records.
+    /*
+     * Mid-stream flush does **not** call Z_FINISH. Path/buffer after flush
+     * while deflating is an unfinished zlib snapshot — **not** decoder-ready.
+     * Only post-close (deflate_finish) bytes are a complete profile stream.
+     * Non-deflating streams already hold complete records.
      */
     if (vi->path) {
         st = write_to_path(vi);
@@ -524,11 +546,15 @@ static nytp_status v5_emit_comment(nytp_sink *sink, nytp_string_view text)
     v5_impl *vi = vi_of(sink);
     unsigned char tag = NYTP_TAG_COMMENT;
     const char nl = '\n';
-    nytp_status st = buf_write(vi, &tag, 1);
+    nytp_status st = check_str_view(text);
     if (st != NYTP_OK) {
         return st;
     }
-    if (text.len && text.ptr) {
+    st = buf_write(vi, &tag, 1);
+    if (st != NYTP_OK) {
+        return st;
+    }
+    if (text.len) {
         st = buf_write(vi, text.ptr, text.len);
         if (st != NYTP_OK) {
             return st;
@@ -629,7 +655,11 @@ static nytp_status v5_emit_new_fid(nytp_sink *sink, nytp_fid fid,
                                    uint32_t mtime, nytp_string_view name)
 {
     v5_impl *vi = vi_of(sink);
-    nytp_status st = write_tag_u32(vi, NYTP_TAG_NEW_FID, fid);
+    nytp_status st = check_str_view(name);
+    if (st != NYTP_OK) {
+        return st;
+    }
+    st = write_tag_u32(vi, NYTP_TAG_NEW_FID, fid);
     if (st != NYTP_OK) {
         return st;
     }
@@ -666,7 +696,11 @@ static nytp_status v5_emit_src_line(nytp_sink *sink, nytp_fid fid,
                                     nytp_line line, nytp_string_view text)
 {
     v5_impl *vi = vi_of(sink);
-    nytp_status st = write_tag_u32(vi, NYTP_TAG_SRC_LINE, fid);
+    nytp_status st = check_str_view(text);
+    if (st != NYTP_OK) {
+        return st;
+    }
+    st = write_tag_u32(vi, NYTP_TAG_SRC_LINE, fid);
     if (st != NYTP_OK) {
         return st;
     }
@@ -693,7 +727,11 @@ static nytp_status v5_emit_sub_info(nytp_sink *sink, nytp_fid fid,
 {
     v5_impl *vi = vi_of(sink);
     /* Wire: fid, name, first, last (callback order differs). */
-    nytp_status st = write_tag_u32(vi, NYTP_TAG_SUB_INFO, fid);
+    nytp_status st = check_str_view(name);
+    if (st != NYTP_OK) {
+        return st;
+    }
+    st = write_tag_u32(vi, NYTP_TAG_SUB_INFO, fid);
     if (st != NYTP_OK) {
         return st;
     }
@@ -726,7 +764,15 @@ static nytp_status v5_emit_sub_callers(nytp_sink *sink, nytp_fid fid,
 {
     v5_impl *vi = vi_of(sink);
     /* Wire: fid, line, caller, count, incl, excl, reci, rec_depth, called */
-    nytp_status st = write_tag_u32(vi, NYTP_TAG_SUB_CALLERS, fid);
+    nytp_status st = check_str_view(caller);
+    if (st != NYTP_OK) {
+        return st;
+    }
+    st = check_str_view(called);
+    if (st != NYTP_OK) {
+        return st;
+    }
+    st = write_tag_u32(vi, NYTP_TAG_SUB_CALLERS, fid);
     if (st != NYTP_OK) {
         return st;
     }
@@ -830,7 +876,11 @@ static nytp_status v5_emit_sub_return(nytp_sink *sink, nytp_depth depth,
                                       nytp_string_view subname)
 {
     v5_impl *vi = vi_of(sink);
-    nytp_status st = write_tag_u32(vi, NYTP_TAG_SUB_RETURN, depth);
+    nytp_status st = check_str_view(subname);
+    if (st != NYTP_OK) {
+        return st;
+    }
+    st = write_tag_u32(vi, NYTP_TAG_SUB_RETURN, depth);
     if (st != NYTP_OK) {
         return st;
     }

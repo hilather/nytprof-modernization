@@ -11,7 +11,7 @@
  *   - High-water triggers flush before capacity exhaustion.
  *   - Oversized payload uses emergency direct path after flush attempt.
  *
- * Residuals: not COL-006 wire encode; not COL-007; not live XS hooks;
+ * Residuals: full fixtures/v5 corpus (complete TEST-003); not COL-007; not live XS hooks;
  * full flush-discount timing ADR still open (BASE-003 / COMPAT-003).
  */
 #ifndef NYTP_BATCH_H

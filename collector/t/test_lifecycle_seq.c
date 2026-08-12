@@ -258,7 +258,7 @@ static void test_sequence_gapless_and_control(void)
     nytp_sink_destroy(s);
 }
 
-static void test_v5_stub_seq_not_wire_claim(void)
+static void test_v5_wire_seq_not_on_wire(void)
 {
     /* v5 wire sink still assigns internal seq for dual compare (not on wire). */
     nytp_sink *s = nytp_v5_sink_create(NULL);
@@ -327,7 +327,7 @@ int main(void)
     test_fork_split_seq_reset();
     test_mark_failed();
     test_sequence_gapless_and_control();
-    test_v5_stub_seq_not_wire_claim();
+    test_v5_wire_seq_not_on_wire();
     test_failed_emit_no_phantom_seq();
 
     if (failures != 0) {

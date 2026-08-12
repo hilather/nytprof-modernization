@@ -19,10 +19,20 @@ Implement **real NYTProf v5 wire encoding** behind the semantic sink API so `for
 |--------|------|
 | `nytp_v5_sink_create(path)` | Create wire sink; writes `NYTProf 5 0\n` immediately |
 | `nytp_v5_sink_create_ex(path, compress_level)` | Same; zlib level 1..9 for `START_DEFLATE` (0 → default 6) |
-| `nytp_v5_sink_wire` / `wire_len` | Borrow in-memory profile bytes (finalize via `close`) |
+| `nytp_v5_sink_wire` / `wire_len` | Borrow in-memory profile bytes (**decoder-ready only after `close`**) |
 | `nytp_v5_sink_file_written` | 1 after successful path write on flush/close |
 | `nytp_v5_sink_is_deflating` | 1 after `START_DEFLATE` (body is zlib) |
 | `nytp_v5_sink_stats` | Counting-compatible multiplicities / seq ring |
+
+### Flush vs close (decoder-ready)
+
+| Call | Deflating? | Path / buffer meaning |
+|------|------------|------------------------|
+| `nytp_sink_flush` mid-stream | yes | **Unfinished** zlib snapshot (`Z_FINISH` not called). **Not** a complete profile; Rust/6.15 verify may fail. |
+| `nytp_sink_flush` | no | Complete records so far (safe if no further emits required for your use). |
+| `nytp_sink_close` | any | Finishes deflate if active; **only post-close bytes are decoder-ready** for a finished stream. |
+
+Prefer reading `nytp_v5_sink_wire` / path after **`close`**.
 
 ### Wire mapping (semantic → tag)
 
@@ -44,7 +54,8 @@ Implement **real NYTProf v5 wire encoding** behind the semantic sink API so `for
 
 Strings: `'` or `"` (UTF-8 flag) + packed len + bytes.  
 NV: 8-byte native double (LE on fixture platforms).  
-COL-003 sequence numbers are **not** written on the wire.
+COL-003 sequence numbers are **not** written on the wire.  
+String views: `ptr == NULL && len > 0` is rejected with `NYTP_ERR_NULL` **before** any wire write (no half-written tag/len).
 
 ### Ticks projection (OI-003-01 residual)
 
@@ -74,6 +85,6 @@ COL-003 sequence numbers are **not** written on the wire.
 
 ## Tests
 
-- `collector/t/test_v5_wire.c` — uncompressed full-tag mini, M4+zlib, overflow, no seq on wire  
+- `collector/t/test_v5_wire.c` — uncompressed full-tag mini, M4+zlib, overflow, null-string fail-closed (no partial write), mid-deflate flush residual, no seq on wire  
 - `collector/t/test_fake_clock.c` — M4 via v5 wire (header present, file written)  
 - Existing sink/lifecycle/batch tests still green with real writer backend  

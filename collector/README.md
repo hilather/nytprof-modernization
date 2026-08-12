@@ -126,6 +126,8 @@ nytp_emit_*  -->  v5 sink (packed tags / strings / NV)
 | Deflate | `emit_start_deflate` writes `z` then compresses subsequent bytes (level default 6) |
 | Ticks | Must fit I32; else `NYTP_ERR_OVERFLOW` (sticky) |
 | Seq | Internal only — not on wire |
+| Strings | `ptr==NULL && len>0` → `NYTP_ERR_NULL` before any wire write |
+| Flush vs close | Mid-deflate **flush** path bytes are unfinished zlib — **not** decoder-ready; only post-**close** is complete |
 | API | `nytp_v5_sink_wire` / `file_written` for tests and handoff |
 
 ## Event mapping (semantic → COMPAT-001 / v5 tag)

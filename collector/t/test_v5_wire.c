@@ -655,6 +655,93 @@ static void test_duplicate_deflate_rejected(void)
     nytp_sink_destroy(s);
 }
 
+/*
+ * Issue 1 regression: ptr==NULL && len>0 must fail closed *before* any wire
+ * write (no half-written string tag/len). Sink stays ACTIVE (NULL is not
+ * sticky); subsequent emits still succeed on the unchanged buffer.
+ */
+static void test_null_string_view_no_partial_write(void)
+{
+    nytp_sink *s = nytp_v5_sink_create(NULL);
+    nytp_string_view bad;
+    size_t len_before = 0;
+    size_t len_after = 0;
+    const uint8_t *wire;
+    EXPECT(s != NULL, "create");
+    if (!s) {
+        return;
+    }
+    EXPECT(nytp_sink_activate(s) == NYTP_OK, "act");
+    EXPECT(nytp_emit_time_line(s, 1, 1, 1) == NYTP_OK, "seed tl");
+    wire = nytp_v5_sink_wire(s, &len_before);
+    EXPECT(wire != NULL && len_before > 12, "wire before");
+
+    bad.ptr = NULL;
+    bad.len = 5;
+    bad.is_utf8 = 0;
+
+    EXPECT(nytp_emit_src_line(s, 1, 2, bad) == NYTP_ERR_NULL, "src null");
+    EXPECT(nytp_emit_new_fid(s, 2, 0, 0, 0, 0, 0, bad) == NYTP_ERR_NULL,
+           "new_fid null");
+    EXPECT(nytp_emit_sub_info(s, 1, 1, 2, bad) == NYTP_ERR_NULL, "sub_info");
+    EXPECT(nytp_emit_sub_return(s, 1, 0.1, 0.05, bad) == NYTP_ERR_NULL,
+           "sub_return");
+    EXPECT(nytp_emit_attribute(s, bad, nytp_sv_cstr("v")) == NYTP_ERR_NULL,
+           "attr key");
+    EXPECT(nytp_emit_option(s, nytp_sv_cstr("k"), bad) == NYTP_ERR_NULL,
+           "opt val");
+    EXPECT(nytp_emit_comment(s, bad) == NYTP_ERR_NULL, "comment");
+    EXPECT(nytp_emit_sub_callers(s, 1, 1, 1, 0.0, 0.0, 0.0, 0, bad,
+                                 nytp_sv_cstr("caller")) == NYTP_ERR_NULL,
+           "callers called");
+    EXPECT(nytp_emit_sub_callers(s, 1, 1, 1, 0.0, 0.0, 0.0, 0,
+                                 nytp_sv_cstr("called"), bad) == NYTP_ERR_NULL,
+           "callers caller");
+
+    wire = nytp_v5_sink_wire(s, &len_after);
+    EXPECT(wire != NULL && len_after == len_before, "wire unchanged");
+    EXPECT(nytp_sink_get_state(s) == NYTP_SINK_ACTIVE, "still active");
+    /* Further valid emit still works (no half-record left). */
+    EXPECT(nytp_emit_discount(s) == NYTP_OK, "discount after");
+    wire = nytp_v5_sink_wire(s, &len_after);
+    EXPECT(wire && len_after == len_before + 1 && wire[len_before] == '-',
+           "discount appended cleanly");
+    EXPECT(nytp_sink_close(s) == NYTP_OK, "close");
+    nytp_sink_destroy(s);
+}
+
+/*
+ * Issue 3 residual: mid-stream flush while deflating writes unfinished zlib.
+ * Path after flush is not claimed decoder-ready; close finalizes.
+ */
+static void test_mid_deflate_flush_not_complete(void)
+{
+    const char *path = "build/mid_flush_partial.nytprof";
+    nytp_sink *s = nytp_v5_sink_create(path);
+    size_t wlen_mid = 0;
+    size_t wlen_end = 0;
+    const uint8_t *wire;
+    EXPECT(s != NULL, "create");
+    if (!s) {
+        return;
+    }
+    EXPECT(nytp_sink_activate(s) == NYTP_OK, "act");
+    EXPECT(nytp_emit_start_deflate(s) == NYTP_OK, "z");
+    EXPECT(nytp_emit_pid_start(s, 1, 0, 0.0) == NYTP_OK, "pid");
+    EXPECT(nytp_emit_time_line(s, 5, 1, 1) == NYTP_OK, "tl");
+    EXPECT(nytp_sink_flush(s) == NYTP_OK, "flush mid");
+    EXPECT(nytp_v5_sink_file_written(s), "path snapshot");
+    wire = nytp_v5_sink_wire(s, &wlen_mid);
+    EXPECT(wire && wlen_mid > 12, "mid wire");
+    /* Still deflating — not finished. Residual: not decoder-ready until close. */
+    EXPECT(nytp_v5_sink_is_deflating(s), "still deflating after flush");
+    EXPECT(nytp_emit_pid_end(s, 1, 1.0) == NYTP_OK, "pid_end");
+    EXPECT(nytp_sink_close(s) == NYTP_OK, "close finishes zlib");
+    wire = nytp_v5_sink_wire(s, &wlen_end);
+    EXPECT(wire && wlen_end >= wlen_mid, "finished >= mid");
+    nytp_sink_destroy(s);
+}
+
 static void test_no_seq_on_wire(void)
 {
     /* COL-003: seq is internal; wire after header must not embed seq fields
@@ -696,12 +783,14 @@ int main(void)
     test_m4_mini_with_deflate_roundtrip();
     test_ticks_overflow_fail_closed();
     test_duplicate_deflate_rejected();
+    test_null_string_view_no_partial_write();
+    test_mid_deflate_flush_not_complete();
     test_no_seq_on_wire();
 
     if (failures != 0) {
         fprintf(stderr, "test_v5_wire: %d failure(s)\n", failures);
         return 1;
     }
-    printf("OK: test_v5_wire (COL-006 real v5 wire + zlib + M4 mini)\n");
+    printf("OK: test_v5_wire (COL-006 real v5 wire + zlib + M4 mini + fail-closed)\n");
     return 0;
 }

@@ -1,6 +1,6 @@
 /* SPDX-License-Identifier: Artistic-1.0-Perl OR GPL-1.0-or-later
  *
- * COL-001 unit tests: semantic emit surface via counting + stub v5 sinks.
+ * COL-001 unit tests: semantic emit surface via counting + v5 wire sinks.
  * Build/run: make -C collector test
  */
 #include "nytp_sink.h"
@@ -112,7 +112,7 @@ static void test_counting_hot_path(void)
     nytp_sink_destroy(s);
 }
 
-static void test_v5_stub_routing(void)
+static void test_v5_wire_routing(void)
 {
     nytp_sink *s = nytp_v5_sink_create("build/test_sink_api.nytprof");
     const nytp_counting_stats *st;
@@ -225,7 +225,7 @@ int main(void)
 {
     test_null_sink_guards();
     test_counting_hot_path();
-    test_v5_stub_routing();
+    test_v5_wire_routing();
     test_type_safe_backend_identity();
     test_event_kind_names();
     test_inactive_before_activate();

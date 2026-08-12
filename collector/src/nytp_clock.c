@@ -256,7 +256,7 @@ static void verify_observed_stats(nytp_sink *sink, nytp_m4_harness_result *local
             return;
         }
     } else {
-        /* v5 stub: copy from stats rings directly. */
+        /* v5 wire: copy from stats rings directly. */
         n_seq = st->seq_ring_len;
         if (n_seq > sizeof(seqs) / sizeof(seqs[0])) {
             n_seq = sizeof(seqs) / sizeof(seqs[0]);

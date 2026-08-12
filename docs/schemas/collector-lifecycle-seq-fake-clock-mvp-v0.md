@@ -57,8 +57,8 @@ Helpers: `nytp_sink_transition_allowed`, `nytp_sink_can_emit`, `nytp_sink_state_
 | Logical kinds | All COMPAT-001 mapped kinds **except** `START_DEFLATE` (control) and `NONE` |
 | Gapless | `next_seq` advances by 1; `nytp_seq_check_gapless` reports first mismatch |
 | Child fork | `nytp_sink_end_fork_child` resets seq to 0 |
-| v5 default | **Does not write** seq on wire (stub has no wire; COL-006 must preserve default) |
-| Dual/test | Counting + stub v5 record `last_seq` + seq ring for comparators |
+| v5 default | **Does not write** seq on wire (COL-006 real wire preserves this) |
+| Dual/test | Counting + v5 wire record `last_seq` + seq ring for comparators |
 
 API: `nytp_sink_peek_seq`, `nytp_sink_last_seq`, `nytp_sink_logical_count`, `nytp_event_kind_is_logical`, `nytp_seq_check_gapless`.
 
@@ -70,7 +70,7 @@ API: `nytp_sink_peek_seq`, `nytp_sink_last_seq`, `nytp_sink_logical_count`, `nyt
 |-------|------|
 | `nytp_fake_clock` | Scripted absolute tick reads; fail-closed on exhaust (`NYTP_ERR_EXHAUSTED`) |
 | `nytp_stmt_driver` | BASE-003: on statement entry, attribute `(now - last)` to **previous** line |
-| `nytp_m4_mini_sample_run` | Synthetic mini stream under counting / stub-v5 sink |
+| `nytp_m4_mini_sample_run` | Synthetic mini stream under counting / v5 wire sink |
 
 ### M4 mini sample (not full corpus)
 
