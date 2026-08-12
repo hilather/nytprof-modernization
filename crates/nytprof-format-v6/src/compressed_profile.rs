@@ -8,7 +8,7 @@
 //! Default `parse_chunk_frame` stays non-inflating; decode uses
 //! `decode_chunk_payload` explicitly. Not dictionaries, not COL-007 C writer.
 
-use crate::chunk::{codec, encode_chunk_frame, kind, parse_chunk_frame, ChunkError};
+use crate::chunk::{codec, encode_chunk_frame, kind, ChunkError};
 use crate::crc::compute_payload_crc;
 use crate::event_body::{
     decode_event_body, encode_event_body, EventBodyError, EventRecord, EventRecordSpec,

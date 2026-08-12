@@ -558,7 +558,7 @@ const DEFAULT_CAPABILITY_FIXTURE: &str = "fixtures/v5/default-calls1/nytprof.out
 ///
 /// JSON mode (`--json` / `--format=json` / `--format json`) — single object on stdout:
 /// ```json
-/// {"ok":true,"decode":true,"report":true,"verify":true,"convert":true,"merge":true,"repack":true,"salvage":true,"profile_ok":"<path>|null"}
+/// {"ok":true,"decode":true,"report":true,"verify":true,"v6_decode":true,"v6_report":true,"convert":true,"merge":true,"repack":true,"salvage":true,"collection_default":"v5","profile_ok":"<path>|null","v6_profile_ok":"<path>|null"}
 /// ```
 ///
 /// Exit 0 when claimed tools work. Non-zero if a found probe fails verify
@@ -574,7 +574,8 @@ fn cmd_capability(args: &[String]) -> Result<(), Box<dyn std::error::Error>> {
     let opts = parse_capability_args(args)?;
 
     // This binary *is* the native offline CLI: decode / report / verify / convert
-    // / merge / repack / salvage are linked.
+    // / merge / repack / salvage are linked. Product collection default remains v5
+    // until an executed R4 default-format flip (ADR-0008 policy only today).
     let profile_ok: Option<String> = match resolve_capability_probe(opts.profile.as_deref()) {
         Some(path) => {
             // Real exercise of decode+model+verify when a fixture is present.
@@ -601,6 +602,31 @@ fn cmd_capability(args: &[String]) -> Result<(), Box<dyn std::error::Error>> {
         None => None,
     };
 
+    // Optional v6 dual-sink probe (E5 honesty): fail closed when fixture is present
+    // but verify fails; skip when absent (same pattern as v5 profile_ok).
+    let v6_profile_ok: Option<String> = match resolve_v6_capability_probe() {
+        Some(path) => match verify_profile(&path) {
+            Ok(summary) => {
+                if !summary.lines().any(|l| l.starts_with("OK:")) {
+                    return Err(format!(
+                        "capability self-test: v6 verify of {} did not produce OK: summary",
+                        path.display()
+                    )
+                    .into());
+                }
+                Some(path.display().to_string())
+            }
+            Err(e) => {
+                return Err(format!(
+                    "capability self-test: v6 verify failed for {}: {e}",
+                    path.display()
+                )
+                .into());
+            }
+        },
+        None => None,
+    };
+
     // Convert probe: dual-sink m4 (integer ticks) round-trip when present.
     // Fail closed if the probe exists but convert/verify fails.
     exercise_convert_probe()?;
@@ -613,11 +639,15 @@ fn cmd_capability(args: &[String]) -> Result<(), Box<dyn std::error::Error>> {
             "decode": true,
             "report": true,
             "verify": true,
+            "v6_decode": true,
+            "v6_report": true,
             "convert": true,
             "merge": true,
             "repack": true,
             "salvage": true,
+            "collection_default": "v5",
             "profile_ok": profile_ok,
+            "v6_profile_ok": v6_profile_ok,
         });
         write_stdout_text(&serde_json::to_string(&obj)?)
     } else {
@@ -626,17 +656,39 @@ fn cmd_capability(args: &[String]) -> Result<(), Box<dyn std::error::Error>> {
             "decode: yes".to_string(),
             "report: yes".to_string(),
             "verify: yes".to_string(),
+            "v6_decode: yes".to_string(),
+            "v6_report: yes".to_string(),
             "convert: yes".to_string(),
             "merge: yes".to_string(),
             "repack: yes".to_string(),
             "salvage: yes".to_string(),
+            "collection_default: v5".to_string(),
         ];
         match profile_ok {
             Some(p) => lines.push(format!("profile_ok: {p}")),
             None => lines.push("profile_ok: skip".to_string()),
         }
+        match v6_profile_ok {
+            Some(p) => lines.push(format!("v6_profile_ok: {p}")),
+            None => lines.push("v6_profile_ok: skip".to_string()),
+        }
         write_stdout_text(&lines.join("\n"))
     }
+}
+
+/// Locate optional dual-sink v6 fixture for E5 capability honesty.
+fn resolve_v6_capability_probe() -> Option<PathBuf> {
+    let candidates = [
+        PathBuf::from("fixtures/e4/dual-sink/default_calls1_v6.nytprof"),
+        PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .join("../..")
+            .join("fixtures/e4/dual-sink/default_calls1_v6.nytprof"),
+        PathBuf::from("fixtures/v6/from-c/absolute.nytprof"),
+        PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .join("../..")
+            .join("fixtures/v6/from-c/absolute.nytprof"),
+    ];
+    candidates.into_iter().find(|p| p.is_file())
 }
 
 /// Exercise strict convert on a small dual-sink fixture when available.
@@ -1109,14 +1161,14 @@ fn render_aggregates_json(
 
     let mut subs = serde_json::Map::new();
     let mut sub_rows: Vec<_> = model.sub_return_totals.iter().collect();
-    sub_rows.sort_by(|(a, _), (b, _)| a.cmp(b));
+    sub_rows.sort_by_key(|(a, _)| *a);
     for (name, t) in sub_rows {
         subs.insert(name.clone(), json!(t.returns));
     }
 
     let mut edges = serde_json::Map::new();
     let mut edge_rows: Vec<_> = model.call_edges.iter().collect();
-    edge_rows.sort_by(|(a, _), (b, _)| a.cmp(b));
+    edge_rows.sort_by_key(|(a, _)| *a);
     for ((caller, called), e) in edge_rows {
         // TAB-joined key — same convention as QUERY-JSON-MVP / JsonlData.
         let key = format!("{caller}\t{called}");

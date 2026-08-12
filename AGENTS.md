@@ -94,13 +94,54 @@ Negative knowledge is part of the repo. Agents **must** automatically record fai
 4. Provisional v6 preflight (`nytprof-format-v6`, `docs/schemas/v6-*-provisional-v0.md`) is **not** a wire freeze and does **not** complete COL-007 (C v6 writer).  
 5. Stop and escalate when observed 6.15 behavior contradicts frozen specs; do not guess wire or timing semantics.  
 6. Handoffs include commits, commands, artifacts, open questions, and known limitations.  
-7. **Automatically** append light rows under `docs/agent-notes/` for abandoned attempts (incl. failed perf) and corrected Perl/Rust misunderstandings; open a `details/<slug>.md` only when the light row is not enough.
+7. **Automatically** append light rows under `docs/agent-notes/` for abandoned attempts (incl. failed perf) and corrected Perl/Rust misunderstandings; open a `details/<slug>.md` only when the light row is not enough.  
+8. **After any push to `main`, tag, or GitHub Release: watch CI until green** (see [Releases and CI watch](#releases-and-ci-watch) below). Do not declare a release done while Actions is red or unwatched.
+
+## Releases and CI watch
+
+Agents that cut a release, merge a stack to `main`, push a version tag, or publish a GitHub Release **must** monitor continuous integration until it passes, and must prefer CI hardening so the same class of failure does not recur.
+
+### Mandatory post-release / post-merge CI watch
+
+| Step | Action |
+|------|--------|
+| **1. Identify the head** | After `git push origin main` and/or `git push origin <tag>`, note the commit SHA and any tag (`v*`). |
+| **2. List runs** | `gh run list --branch main --limit 10` (and `gh run list --limit 10` filtered by the tag push if present). Expect workflow **CI matrix (BUILD-006 MVP)** (`.github/workflows/ci-matrix.yml`). |
+| **3. Wait for completion** | `gh run watch <run-id> --exit-status` (or poll until `completed`). Prefer waiting on **all** jobs: `rust-smoke` and both matrix rows (`linux-x86_64`, `macos-arm64`). |
+| **4. On failure** | `gh run view <run-id> --log-failed`. Fix on a branch, open/merge to `main`, retag only if the release notes/tag commit must move (prefer a patch tag `vX.Y.Z` over force-moving published tags). Re-run watch until green. |
+| **5. Record** | In the release body or session handoff: run URL(s), conclusion, and any residual honest skips (oracle pin, cargo-absent packaging paths). |
+| **6. Do not ship red** | Do not announce the release complete, close the task, or mark board “released” while required CI is failed or still in progress without an explicit maintainer waiver. |
+
+### CI hardening expectations (agents)
+
+When fixing a CI failure, also **harden** so the next release does not hit the same class of bug:
+
+| Hardening | Detail |
+|-----------|--------|
+| **Fail closed on capability honesty** | `nytprof-cli capability --json` must emit the keys product tests assert (`collection_default`, `v6_decode`, `v6_report`, convert/merge/repack/salvage when claimed). Stack/merge conflict resolution must not drop those fields. |
+| **Keep smoke job first** | `.github/workflows/ci-matrix.yml` runs a Linux `rust-smoke` (`cargo test` on gate packages + targeted `clippy -D warnings --no-deps`) **before** the longer multi-OS offline_gate matrix. Preserve that ordering when editing CI. |
+| **Matrix deps** | Linux needs `zlib1g-dev` / `libzstd-dev` / `liblz4-dev` for collector codec links; macOS needs brew `zstd`/`lz4` when collector builds. Do not remove them without an honest skip path. |
+| **No soft-fail gates** | Matrix and offline_gate scripts must use `set -euo pipefail` (or equivalent) so a red suite fails the job. Do not wrap gates in `|| true`. |
+| **Local before push** | For release merges: at least `cargo test -p nytprof-cli --test cli_e5_v6 --test capability_selftest` and `cargo clippy -p nytprof-cli -p nytprof-model -p nytprof-report --no-deps -- -D warnings`. Prefer `./scripts/ci/offline_gate.sh` when oracle pin time allows. |
+| **Clippy scope** | Prefer `-D warnings` on product CLI/model/report surfaces; preflight-heavy crates (e.g. format-v6) and C-ABI FFI raw pointers may stay outside `-D` until cleaned — document exceptions in the workflow comments. |
+
+### Suggested watch commands
+
+```bash
+# After push to main / tag:
+gh run list --branch main --limit 5
+gh run watch "$(gh run list --branch main --workflow 'CI matrix (BUILD-006 MVP)' --limit 1 --json databaseId -q '.[0].databaseId')" --exit-status
+
+# On failure:
+gh run view <run-id> --log-failed | tail -200
+```
 
 ## Primary gates and docs
 
 | Item | Path |
 |------|------|
 | Offline R1 gate | `./scripts/ci/offline_gate.sh` |
+| Multi-OS CI matrix (GHA) | [`.github/workflows/ci-matrix.yml`](https://github.com/hilather/nytprof-modernization/blob/main/.github/workflows/ci-matrix.yml) |
 | Operator runbook | [`docs/R1_PREVIEW_OPERATOR_RUNBOOK.md`](https://github.com/hilather/nytprof-modernization/blob/main/docs/R1_PREVIEW_OPERATOR_RUNBOOK.md) |
 | First-slice board | [`docs/FIRST_SLICE_BOARD.md`](https://github.com/hilather/nytprof-modernization/blob/main/docs/FIRST_SLICE_BOARD.md) |
 | Residual matrix | [`docs/contracts/R1_RESIDUAL_READINESS_MATRIX_v0.md`](https://github.com/hilather/nytprof-modernization/blob/main/docs/contracts/R1_RESIDUAL_READINESS_MATRIX_v0.md) |

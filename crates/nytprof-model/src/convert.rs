@@ -21,7 +21,6 @@
 
 use std::path::Path;
 
-use nytprof_format_v5;
 use nytprof_format_v6::chunk::codec;
 use nytprof_format_v6::event_body::EventRecordSpec;
 use nytprof_format_v6::{e3_standin_write_absolute, SUPPORTED_MAJOR};

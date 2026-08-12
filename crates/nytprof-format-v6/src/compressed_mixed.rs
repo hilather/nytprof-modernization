@@ -7,7 +7,7 @@
 //! non-inflating; decode uses `decode_chunk_payload` explicitly.
 //! Not dictionaries, not COL-007 C writer.
 
-use crate::chunk::{codec, encode_chunk_frame, kind, parse_chunk_frame, ChunkError};
+use crate::chunk::{codec, encode_chunk_frame, kind, ChunkError};
 use crate::compressed_profile::{
     encode_kind_chunk, is_supported_event_codec, OwnedEventRecord,
 };
@@ -23,7 +23,7 @@ use crate::index_body::{
     decode_index_body, encode_index_body, IndexBodyError, IndexRecordSpec,
 };
 use crate::multi_chunk_event::partition_event_records;
-use crate::payload_codec::{decode_chunk_payload, deflate_zlib, PayloadCodecError};
+use crate::payload_codec::{decode_chunk_payload, PayloadCodecError};
 use crate::source_body::{
     decode_source_body, encode_source_body, SourceBodyError, SourceRecordSpec,
 };

@@ -5,6 +5,12 @@
 # (scripts/ci/offline_gate.sh). Honest skips inside offline_gate / dual_path
 # (cargo/native absent, etc.) are preserved unchanged.
 #
+# Hardening (release / post-merge):
+#   - Install zlib/zstd/lz4 headers for collector C tests when CC is present
+#   - Cargo registry/target cache keyed by lockfile
+#   - Fast rustc/clippy smoke on Linux before the full offline gate
+#   - Fail the job if matrix_gate / offline_gate exits non-zero (no soft-fail)
+#
 # Honesty boundary (not full BUILD-006):
 #   - not multi-Perl / multi-rustc version matrix
 #   - not Windows / full platform tier freeze
@@ -22,6 +28,9 @@ on:
     branches:
       - main
       - 'execute-plan/**'
+      - 'release/**'
+    tags:
+      - 'v*'
   pull_request:
   workflow_dispatch:
 
@@ -33,8 +42,65 @@ permissions:
   contents: read
 
 jobs:
+  # Cheap, always-on compile+test smoke (Linux only). Catches capability /
+  # crate wiring breaks before the longer oracle offline_gate matrix.
+  rust-smoke:
+    name: rust-smoke (linux)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy
+
+      - name: Cache Cargo
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: ${{ runner.os }}-smoke-cargo-${{ hashFiles('Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-smoke-cargo-
+
+      - name: cargo test (workspace packages used by offline gate)
+        env:
+          CARGO_TERM_COLOR: always
+        run: |
+          set -euo pipefail
+          cargo test \
+            -p nytprof-format-v5 \
+            -p nytprof-format-v6 \
+            -p nytprof-model \
+            -p nytprof-report \
+            -p nytprof-cli \
+            -p nytprof-ffi \
+            --locked
+
+      - name: cargo clippy (deny warnings on product crates)
+        env:
+          CARGO_TERM_COLOR: always
+        run: |
+          set -euo pipefail
+          # --no-deps: format-v6 still carries preflight-style lints; do not -D those here.
+          # nytprof-ffi intentionally uses raw pointers in extern "C" (clippy::not_unsafe_ptr_arg_deref);
+          # cover it with `cargo test -p nytprof-ffi` above rather than -D warnings on the C ABI surface.
+          cargo clippy \
+            -p nytprof-cli \
+            -p nytprof-model \
+            -p nytprof-report \
+            --locked \
+            --no-deps \
+            -- -D warnings
+
   offline-gate-matrix:
     name: offline_gate (${{ matrix.label }})
+    needs: [rust-smoke]
     runs-on: ${{ matrix.os }}
     timeout-minutes: 90
     strategy:
@@ -59,18 +125,24 @@ jobs:
       - name: Install Linux build dependencies
         if: runner.os == 'Linux'
         run: |
+          set -euo pipefail
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends \
             build-essential \
             zlib1g-dev \
+            libzstd-dev \
+            liblz4-dev \
             pkg-config \
             python3 \
             perl
 
-      - name: Verify macOS toolchain
+      - name: Install macOS library deps for collector
         if: runner.os == 'macOS'
         run: |
-          # Xcode CLT / clang are preinstalled on GitHub macOS runners.
+          set -euo pipefail
+          # Homebrew is preinstalled; zstd/lz4 needed when collector links codecs.
+          brew list zstd >/dev/null 2>&1 || brew install zstd
+          brew list lz4 >/dev/null 2>&1 || brew install lz4
           command -v clang
           command -v perl
           command -v python3
@@ -94,5 +166,7 @@ jobs:
           NYTPROF_MATRIX_LABEL: ${{ matrix.label }}
           CARGO_TERM_COLOR: always
         run: |
+          set -euo pipefail
           chmod +x scripts/ci/matrix_gate.sh scripts/ci/offline_gate.sh
+          # Fail closed: do not swallow gate exit codes.
           ./scripts/ci/matrix_gate.sh

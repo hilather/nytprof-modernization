@@ -12,7 +12,7 @@
 //! then a single body decode. Default `parse_chunk_frame` stays non-inflating.
 //! Not COL-007 C writer. Always-on inflate remains residual.
 
-use crate::chunk::{codec, encode_chunk_frame, kind, parse_chunk_frame, ChunkError};
+use crate::chunk::{codec, encode_chunk_frame, kind};
 use crate::compressed_mixed::{OwnedIndexRecord, OwnedSourceRecord, OwnedSummaryRecord};
 use crate::compressed_profile::{
     encode_event_chunk, encode_kind_chunk, is_supported_event_codec, CompressedProfileError,
@@ -24,11 +24,11 @@ use crate::file_prefix::encode_file_prefix;
 use crate::index_body::{
     decode_index_body, encode_index_body, IndexBodyError, IndexRecordSpec,
 };
-use crate::payload_codec::{decode_chunk_payload, deflate_zlib};
+use crate::payload_codec::decode_chunk_payload;
 use crate::source_body::{
     decode_source_body, encode_source_body, SourceBodyError, SourceRecordSpec,
 };
-use crate::stream::{decode_prefix_chunk_stream, StreamError};
+use crate::stream::decode_prefix_chunk_stream;
 use crate::summary_body::{
     decode_summary_body, encode_summary_body, SummaryBodyError, SummaryRecordSpec,
 };
