@@ -54,6 +54,7 @@ See mapping table in [`collector/README.md`](https://github.com/hilather/nytprof
 | Full lifecycle freeze | **COL-002 landed (PR-B03 scaffold)** — see [`collector-lifecycle-seq-fake-clock-mvp-v0.md`](https://github.com/hilather/nytprof-modernization/blob/main/docs/schemas/collector-lifecycle-seq-fake-clock-mvp-v0.md); COL-015 residual for full fork/signal matrix |
 | Sequence numbers | **COL-003 landed (PR-B03)** — internal gapless seq; not on default v5 wire |
 | Fake-clock full M4 corpus | TEST-003 complete / COL-006 — **mini sample only** in PR-B03 |
+| Batch + stmt fast path | **COL-004/005 landed (PR-B04)** — see [`collector-batch-fast-mvp-v0.md`](https://github.com/hilather/nytprof-modernization/blob/main/docs/schemas/collector-batch-fast-mvp-v0.md) |
 | Live XS hook integration | later COL / packaging |
 | Dual-sink overhead prototype | ARCH-007 |
 | Wire freeze / format defaults | out of scope |
@@ -63,3 +64,4 @@ See mapping table in [`collector/README.md`](https://github.com/hilather/nytprof
 - `collector/t/test_sink_api.c` — null guards, counting hot path, stub v5 routing, kind names, OPEN emit.
 - `collector/t/test_lifecycle_seq.c` — COL-002 transitions + COL-003 gapless seq.
 - `collector/t/test_fake_clock.c` — TEST-003 fake-clock + M4 mini sample.
+- `collector/t/test_batch_fast.c` — COL-004/005 batch + fast path + SV lifetime.

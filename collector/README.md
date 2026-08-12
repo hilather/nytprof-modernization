@@ -1,9 +1,9 @@
-# Collector overlay (ADR-0004 B0-A) — COL-001..003 + fake-clock scaffold
+# Collector overlay (ADR-0004 B0-A) — COL-001..005 + fake-clock scaffold
 
-**Status:** scaffolding (PR-B02 COL-001 + PR-B03 COL-002/003/TEST-003 slice)  
+**Status:** scaffolding (PR-B02 COL-001 + PR-B03 COL-002/003/TEST-003 + **PR-B04 COL-004/005**)  
 **Layout decision:** [ADR-0004](https://github.com/hilather/nytprof-modernization/blob/main/docs/adrs/0004-collector-packaging-source-tree.md)  
 **Logical events:** [COMPAT-001](https://github.com/hilather/nytprof-modernization/blob/main/docs/contracts/COMPAT-001_LOGICAL_EVENT_CONTRACT.md)  
-**Schemas:** [collector-sink-api-mvp-v0.md](https://github.com/hilather/nytprof-modernization/blob/main/docs/schemas/collector-sink-api-mvp-v0.md), [collector-lifecycle-seq-fake-clock-mvp-v0.md](https://github.com/hilather/nytprof-modernization/blob/main/docs/schemas/collector-lifecycle-seq-fake-clock-mvp-v0.md)  
+**Schemas:** [collector-sink-api-mvp-v0.md](https://github.com/hilather/nytprof-modernization/blob/main/docs/schemas/collector-sink-api-mvp-v0.md), [collector-lifecycle-seq-fake-clock-mvp-v0.md](https://github.com/hilather/nytprof-modernization/blob/main/docs/schemas/collector-lifecycle-seq-fake-clock-mvp-v0.md), [collector-batch-fast-mvp-v0.md](https://github.com/hilather/nytprof-modernization/blob/main/docs/schemas/collector-batch-fast-mvp-v0.md)  
 **Timing notes:** [BASE-003](https://github.com/hilather/nytprof-modernization/blob/main/baseline/inventories/timing-lifecycle-notes.md)
 
 Modernization C sources for the **semantic event sink** live here — **not** under `baseline/6.15/` (oracle pin remains immutable).
@@ -12,8 +12,8 @@ Modernization C sources for the **semantic event sink** live here — **not** un
 
 ```text
 collector/
-  include/     public C headers (sink API, types, clock, counting + stub v5)
-  src/         sink wrappers + backends + fake-clock
+  include/     public C headers (sink API, types, clock, batch/event, counting + stub v5)
+  src/         sink wrappers + backends + fake-clock + batch/fast path
   t/           unit tests (no Perl; pure C)
   xs/          reserved for future XS glue (empty)
   Makefile     opt-in C build
@@ -29,10 +29,12 @@ collector/
 | `nytp_emit_*` | Semantic emit surface (COMPAT-001 + `start_deflate` control) |
 | **COL-002 lifecycle** | `OPEN/ACTIVE/STOPPED/FINALIZING/CLOSED/FAILED/FORK_SPLIT` + legal transitions + emit gates |
 | **COL-003 sequence** | Gapless logical `nytp_seq` on successful emits (not for `START_DEFLATE`); backends record via post-commit `on_logical_committed` |
-| Counting sink | Test dual companion — multiplicities, seq ring, no I/O |
+| **COL-004 fast path** | `nytp_fast_emit_time_line` / `_time_block` + POD batch append — no malloc after create |
+| **COL-005 batching** | Fixed event buffer + side arena; high-water / full flush; emergency oversized path; batch sink facade |
+| Counting sink | Test dual companion — multiplicities, seq ring, last src/sub fingerprints |
 | Stub v5 adapter | Conceptual route for legacy v5 writes (**no wire encode yet**) |
 | **Fake-clock harness** | Scripted ticks + BASE-003 stmt driver + M4 **mini** sample |
-| `make -C collector test` | `test_sink_api` + `test_lifecycle_seq` + `test_fake_clock` |
+| `make -C collector test` | `test_sink_api` + `test_lifecycle_seq` + `test_fake_clock` + `test_batch_fast` |
 
 ## Explicit non-claims
 
@@ -42,7 +44,9 @@ collector/
 - **Not COL-015** — full fork buffer ownership / signal-safe finalization matrix  
 - **Not** hooked into live Perl opcode profiler yet  
 - **Not** a default dependency of `make legacy-smoke` or dual-path legacy half  
-- Fake-clock is **test/dev only** — must not be production default
+- Fake-clock is **test/dev only** — must not be production default  
+- Light microbench in `test_batch_fast` is **engineering only** — not BENCH-003/006 certification  
+- Flush/compression **discount timing** vs BASE-003 remains open (timing ADR residual)
 
 ## Build / test
 
@@ -76,7 +80,26 @@ Emit: all kinds in `OPEN`/`ACTIVE`; finalization subset in `FINALIZING`; none in
 - Assigned by public emit wrappers on success; starts at 0; gapless per process stream.  
 - `START_DEFLATE` is control — **no** seq.  
 - Default v5 path does **not** write seq on wire (COL-006 must preserve).  
+- Batch flush replays to child ops with the **batch-stamped** seq (no double assign).  
 - Comparators: `nytp_seq_check_gapless`, counting seq ring.
+
+## Batching + fast path (COL-004 / COL-005 summary)
+
+```text
+nytp_emit_* / nytp_fast_emit_*  -->  batch (fixed headers + arena)
+                                         |
+                                    high-water / full / explicit flush
+                                         v
+                                   child sink ops (counting / stub-v5 / later real v5)
+```
+
+| Rule | Detail |
+|------|--------|
+| Statement path | `TIME_LINE`/`TIME_BLOCK` copy POD only; `heap_allocs` must not grow after create |
+| Strings | Copied once into bounded arena; never retain caller/Perl pointers |
+| Order | Forced capacities `1..64` must match direct counting kind+seq rings |
+| Failure | Failed flush retains pending events; no phantom logical commits on child |
+| Oversized | Emergency direct child emit after flush attempt |
 
 ## Event mapping (semantic → COMPAT-001 / v5 tag)
 
@@ -89,7 +112,7 @@ Emit: all kinds in `OPEN`/`ACTIVE`; finalization subset in `FINALIZING`; none in
 | `nytp_emit_time_block` | `time_block` | `TIME_BLOCK` `*` | count + seq + last fields |
 | `nytp_emit_discount` | `discount` | `DISCOUNT` `-` | count + seq |
 | `nytp_emit_new_fid` | `new_fid` | `NEW_FID` `@` | count + seq |
-| `nytp_emit_src_line` | `src_line` | `SRC_LINE` `S` | count + seq |
+| `nytp_emit_src_line` | `src_line` | `SRC_LINE` `S` | count + seq + last text |
 | `nytp_emit_sub_info` | `sub_info` | `SUB_INFO` `s` | count + seq |
 | `nytp_emit_sub_callers` | `sub_callers` | `SUB_CALLERS` `c` | count + seq |
 | `nytp_emit_pid_start` | `pid_start` | `PID_START` `P` | count + seq |
@@ -104,11 +127,11 @@ Hooks will call **emit**, never v5 bytes, once integrated. Dual/v6 sinks plug th
 
 | Task / PR | Continues |
 |-----------|-----------|
-| COL-004 / COL-005 | Hot-path / batching |
 | COL-006 | Real v5 writer behind this API + full M4 stream neutrality |
 | Complete TEST-003 | Full corpus fake-clock oracle match |
 | COL-007 | C v6 writer (separate) |
-| COL-015 | Full fork / signal lifecycle matrix |
+| COL-015 | Full fork / signal lifecycle matrix with batch ownership |
+| BENCH-003 | Certified statement-path performance gates |
 
 ## Isolation
 

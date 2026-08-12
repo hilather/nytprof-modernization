@@ -225,13 +225,24 @@ static nytp_status counting_emit_src_line(nytp_sink *sink, nytp_fid fid,
 {
     counting_impl *ci = ci_of(sink);
     nytp_status st = maybe_fail_next(ci);
-    (void)text;
+    size_t n;
     if (st != NYTP_OK) {
         return st;
     }
     note_kind(ci, NYTP_EVT_SRC_LINE);
     ci->stats.last_fid = fid;
     ci->stats.last_line = line;
+    ci->stats.last_src_fid = fid;
+    ci->stats.last_src_line = line;
+    n = text.len;
+    if (n >= sizeof(ci->stats.last_src_text)) {
+        n = sizeof(ci->stats.last_src_text) - 1;
+    }
+    if (n > 0 && text.ptr) {
+        memcpy(ci->stats.last_src_text, text.ptr, n);
+    }
+    ci->stats.last_src_text[n] = '\0';
+    ci->stats.last_src_text_len = n;
     return NYTP_OK;
 }
 

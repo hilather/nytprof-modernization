@@ -1,6 +1,6 @@
 /* SPDX-License-Identifier: Artistic-1.0-Perl OR GPL-1.0-or-later
  *
- * Common types for the modernization collector overlay (ADR-0004 / COL-001..003).
+ * Common types for the modernization collector overlay (ADR-0004 / COL-001..005).
  * Stream-neutral: no v5/v6 wire dependency.
  */
 #ifndef NYTP_TYPES_H

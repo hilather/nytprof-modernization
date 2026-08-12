@@ -33,6 +33,11 @@ typedef struct nytp_counting_stats {
     nytp_depth last_depth;
     char last_subname[128];
     size_t last_subname_len;
+    /* Last src_line text (for SV-lifetime / arena-copy tests; COL-005). */
+    char last_src_text[128];
+    size_t last_src_text_len;
+    nytp_fid last_src_fid;
+    nytp_line last_src_line;
     /* Seq + kind rings (logical emits only; filled post-commit). */
     nytp_seq seq_ring[NYTP_COUNTING_SEQ_RING];
     nytp_event_kind kind_ring[NYTP_COUNTING_SEQ_RING];

@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# COL-001..003 / PR-B02+B03 — collector sink + lifecycle/seq + fake-clock smoke.
+# COL-001..005 / PR-B02..B04 — collector sink + lifecycle/seq + batch/fast + fake-clock smoke.
 #
 # When a C toolchain is present: build + unit-test the overlay sink.
 # When absent: honest skip (offline_gate remains green).
@@ -21,7 +21,7 @@ ok() { printf 'OK: %s\n' "$*"; }
 fail() { printf 'ERROR: %s\n' "$*" >&2; exit 1; }
 banner() { printf '\n=== %s ===\n' "$*"; }
 
-banner "collector_sink_smoke (COL-001..003 + fake-clock scaffold)"
+banner "collector_sink_smoke (COL-001..005 + fake-clock scaffold)"
 
 # ---------------------------------------------------------------------------
 # Tree present (this smoke is only meaningful after PR-B02 lands sources)
@@ -30,9 +30,12 @@ banner "collector_sink_smoke (COL-001..003 + fake-clock scaffold)"
 [[ -f "$MAKEFILE" ]] || fail "missing $MAKEFILE"
 [[ -f "$COLLECTOR/include/nytp_sink.h" ]] || fail "missing nytp_sink.h"
 [[ -f "$COLLECTOR/include/nytp_clock.h" ]] || fail "missing nytp_clock.h (PR-B03)"
+[[ -f "$COLLECTOR/include/nytp_batch.h" ]] || fail "missing nytp_batch.h (PR-B04)"
+[[ -f "$COLLECTOR/include/nytp_event.h" ]] || fail "missing nytp_event.h (PR-B04)"
 [[ -f "$COLLECTOR/src/nytp_sink_v5.c" ]] || fail "missing stub v5 adapter"
 [[ -f "$COLLECTOR/src/nytp_clock.c" ]] || fail "missing nytp_clock.c"
-ok "collector/ overlay tree present (B0-A; COL-001..003)"
+[[ -f "$COLLECTOR/src/nytp_batch.c" ]] || fail "missing nytp_batch.c (PR-B04)"
+ok "collector/ overlay tree present (B0-A; COL-001..005)"
 
 # ---------------------------------------------------------------------------
 # Isolation: never put collector/ (or crates/) on oracle PERL5LIB
@@ -123,16 +126,20 @@ make -C "$COLLECTOR" test CC="$CC_BIN"
 [[ -x "$COLLECTOR/build/test_sink_api" ]] || fail "test binary missing after make test"
 [[ -x "$COLLECTOR/build/test_lifecycle_seq" ]] || fail "test_lifecycle_seq missing"
 [[ -x "$COLLECTOR/build/test_fake_clock" ]] || fail "test_fake_clock missing"
+[[ -x "$COLLECTOR/build/test_batch_fast" ]] || fail "test_batch_fast missing (PR-B04)"
 # Re-run shipped binaries once more (entry points, not reimplementations).
 "$COLLECTOR/build/test_sink_api"
 "$COLLECTOR/build/test_lifecycle_seq"
 "$COLLECTOR/build/test_fake_clock"
-ok "collector unit tests (sink + lifecycle/seq + fake-clock mini M4)"
+"$COLLECTOR/build/test_batch_fast"
+ok "collector unit tests (sink + lifecycle/seq + fake-clock mini M4 + batch/fast)"
 
 # Residual honesty banner (do not claim wire, full M4, or COL-007).
 echo "NOTE: stub v5 adapter does not encode wire bytes (COL-006); COL-007 not implemented"
 echo "NOTE: M4 mini sample only — full oracle corpus under fake-clock needs COL-006 + complete TEST-003"
+echo "NOTE: batch light microbench is engineering only — not BENCH-003/006 certification"
+echo "NOTE: flush/compression discount timing vs BASE-003 remains residual"
 
 banner "collector_sink_smoke PASSED"
-ok "COL-001..003 + fake-clock scaffold build + isolation"
+ok "COL-001..005 + fake-clock scaffold build + isolation"
 exit 0
