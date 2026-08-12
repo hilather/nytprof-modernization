@@ -78,7 +78,8 @@ Plan COL-007 listed dependencies **FMT-002 through FMT-010**. This program **imp
 8. **COL-015 depth:** full TEST-018 oracle forkdepth/addpid/merge corpus; mid-deflate continue-in-child; product option wiring — residual beyond MVP stress suite.
 9. **SEC-002** continuous fuzz / **SEC-012** release review — residual beyond offline SEC-FUZZ package.
 10. **Public P1–P4** certification — residual (methodology + light harness only; claims waived).
-11. **R3/R4** product default flips — **not started**.
+11. **R3/R4** product default flips — policy ADRs when present; **runtime flips not executed** on this residual honesty baseline.
+12. **R5** retirement — **governance only** (ADR-0009); **no component retired**.
 
 ## First-slice vs full-R1 vs R0–R5 (honesty)
 
@@ -88,7 +89,8 @@ Plan COL-007 listed dependencies **FMT-002 through FMT-010**. This program **imp
 | Full product R1 | **Not complete** on this branch’s residual table (FFI/XS Data, full nytprofhtml DOM, multi-OS CI, perf cert, R3 engine default — Track A may close some on other branches) |
 | **R2-preview** v6 opt-in | **Ready (opt-in only)** — packaging honesty PR-B13; convert/merge residual at that cut alone |
 | **R2-stable** | **Ready (PR-C05 honesty cut)** — convert/merge/salvage green; COL-015 MVP; SEC-FUZZ offline package; P1/P2 methodology (public claims waived); E3-mixed / full oracle E4 / full TEST-018 / SEC-002 residual |
-| R3–R5 defaults / retirement | **Not started** |
+| R3–R4 defaults | Policy ADRs when present; **runtime flips not executed** on this residual honesty baseline |
+| R5 retirement | **Governance accepted** ([ADR-0009](https://github.com/hilather/nytprof-modernization/blob/main/docs/adrs/0009-r5-legacy-retirement-governance.md)); **no component retired** (never automatic) |
 
 ## Non-claims
 
@@ -101,7 +103,8 @@ Do **not** treat this document as:
 - COL-008 done;
 - E3-mixed / full oracle E4 complete;
 - public performance certification (P1–P4 SLOs);
-- R3 or R4 claims;
+- R3 or R4 **runtime** default-flip claims;
+- R5 **component** retirement claims (governance-only ADR-0009 is not removal);
 - full R1 HTML/XS/FFI or multi-OS CI (unless closed elsewhere with evidence).
 
 Wire **numeric IDs** for major=6 **are** frozen (ADR-0006). Production writer backend is **C** (ADR-0007). Those claims are **not** “product dual-equality complete.”

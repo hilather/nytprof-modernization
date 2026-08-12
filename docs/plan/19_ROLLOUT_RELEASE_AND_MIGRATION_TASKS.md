@@ -219,17 +219,17 @@ Introduce native reporting and v6 collection in reversible stages while preservi
 
 ### REL-012 - Run legacy retirement/deprecation review
 
-- **Status:** deferred
+- **Status:** deferred (execution); **governance ready** via [ADR-0009](https://github.com/hilather/nytprof-modernization/blob/main/docs/adrs/0009-r5-legacy-retirement-governance.md) + [`docs/R5_RETIREMENT_REVIEW.md`](https://github.com/hilather/nytprof-modernization/blob/main/docs/R5_RETIREMENT_REVIEW.md) (**PR-F01** / ADR-Q026)
 - **Size:** XL
-- **Dependencies:** sustained R4 field use, ADR-Q026
+- **Dependencies:** sustained R4 field use, ADR-Q026 (governance answered; component ADRs still required per retirement)
 - **Suggested owner:** ecosystem/release review group
 - **Goal:** Evaluate components independently rather than assuming removal.
 - **Work:**
   - Measure usage/platform need/security/maintenance cost for legacy report engine, reader, writer, v5 format, and old Perl tiers.
-  - Propose no change, narrower installation, deprecation, or retirement per component.
+  - Propose no change, narrower installation, deprecation, or retirement per component (catalog IDs in ADR-0009).
   - Provide migration tooling, warning period, support end, and archival reader guarantees.
-- **Deliverables:** component-specific ADRs and deprecation plans if any.
-- **Acceptance:** No component is removed solely because native/v6 exists.
+- **Deliverables:** component-specific ADRs and deprecation plans if any; review packets per `R5_RETIREMENT_REVIEW.md`.
+- **Acceptance:** No component is removed solely because native/v6 exists; **absence of retirement is valid success**.
 - **Regression gate:** v5 archival readability requires an explicit long-term policy.
 
 ### REL-013 - Final modernization program review

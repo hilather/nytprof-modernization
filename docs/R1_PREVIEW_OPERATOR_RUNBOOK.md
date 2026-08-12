@@ -1,8 +1,8 @@
 # R1-preview operator runbook (offline R0 / R1-preview)
 
-**Status:** operator-facing consolidation of the offline R0 / R1-preview stack  
-**Board ID:** `R1-PREVIEW-RUNBOOK` (honesty sync: `R1-HONESTY-SYNC`)  
-**Date:** 2026-08-07  
+**Status:** operator-facing consolidation of the offline R0 / R1-preview stack + **full R1 MVP product cut** honesty (PR-A10)  
+**Board ID:** `R1-PREVIEW-RUNBOOK` (honesty sync: `R1-HONESTY-SYNC`; full cut: `R1-FULL-READINESS-CUT`)  
+**Date:** 2026-08-11  
 **Gate:** done **before COL-007** (C v6 writer)
 
 ---
@@ -14,7 +14,8 @@ This runbook is the single operator entry for **offline developer preview** of t
 | Level | Meaning here |
 |-------|----------------|
 | **R0** | Developer preview (experimental / opt-in tools). No product default change. See [PROGRAM_CHARTER.md](https://github.com/hilather/nytprof-modernization/blob/main/docs/PROGRAM_CHARTER.md). |
-| **R1-preview** | Opt-in **native v5 read/report** path + pure-Perl dump-JSONL query facade. Not a full charter **R1** product claim. |
+| **R1-preview** | Opt-in **native v5 read/report** path + pure-Perl dump-JSONL query facade. |
+| **Full R1 (MVP product scope)** | Phase A product cut per [ADR-0003](https://github.com/hilather/nytprof-modernization/blob/main/docs/adrs/0003-r1-full-residual-policy.md) + [RELEASE_NOTES_R1.md](https://github.com/hilather/nytprof-modernization/blob/main/docs/RELEASE_NOTES_R1.md) (**PR-A10**): FFI/XS **MVP closed**, HTML A01/A02 closed (A03 flame residual), multi-OS MVP, packaging depth, public perf **waived**. **Not** complete residual-table close. |
 
 **This is not:**
 
@@ -23,10 +24,15 @@ This runbook is the single operator entry for **offline developer preview** of t
 - full oracle **`nytprofhtml` DOM** / CSS / tablesorter / flame / Graphviz parity;
 - CLI **v6 default** / collection default format flip (collection remains v5 until R4); E3-mixed multi-kind C fixtures; **COL-008** batched Rust writer (COL-007 product E3-EVENT **and** major=6 wire freeze ADR-0006 are **done**);
 - performance certification or public perf claims;
+- a CPAN upload or full **BUILD-003** XS dual-build certification;
+- full **RUST-010** beyond open/query/close MVP, or full **COMPAT-007 / pure-XS** Data materialization (thin product Data/ReadStream MVP is shipped under **PERL-XS-DATA-READSTREAM-MVP**);
+- full oracle **`nytprofhtml` DOM** / tablesorter / flame / Graphviz parity (A01/A02 MVP HTML only; A03 flame open; WAIVE classes residual);
+- **v6** wire freeze, CLI v6 default, or **COL-007** C v6 writer;
+- performance certification or public perf SLOs (**A09 default = WAIVE**);
 - permission to flip product defaults (`engine=auto` as R3 product default, format defaults — charter R3/R4).
 
 **Ready vs residual freeze:**  
-[R1_RESIDUAL_READINESS_MATRIX_v0.md](https://github.com/hilather/nytprof-modernization/blob/main/docs/contracts/R1_RESIDUAL_READINESS_MATRIX_v0.md)
+[R1_RESIDUAL_READINESS_MATRIX_v0.md](https://github.com/hilather/nytprof-modernization/blob/main/docs/contracts/R1_RESIDUAL_READINESS_MATRIX_v0.md) (§ Residual for full R1 + § Full R1 ready)
 
 **Isolation rule (always):** never put `crates/`, candidate `perl/`, or `collector/` (incl. `collector/install/`) on oracle `PERL5LIB`. Oracle tools use `baseline/6.15/install` only.
 
@@ -49,19 +55,36 @@ Policy: [BUILD_SUPPORT_POLICY.md](https://github.com/hilather/nytprof-modernizat
 
 | Step | What | Cargo / native |
 |------|------|----------------|
-| 1 | `cargo test -p nytprof-format-v5 -p nytprof-model -p nytprof-report -p nytprof-cli` | **Honest skip** if `cargo` / `crates/` absent |
+| 1 | `cargo test -p nytprof-format-v5 -p nytprof-format-v6 -p nytprof-model -p nytprof-report -p nytprof-cli -p nytprof-ffi` | **Honest skip** if `cargo` / `crates/` absent |
 | 2 | `./tools/oracle/selftest_harness.sh` | **Required** (dump parity, fail-closed, incomplete-stream, decode-fuzz, normalize, …) |
 | 3 | `./scripts/packaging/dual_path_smoke.sh` | **Primary packaging** — legacy always; native install when cargo present |
 | 4 | `./scripts/packaging/engine_auto_fallback_smoke.sh` | **Required** (Perl `engine=auto` prefer-native / fall-back-legacy) |
 | 5 | `./scripts/packaging/perl_jsonl_data_all_smoke.sh` | **Required** (pure-Perl JsonlData roll-up incl. DISCOUNT A3 + **SUB_ENTRY** multiplicity; golden JSONL; no cargo) |
+| 5b | `./scripts/packaging/perl_xs_data_readstream_smoke.sh` | **Required** (**PERL-XS-DATA-READSTREAM-MVP** / PR-A06: product `Data` / `ReadStream` over golden JSONL; binary via native dump when CLI present; thin materializer only — not COMPAT-007 / pure-XS wire decode) |
 | 6 | `./scripts/packaging/perl_query_json_smoke.sh` (+ JSON surface smokes 6b–6g) | **Required** (**CI-QUERY-JSON-GATE** / QUERY-JSON-MVP / QUERY-JSON-EXPAND; golden `--jsonl`; no cargo). Also **json_sub_entry** / **json_blocks** / **json_subdef_source** / **json_meta_files** / **json_time_block** / **json_file_basename** / **json_event_counts** / **json_total_basetime** (**JSON-FILE-BASENAME-MVP** / **JSON-EVENT-COUNTS-MVP** / **JSON-TOTAL-EVENTS-MVP** / **JSON-ATTR-BASETIME-MVP**: basename **workload.pl**, `total_events` **2474**, `attribute_basetime`) |
 | 7 | `./scripts/packaging/native_agg_json_smoke.sh` (+ stream + incomplete) | **Optional when native** (**NATIVE-AGG-JSON** **15/3/15**; **JSON-NATIVE-STREAM-MVP**; **JSON-REPORT-INCOMPLETE-FAILCLOSED** via `json_report_incomplete_smoke.sh`) |
 | 8 | `./scripts/packaging/native_query_json_cross_smoke.sh` | **Optional when native** (**NATIVE-QUERY-JSON-CROSS** / **CROSS-EXPAND** / **CROSS-BLOCKS** / **CROSS-META** / **CROSS-TIMEBLOCK** / **CROSS-COUNTS** / **CROSS-TOTAL**: native `report --json` ↔ Perl `query --json` **15/3/15** + discount **818** + `sub_entry_events` **0** when both expose; calls2 **27**; blocks-calls1 **780**/**810**; `time_block_events` **0**/**916** when both expose; event counts **27/3/13/632/31** + `file_1_basename` when both expose; default-calls1 stream/PID + A9/A8 + greppable meta when both expose) |
 | 9 | `./scripts/packaging/capability_selftest_smoke.sh` | Run when cargo **or** `prefix`/`target` native CLI (or `$NYTPROF_NATIVE_CLI`); **honest skip** otherwise (**CI-CAPABILITY-GATE**) |
 | 10 | `./scripts/packaging/collector_sink_smoke.sh` | **COL-001..007 + COL-014 dual (test/dev-only OQ-4)** — isolation always; `make -C collector test` when CC; honest skip without C. |
 | 11 | `./tools/oracle/e3_c_writer_parity.sh` | **COL-007 product E3-EVENT** (when cargo): C fixtures `fixtures/v6/from-c/**` + `e3_c_*`; E3-mixed residual; honest skip without cargo (fixture presence still checked). |
+| 12 | `./scripts/packaging/e4_v5_v6_semantic_smoke.sh --full` | When native CLI available (**E4 product CLI** on dual-sink pairs); honest skip otherwise; dual-sink fixture presence still required; full oracle dual residual (TEST-008) |
 
-Not part of this gate (document only): broader `./scripts/packaging/packaging_gate.sh`, `./scripts/packaging/makemaker_dual_path_smoke.sh`. Not multi-OS CI (**BUILD-006**).
+Not part of this gate (document only): broader `./scripts/packaging/packaging_gate.sh`, `./scripts/packaging/makemaker_dual_path_smoke.sh`. Multi-OS matrix entry is separate: `./scripts/ci/matrix_gate.sh` + GHA **BUILD-006-MVP** (not full **BUILD-006**).
+
+### Multi-OS matrix MVP (BUILD-006-MVP)
+
+```sh
+# Same offline gate on this host after ensuring a host-local oracle pin
+./scripts/ci/matrix_gate.sh
+```
+
+| Piece | Path |
+|-------|------|
+| Matrix entry | [scripts/ci/matrix_gate.sh](https://github.com/hilather/nytprof-modernization/blob/main/scripts/ci/matrix_gate.sh) |
+| GHA workflow | [.github/workflows/ci-matrix.yml](https://github.com/hilather/nytprof-modernization/blob/main/.github/workflows/ci-matrix.yml) |
+| Policy | [BUILD_SUPPORT_POLICY.md](https://github.com/hilather/nytprof-modernization/blob/main/docs/BUILD_SUPPORT_POLICY.md) § Multi-OS CI matrix MVP |
+
+GHA matrix rows: **ubuntu-latest** (`linux-x86_64`) + **macos-latest** (`macos-arm64`; current GitHub macOS runners are Apple Silicon). Honest skips inside `offline_gate.sh` are unchanged. This is **not** full multi-Perl / multi-rustc / Windows certification.
 
 ---
 
@@ -102,8 +125,8 @@ cargo run -q -p nytprof-cli -- capability --json
 ./scripts/packaging/capability_selftest_smoke.sh
 ```
 
-Expect (human): `OK: native capability self-test`, `decode: yes`, `report: yes`, `verify: yes`, `convert: yes`, `merge: yes`, `repack: yes`, `salvage: yes`.  
-Expect (JSON): `ok` / `decode` / `report` / `verify` / `convert` / `merge` / `repack` / `salvage` true; `profile_ok` non-null when the default golden fixture is found.
+Expect (human): `OK: native capability self-test`, `decode: yes`, `report: yes`, `verify: yes`, plus E5 honesty `v6_decode: yes` / `v6_report: yes` / `convert: yes` / `merge: yes` / `repack: yes` / `salvage: yes` / `collection_default: v5`; `profile_ok` / `v6_profile_ok` non-skip when the default v5 / dual-sink v6 fixtures resolve.  
+Expect (JSON): `ok` / `decode` / `report` / `verify` / `v6_decode` / `v6_report` / `convert` / `merge` / `repack` / `salvage` true; `collection_default` `"v5"`; `profile_ok` non-null when the default v5 golden is found; `v6_profile_ok` non-null when `fixtures/e4/dual-sink/default_calls1_v6.nytprof` resolves.
 
 Strict convert (PR-C01; integer-tick dual-sink / representable streams):
 
@@ -128,6 +151,8 @@ Schema: [convert-strict-mvp-v0.md](https://github.com/hilather/nytprof-moderniza
 Schema: [merge-repack-salvage-mvp-v0.md](https://github.com/hilather/nytprof-modernization/blob/main/docs/schemas/merge-repack-salvage-mvp-v0.md)
 
 Schema: [capability-selftest-mvp-v0.md](https://github.com/hilather/nytprof-modernization/blob/main/docs/schemas/capability-selftest-mvp-v0.md)
+
+Schema: [capability-selftest-mvp-v0.md](https://github.com/hilather/nytprof-modernization/blob/main/docs/schemas/capability-selftest-mvp-v0.md) (E5 fields); [cli-e5-v6-opt-in-mvp-v0.md](https://github.com/hilather/nytprof-modernization/blob/main/docs/schemas/cli-e5-v6-opt-in-mvp-v0.md)
 
 ### Native aggregates JSON (NATIVE-AGG-JSON)
 
@@ -242,7 +267,7 @@ perl -Iperl/lib perl/bin/nytprof-engine --engine=native callgrind \
 | Engine | Behavior |
 |--------|----------|
 | `native` | Subprocess to `nytprof-cli`; missing CLI → **fail** (no silent legacy) |
-| `auto` | **Perl facade:** prefer native, fall back to legacy + STDERR note; **not** charter R3 product default flip. Pure-Rust `nytprof-cli` still maps `auto` → `native`. |
+| `auto` | **Perl facade:** prefer native, fall back to legacy + STDERR note; **not** charter R3 product default (omit still → `native` until gated flip). Policy: [ADR-0005](https://github.com/hilather/nytprof-modernization/blob/main/docs/adrs/0005-r3-engine-auto-default-promotion.md). Pure-Rust `nytprof-cli` still maps `auto` → `native`. |
 | `legacy` | Oracle install-only `PERL5LIB` + stream dump smoke |
 
 Smokes:
@@ -338,18 +363,69 @@ Stream bridge: [perl-jsonl-readstream-mvp-v0.md](https://github.com/hilather/nyt
 |-----|------|
 | [REPORT_SURFACE_CONTRACT_v0.md](https://github.com/hilather/nytprof-modernization/blob/main/docs/contracts/REPORT_SURFACE_CONTRACT_v0.md) | Advertised native report/export/verify surfaces + frozen semantic counts |
 | [R1_RESIDUAL_READINESS_MATRIX_v0.md](https://github.com/hilather/nytprof-modernization/blob/main/docs/contracts/R1_RESIDUAL_READINESS_MATRIX_v0.md) | Offline R0 / R1-preview **ready** vs residual full R1 |
-| [REPORT_HTML_RESIDUAL_INVENTORY_v0.md](https://github.com/hilather/nytprof-modernization/blob/main/docs/contracts/REPORT_HTML_RESIDUAL_INVENTORY_v0.md) | Oracle `nytprofhtml` vs native HTML artifact residual honesty |
+| [REPORT_HTML_RESIDUAL_INVENTORY_v0.md](https://github.com/hilather/nytprof-modernization/blob/main/docs/contracts/REPORT_HTML_RESIDUAL_INVENTORY_v0.md) | Oracle `nytprofhtml` vs native HTML artifact residual honesty + full R1 CLOSE/WAIVE map |
+| [0003-r1-full-residual-policy.md](https://github.com/hilather/nytprof-modernization/blob/main/docs/adrs/0003-r1-full-residual-policy.md) | **ADR-0003** full R1 residual policy (HTML class map + **OQ-2** FFI/XS → CLOSE) |
+| [RELEASE_NOTES_R1.md](https://github.com/hilather/nytprof-modernization/blob/main/docs/RELEASE_NOTES_R1.md) | Full R1 MVP product cut release notes (PR-A10) |
 | [BUILD_SUPPORT_POLICY.md](https://github.com/hilather/nytprof-modernization/blob/main/docs/BUILD_SUPPORT_POLICY.md) | Dual-path packaging + offline gate policy |
 | [FIRST_SLICE_BOARD.md](https://github.com/hilather/nytprof-modernization/blob/main/docs/FIRST_SLICE_BOARD.md) | Ordered board (this runbook = `R1-PREVIEW-RUNBOOK`) |
 | [RELEASE_NOTES_R2_PREVIEW.md](https://github.com/hilather/nytprof-modernization/blob/main/docs/RELEASE_NOTES_R2_PREVIEW.md) | R2-preview packaging notes (v6 **opt-in only**; COL-009 / ADR-0007) |
 | [DUAL_EQUALITY_READINESS_v0.md](https://github.com/hilather/nytprof-modernization/blob/main/docs/contracts/DUAL_EQUALITY_READINESS_v0.md) | Dual-equality E1–E5 readiness checklist |
 | [PROGRAM_CHARTER.md](https://github.com/hilather/nytprof-modernization/blob/main/docs/PROGRAM_CHARTER.md) | R0–R5 levels and non-goals |
+| [R3_FIELD_WINDOW.md](https://github.com/hilather/nytprof-modernization/blob/main/docs/R3_FIELD_WINDOW.md) | R3 field-window evidence pack (PR-D01; **no** runtime default flip) |
+| [0005-r3-engine-auto-default-promotion.md](https://github.com/hilather/nytprof-modernization/blob/main/docs/adrs/0005-r3-engine-auto-default-promotion.md) | **ADR-0005** R3 promotion policy (PR-D02; flip **not** executed) |
+| [R3_DEFAULT_FLIP.md](https://github.com/hilather/nytprof-modernization/blob/main/docs/R3_DEFAULT_FLIP.md) | R3 flip execution + rollback checklist (gated on accepted field report) |
+| [0009-r5-legacy-retirement-governance.md](https://github.com/hilather/nytprof-modernization/blob/main/docs/adrs/0009-r5-legacy-retirement-governance.md) | **ADR-0009** R5 retirement governance (PR-F01; **no** component retired) |
+| [R5_RETIREMENT_REVIEW.md](https://github.com/hilather/nytprof-modernization/blob/main/docs/R5_RETIREMENT_REVIEW.md) | R5 per-component review + retirement checklist (never automatic) |
 
 ---
 
 ## 7. Explicit residual honesty
 
-Do **not** claim these under offline R0 / R1-preview (full-R1 residuals; `R1-HONESTY-SYNC`):
+### 7.1 Full R1 MVP product cut (PR-A10)
+
+Per [ADR-0003](https://github.com/hilather/nytprof-modernization/blob/main/docs/adrs/0003-r1-full-residual-policy.md) and residual matrix § **Full R1 ready**:
+
+| Area | Full R1 cut status | Do not claim |
+|------|--------------------|--------------|
+| **FFI (OQ-2 / A05)** | **closed (MVP)** — `crates/nytprof-ffi` open/query/close | full RUST-010 (batch APIs, BUILD-007, production dylib install, ABI freeze) |
+| **XS Data/ReadStream (OQ-2 / A06)** | **closed (MVP)** — binary via native dump → Jsonl* | COMPAT-007 bless-array; pure-XS wire decode |
+| **HTML A01/A02** | **closed (MVP)** — shared CSS/structure; `index-subs-excl.html` | full oracle DOM |
+| **HTML Shared JS** | **OPEN residual (CLOSE path)** — A01 CSS-only; tablesorter/jquery not shipped | Shared JS/tablesorter as native-ready |
+| **HTML A03 flame** | **residual open** | native flame SVG / site flame inputs as ready |
+| **HTML WAIVE classes** | **waived** (residual-honest) | Graphviz, treemap, block/sub pages, oracle naming as native-ready |
+| **Multi-OS (A07)** | **closed (MVP)** — GHA Linux + macOS | full multi-Perl/rustc/Windows certification |
+| **Packaging (A08)** | **closed (depth MVP)** | full BUILD-003 XS CPAN dual-build |
+| **Public perf (A09)** | **WAIVED** | public SLOs / “% faster” / certified P3–P4 |
+| **COL-007 / wire freeze / CLI v6 default** | **OUT-OF-R1** | product v6 writer or default v6 CLI report |
+| **R3/R4 defaults** | **OUT-OF-R1** | product default engine/format **runtime** flip |
+| **R3 field-window pack (PR-D01)** | **instrumentation only** — collect local evidence packs; **does not** flip defaults | treating packs as flip authorization |
+| **R3 default policy (PR-D02 / ADR-0005)** | **policy accepted**; flip **not executed** — [R3_DEFAULT_FLIP.md](https://github.com/hilather/nytprof-modernization/blob/main/docs/R3_DEFAULT_FLIP.md) | claiming R3 complete or changing omitted-engine default without accepted promote report |
+| **R5 retirement governance (PR-F01 / ADR-0009)** | **governance accepted**; **no component retired** — [R5_RETIREMENT_REVIEW.md](https://github.com/hilather/nytprof-modernization/blob/main/docs/R5_RETIREMENT_REVIEW.md) | claiming legacy removed/deprecated, or treating R3/R4 success as retirement authorization |
+
+Release notes: [RELEASE_NOTES_R1.md](https://github.com/hilather/nytprof-modernization/blob/main/docs/RELEASE_NOTES_R1.md).
+
+### 7.1.1 R3 field window + default policy (post-cut; runtime flip gated)
+
+After the full R1 MVP cut, operators may collect **local** field evidence for `engine=auto` product default promotion **without** changing defaults:
+
+```sh
+./scripts/field/r3_field_window_collect.sh --out /tmp/r3-field-pack
+./scripts/field/r3_field_window_smoke.sh   # fixture layout + honesty smoke
+```
+
+| Doc / tool | Path |
+|------------|------|
+| Guide | [R3_FIELD_WINDOW.md](https://github.com/hilather/nytprof-modernization/blob/main/docs/R3_FIELD_WINDOW.md) |
+| Report template | [templates/R3_FIELD_WINDOW_REPORT.md](https://github.com/hilather/nytprof-modernization/blob/main/docs/templates/R3_FIELD_WINDOW_REPORT.md) |
+| Pack schema | [schemas/r3-field-window-mvp-v0.md](https://github.com/hilather/nytprof-modernization/blob/main/docs/schemas/r3-field-window-mvp-v0.md) |
+| Promotion policy ADR | [0005-r3-engine-auto-default-promotion.md](https://github.com/hilather/nytprof-modernization/blob/main/docs/adrs/0005-r3-engine-auto-default-promotion.md) (**accepted policy**; flip not executed) |
+| Flip + rollback checklist | [R3_DEFAULT_FLIP.md](https://github.com/hilather/nytprof-modernization/blob/main/docs/R3_DEFAULT_FLIP.md) |
+
+**Not** charter R3 completion. Product default remains omit→`native` until an accepted field report recommends **Promote** and the flip checklist is executed. Operator escape hatch (always): `--engine=legacy` / `NYTPROF_ENGINE=legacy`.
+
+### 7.2 Offline R0 / R1-preview residual honesty (`R1-HONESTY-SYNC`)
+
+Do **not** over-claim preview surfaces as complete product residual-table close. Preview **does** include the Phase A MVPs above when cargo/native is present.
 
 | Residual | Notes |
 |----------|--------|
@@ -360,11 +436,19 @@ Do **not** claim these under offline R0 / R1-preview (full-R1 residuals; `R1-HON
 | **No full MakeMaker XS CPAN dual-build** | Candidate `Makefile.PL` facade only (**BUILD-MAKEMAKER-OPT**), not BUILD-003 full. |
 | **No multi-OS CI matrix** | Single-host `offline_gate.sh` only (**BUILD-006** open). |
 | **No product default flip** | Native remains opt-in; Perl `engine=auto` is facade behavior, not charter R3 product default. |
-| **No convert / merge claim (R2-preview)** | Capability `convert`/`merge` stay **false** until Phase C tools green. |
+| **Convert / merge / salvage (R2-stable tooling)** | Capability `convert`/`merge`/`repack`/`salvage` **true** on integrated R2-stable stack (PR-C01/C02). |
+| **FFI / XS Data residual** | **FFI MVP (PR-A05 / `FFI-CDYLIB-MVP`):** `crates/nytprof-ffi` cdylib open/query/close C ABI over `ProfileModel` is shipped ([`docs/schemas/ffi-cdylib-mvp-v0.md`](https://github.com/hilather/nytprof-modernization/blob/main/docs/schemas/ffi-cdylib-mvp-v0.md)); panic-safe; dual-path still works **without** loading the dylib. **XS Data/ReadStream MVP (PR-A06 / `PERL-XS-DATA-READSTREAM-MVP`):** product `Devel::NYTProf::Data` + `::ReadStream` open **binary** profiles via native dump → JsonlData/JsonlReadStream ([`docs/schemas/perl-xs-data-readstream-mvp-v0.md`](https://github.com/hilather/nytprof-modernization/blob/main/docs/schemas/perl-xs-data-readstream-mvp-v0.md)); smoke `./scripts/packaging/perl_xs_data_readstream_smoke.sh`; `claims_compat007_shapes=0`. **Still residual:** full RUST-010; full PERL-004 pure-XS; full PERL-005 COMPAT-007. Preview primary = CLI subprocess + pure-Perl Jsonl* + product thin binary facades. |
+| **No full nytprofhtml DOM** | Native HTML is MVP summary / multi-file site (A01 CSS + A02 excl index) — not oracle DOM, Shared JS/tablesorter (**OPEN CLOSE residual**), flame SVG (A03 open), Graphviz. See HTML residual inventory + **ADR-0003** per-class map. |
+| **No v6 / COL-007** | No v6 wire freeze; C v6 writer (**COL-007**) deferred; COL-008 non-baseline. Collector remains 6.15 oracle / v5. Provisional `nytprof-format-v6` preflight only — **not** product writer / CLI v6 default. |
+| **No performance claims** | Public SLOs **WAIVED** (`docs/BENCH_NOTES.md`, `tools/bench/light_bench.sh` only). |
+| **No full MakeMaker XS CPAN dual-build** | **BUILD-MAKEMAKER-OPT** + **BUILD-003-DEPTH** partial only — **not** BUILD-003 full. |
+| **No full multi-OS CI matrix** | **BUILD-006-MVP** lands GHA **ubuntu-latest** (`linux-x86_64`) + **macos-latest** (`macos-arm64`) via `./scripts/ci/matrix_gate.sh`. Full multi-Perl / multi-rustc / Windows / dashboard remains residual. |
+| **No product default flip (runtime)** | Native remains product opt-in default (omit→`native`). Perl explicit `engine=auto` is facade prefer-native/fallback, not charter R3 completion. [ADR-0005](https://github.com/hilather/nytprof-modernization/blob/main/docs/adrs/0005-r3-engine-auto-default-promotion.md) freezes promotion criteria; field packs ([R3_FIELD_WINDOW.md](https://github.com/hilather/nytprof-modernization/blob/main/docs/R3_FIELD_WINDOW.md)) are evidence-only (`no_default_flip=true`). |
 
-Advertised preview **does** include native aggregates JSON (incl. **SUB_ENTRY**, stream/PID, A2 `time_block_events` **0**/**916**, A9/A8 samples, ATTRIBUTE/OPTION/file samples, and blocks A4/A4b greppable ints), pure-Perl query JSON, **JSON report incomplete fail-closed** (COMPAT-010), **native↔query JSON cross-parity** with **CROSS-EXPAND** / **CROSS-BLOCKS** / **CROSS-META** / **CROSS-TIMEBLOCK** (`sub_entry` on default-calls1 **0** + calls2 **27** + blocks **780**/**810** + `time_block_events` **0**/**916** + stream/PID + A9/A8 + greppable meta when native CLI present), and pure-Perl **SUB_ENTRY** event multiplicity — without promoting those to full R1 / CPAN / FFI readiness.
+Advertised surfaces **do** include native aggregates JSON (incl. **SUB_ENTRY**, stream/PID, A2 `time_block_events` **0**/**916**, A9/A8 samples, ATTRIBUTE/OPTION/file samples, blocks A4/A4b greppable ints), pure-Perl query JSON, **JSON report incomplete fail-closed**, **native↔query JSON cross-parity**, pure-Perl **SUB_ENTRY** multiplicity, **FFI open/query/close MVP**, **product Data/ReadStream thin binary path MVP**, multi-OS matrix MVP, and packaging depth — **without** promoting those to full residual-table close / CPAN / full RUST-010 / full COMPAT-007 / full oracle DOM / COL-007.
 
-Full residual table: [R1_RESIDUAL_READINESS_MATRIX_v0.md](https://github.com/hilather/nytprof-modernization/blob/main/docs/contracts/R1_RESIDUAL_READINESS_MATRIX_v0.md) § Residual for full R1.
+Full residual table: [R1_RESIDUAL_READINESS_MATRIX_v0.md](https://github.com/hilather/nytprof-modernization/blob/main/docs/contracts/R1_RESIDUAL_READINESS_MATRIX_v0.md) § Residual for full R1 + § Full R1 ready.  
+Policy ADR: [0003-r1-full-residual-policy.md](https://github.com/hilather/nytprof-modernization/blob/main/docs/adrs/0003-r1-full-residual-policy.md).
 
 ### 7b. R2-preview honesty (`R2-PREVIEW-READINESS-CUT`)
 
@@ -374,20 +458,20 @@ R2-preview is an **opt-in** horizon on top of the R0/R1-preview stack. Authorita
 |------------------------|--------|
 | Offline CLI on **v6** files (report/html/csv/… via magic) | **ready** (PR-B12 E5) |
 | Capability `v6_decode` / `v6_report` | **true** |
-| Capability `convert` / `merge` / `repack` / `salvage` | **true** on this R2-stable stack (PR-C01/C02; was false at PR-B13 preview cut) |
+| Capability `convert` / `merge` | **false** (residual) |
 | Collection default | **v5** (`collection_default: v5`) — **not** R4 |
 | COL-007 C writer E3-EVENT | **done** (PR-B09 — not packaging) |
 | COL-009 production writer backend | **C** reaffirmed (ADR-0007 / PR-B13) |
 | Wire freeze ADR-0006 | **done** |
 | E4 product smoke (offline_gate step 12) | **ready** on dual-sink scaled pairs |
 | Dual-path legacy without Cargo | **unchanged** |
-| R2-stable honesty cut | **done** (PR-C05); R3 / R4 still **not claimed**; lossy convert residual |
+| R2-stable / R3 / R4 / convert-merge product | **not claimed** |
 | Public P1/P2 performance certification | **waived** (methodology only; PR-C04) |
 
 ```sh
 # Capability honesty (E5)
 ./prefix/bin/nytprof-cli capability
-# Expect: v6_decode: yes; v6_report: yes; convert: no; merge: no; collection_default: v5
+# Expect: v6_decode: yes; v6_report: yes; convert: yes; merge: yes; repack: yes; salvage: yes; collection_default: v5
 
 # E4 product smoke when native present
 ./scripts/packaging/e4_v5_v6_semantic_smoke.sh --full
@@ -433,6 +517,22 @@ After the R2-stable cut, operators may collect **local** field evidence for `for
 | Flip + rollback checklist | [R4_DEFAULT_FLIP.md](https://github.com/hilather/nytprof-modernization/blob/main/docs/R4_DEFAULT_FLIP.md) |
 
 **Not** charter R4 completion. Product collection default remains **v5** (`collection_default: v5`) until an accepted field report recommends **Promote** and the flip checklist is executed. Packs must keep `collection_default: v5` and `no_default_flip: true`. Operator escape hatch (always retained after any future flip): force `format=v5` / convert `--to=v5`.
+
+### 7c.2 R5 retirement governance (optional; never automatic)
+
+Charter **R5** is **governance only** unless a later **per-component** ADR executes deprecation or removal:
+
+| Doc | Path |
+|-----|------|
+| Governance ADR | [0009-r5-legacy-retirement-governance.md](https://github.com/hilather/nytprof-modernization/blob/main/docs/adrs/0009-r5-legacy-retirement-governance.md) (**accepted policy**; **no component retired**) |
+| Review + retirement checklist | [R5_RETIREMENT_REVIEW.md](https://github.com/hilather/nytprof-modernization/blob/main/docs/R5_RETIREMENT_REVIEW.md) |
+
+**Binding residual honesty:**
+
+- R3/R4 product default flips (when/if executed) **retain** operator escapes (`--engine=legacy`, `format=v5`) and **do not** authorize path removal.
+- **No** legacy report engine, v5 reader/writer, dual-path install, or oracle CLI is removed or deprecation-timed by PR-F01.
+- **Absence of retirement is valid success** for the modernization program.
+- Any future retirement is **per-component** under REL-012 + a dedicated component ADR — never silent, never bulk-auto.
 
 ### `fixtures/v5/default-calls1` (leaf / mid)
 
@@ -540,6 +640,12 @@ Also on blocks-calls1 when asserted: leaf returns **15**, mid returns **3** (sam
 | `R1-PREVIEW-RUNBOOK` | done | this file (`docs/R1_PREVIEW_OPERATOR_RUNBOOK.md`) |
 | `R1-RESIDUAL-MATRIX` | done | [R1_RESIDUAL_READINESS_MATRIX_v0.md](https://github.com/hilather/nytprof-modernization/blob/main/docs/contracts/R1_RESIDUAL_READINESS_MATRIX_v0.md) |
 | `R1-HONESTY-SYNC` | **done** | matrix + this runbook advertise **NATIVE-QUERY-JSON-CROSS** / **CROSS-EXPAND** / **CROSS-BLOCKS** / **CROSS-META** / **CROSS-TIMEBLOCK** / **CROSS-COUNTS**, **JSON-EVENT-COUNTS-MVP**, **JSON-FILE-BASENAME-MVP** (absolute `file_1` volatile; basename greppable stable sample), **JSON-TIME-BLOCK-MVP**, **JSON-REPORT-INCOMPLETE-FAILCLOSED**, **JSON-SUB-ENTRY-MVP**, **JSON-BLOCKS-MVP**, **JSON-META-FILES-MVP**, + **PERL-SUB-ENTRY-JSONL** while listing full-R1 residuals (no production FFI/XS Data, no full nytprofhtml DOM, COL-007 E3-EVENT done with E3-mixed residual; no multi-OS CI, no perf claims). |
+| `R1-RESIDUAL-POLICY-ADR` | **done** (PR-A04 policy) | [ADR-0003](https://github.com/hilather/nytprof-modernization/blob/main/docs/adrs/0003-r1-full-residual-policy.md) — full R1 CLOSE/WAIVE map; **OQ-2** FFI/XS → CLOSE PR-A05/A06 (not waive); HTML per-class map. Preview residual honesty unchanged until close PRs land. |
+| `FFI-CDYLIB-MVP` | **done** (MVP; PR-A05) | [`docs/schemas/ffi-cdylib-mvp-v0.md`](https://github.com/hilather/nytprof-modernization/blob/main/docs/schemas/ffi-cdylib-mvp-v0.md); `crates/nytprof-ffi` + `include/nytprof_ffi.h`; `cargo test -p nytprof-ffi` (offline_gate step 1). OQ-2 product path; full RUST-010 residual remains. **Before COL-007.** |
+| `PERL-XS-DATA-READSTREAM-MVP` | **done** (MVP; PR-A06) | [`docs/schemas/perl-xs-data-readstream-mvp-v0.md`](https://github.com/hilather/nytprof-modernization/blob/main/docs/schemas/perl-xs-data-readstream-mvp-v0.md); `Devel::NYTProf::Data` + `::ReadStream` thin binary path; `./scripts/packaging/perl_xs_data_readstream_smoke.sh`. OQ-2 product path; full PERL-004/005 / COMPAT-007 residual remains. **Before COL-007.** |
+| `R1-HONESTY-SYNC` | **done** | matrix + this runbook advertise preview + Phase A product MVPs (FFI/XS Data, BUILD-006-MVP, BUILD-003-DEPTH, HTML A01/A02) while listing beyond-MVP residuals (full RUST-010 / PERL-004/005 / COMPAT-007; no full oracle DOM; A03 flame open; no v6/COL-007 product writer; no full multi-OS / full BUILD-003; public perf **WAIVED**). **Before COL-007.** |
+| `R1-FULL-READINESS-CUT` | **done** (PR-A10) | Full R1 **MVP product scope** honesty in matrix § Full R1 ready + this §7 + [RELEASE_NOTES_R1.md](https://github.com/hilather/nytprof-modernization/blob/main/docs/RELEASE_NOTES_R1.md). Does **not** claim COL-007, wire freeze, CLI v6 default, full oracle DOM, full BUILD-003, full RUST-010 beyond MVP. **Before COL-007.** |
+| `BUILD-006-MVP` | **done** | GHA `linux-x86_64` + `macos-arm64` + `./scripts/ci/matrix_gate.sh`; portable oracle hash; honest skips preserved; not full BUILD-006. **Before COL-007.** |
 | `NATIVE-QUERY-JSON-CROSS` | done | `scripts/packaging/native_query_json_cross_smoke.sh`; offline_gate step 8 when native |
 | `NATIVE-QUERY-JSON-CROSS-EXPAND` | done | same smoke: `sub_entry_events` **0** on default-calls1 when both expose; calls2-default **27** (fixture-scoped). **Before COL-007.** |
 | `NATIVE-QUERY-JSON-CROSS-BLOCKS` | **done** | same smoke: blocks-calls1 pair ×2 `line_calls_1_5` **780** / `block_line_calls_1_4` **810** equal native↔perl. **Before COL-007.** |
@@ -656,6 +762,8 @@ Also on blocks-calls1 when asserted: leaf returns **15**, mid returns **3** (sam
 | `FMT-V6-EVENT-BODY-SRC-LINE-NEW-FID-PROVISIONAL` | **done** | SRC_LINE + NEW_FID provisional event-body opcodes. Not full catalog freeze. Default `parse_chunk_frame` stays non-inflating. **Before full COL-007.** |
 | `FMT-V6-EVENT-BODY-SRC-LINE-NEW-FID-MVP` | **done** | Event-body SRC_LINE/NEW_FID + always-inflate EVENT/mixed tests. **Before full COL-007.** |
 | `FMT-V6-EVENT-BODY-PID-START-END-PROVISIONAL` | **done** | PID_START + PID_END provisional event-body opcodes. Not full catalog freeze / COL-015. Default `parse_chunk_frame` stays non-inflating. **Before full COL-007.** |
+| **No full continuous fuzz / SEC-012** | Offline package **SEC-FUZZ-HARDENING-MVP** (PR-C03) covers deterministic v5+v6 batteries + batch/fork threat catalogue — **not** SEC-002 continuous fuzz jobs, sanitizer matrices, or independent SEC-012 release sign-off. Contract: [`SECURITY_FUZZ_HARDENING_PACKAGE_v0.md`](https://github.com/hilather/nytprof-modernization/blob/main/docs/contracts/SECURITY_FUZZ_HARDENING_PACKAGE_v0.md). |
+| 12 | `./tools/oracle/selftest_security_fuzz.sh` | **SEC-FUZZ-HARDENING-MVP** (when cargo): v5+v6 decode-fuzz batteries + optional collector batch/fork unit suite; honest skip without cargo. **Not** full SEC-002 continuous fuzz; COL-015 residual. |
 | `FMT-V6-EVENT-BODY-PID-START-END-MVP` | **done** | Event-body PID_START/PID_END + always-inflate EVENT/mixed tests. **Before full COL-007.** |
 | `FMT-V6-EVENT-BODY-SUB-CALLERS-DISCOUNT-PROVISIONAL` | **done** | SUB_CALLERS + DISCOUNT provisional event-body opcodes. Not full catalog freeze / DISCOUNT accounting freeze. Default `parse_chunk_frame` stays non-inflating. **Before full COL-007.** |
 | `FMT-V6-EVENT-BODY-SUB-CALLERS-DISCOUNT-MVP` | **done** | Event-body SUB_CALLERS/DISCOUNT + always-inflate EVENT/mixed tests. **Before full COL-007.** |
@@ -679,7 +787,9 @@ Also on blocks-calls1 when asserted: leaf returns **15**, mid returns **3** (sam
 | `FMT-V6-EVENT-BODY-UNKNOWN-OPTIONAL-SKIP-MVP` | **done** | Length-framed unknown-optional skip + always-inflate EVENT/mixed tests (order+fields; SOURCE co-kind). **Before full COL-007.** |
 | `COL-001-SINK-MVP` | **done (scaffold)** | Overlay `collector/` semantic sink + counting + v5 wire; smoke offline_gate step 10; **not** live hooks |
 | `COL-014-DUAL-SINK-MVP` | **done (test/dev-only)** | Same-run dual fan-out v5+v6 (OQ-4 not product UX); `test_dual_sink`; schema `collector-dual-sink-mvp-v0.md`; full oracle dual residual; feeds E4-v0 model pairs |
-| `E4-V0-MODEL-SEMANTIC-MVP` | **done** | E4-v0 model-level v5↔v6 aggregates on dual-sink pairs; `e4_v0_*` tests + `e4_v5_v6_semantic_smoke.sh --model-only`; full oracle + product CLI residual (PR-B12b) |
+| `E4-V0-MODEL-SEMANTIC-MVP` | **done** | E4-v0 model-level v5↔v6 aggregates on dual-sink pairs; `e4_v0_*` tests + `e4_v5_v6_semantic_smoke.sh --model-only`; full oracle residual (TEST-008) |
+| `E4-PRODUCT-CLI-SMOKE-MVP` | **done** | E4 product CLI smoke: real CLIs on v5+v6 dual pairs; `e4_v5_v6_semantic_smoke.sh --full`; offline_gate step 12 when native; schema `e4-product-cli-smoke-mvp-v0.md` |
+| `CLI-E5-V6-OPT-IN-MVP` | **done** | CLI E5 report/html/csv/folded/callgrind on v6; capability `v6_decode`/`v6_report`; no convert/merge claim; `collection_default: v5`; schema `cli-e5-v6-opt-in-mvp-v0.md` |
 | `COL-002-LIFECYCLE-MVP` | **done (scaffold)** | Explicit sink lifecycle + emit gates; **not** COL-015 full fork/signal matrix |
 | `COL-003-SEQ-MVP` | **done (scaffold)** | Internal gapless logical seq; not on default v5 wire |
 | `COL-004-FAST-PATH-MVP` | **done (scaffold)** | No-alloc TIME_LINE/TIME_BLOCK batch append + `nytp_fast_emit_*`; light microbench engineering only — **not** BENCH cert |
@@ -734,7 +844,7 @@ Also on blocks-calls1 when asserted: leaf returns **15**, mid returns **3** (sam
 | `ADR-0002-V6-STRING-POOL-CANDIDATE` | **done** (proposed) | FOOTER string-pool ADR candidate. Not global pool; not COL-007. **Before full COL-007.** |
 | `E3-DUAL-EQUALITY-HARNESS-MVP` | **done** | E3 harness writer-bytes→decode equality (stand-in absolute/packing/string-dict/mid-stream). Stand-in **not** product dual-equality evidence. Not COL-007 C writer. **Before full COL-007.** |
 | `E4-V5-V6-SEMANTIC-EQUALITY-POLICY-PROVISIONAL` | **done** | E4 v5↔v6 semantic equality policy draft. E4-v0 model enforcement ready (PR-B10). |
-| `E4-V5-V6-SEMANTIC-EQUALITY-POLICY-MVP` | **done** | E4 policy honesty sync. E4-v0 model ready; full oracle + product CLI residual. |
+| `E4-V5-V6-SEMANTIC-EQUALITY-POLICY-MVP` | **done** | E4 policy honesty sync. E4-v0 model + E4 product CLI ready (PR-B12b / **E4-PRODUCT-CLI-SMOKE-MVP**); full oracle dual residual (TEST-008). |
 | `COL-007` | deferred | C v6 writer — unblocked for *start* after report-side evidence; not implemented by this runbook |
 
 ## Revision rule

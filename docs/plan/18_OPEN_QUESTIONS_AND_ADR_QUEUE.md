@@ -255,12 +255,12 @@ Record decisions that affect stable semantics, wire bytes, platform support, pac
 
 ### ADR-Q026 - Legacy code retirement policy
 
-- **Status:** deferred
+- **Status:** **governance answered** by [ADR-0009](https://github.com/hilather/nytprof-modernization/blob/main/docs/adrs/0009-r5-legacy-retirement-governance.md) (**PR-F01**); **no component retired**; component-specific deprecation/removal ADRs remain optional / deferred on evidence
 - **Blocks:** none for modernization
 - **Question:** Whether/when to retire legacy reader/report/writer or raise minimum Perl versions?
-- **Evidence required:** long-term native field use, platform/ecosystem usage, maintenance/security cost, migration coverage.
-- **Recommended direction:** no automatic retirement; separate decisions per component after deprecation.
-- **Decision must specify:** warning period, alternatives, support end, file-format longevity.
+- **Evidence required:** long-term native field use, platform/ecosystem usage, maintenance/security cost, migration coverage — pack via [R5_RETIREMENT_REVIEW.md](https://github.com/hilather/nytprof-modernization/blob/main/docs/R5_RETIREMENT_REVIEW.md)
+- **Recommended direction:** no automatic retirement; separate decisions per component after deprecation — **accepted in ADR-0009**; absence of retirement is valid success.
+- **Decision must specify:** warning period, alternatives, support end, file-format longevity — **process specified in ADR-0009** + per-component ADRs when (if ever) executed.
 
 ### BUILD-LAYOUT - Collector packaging / source-tree overlay (design-program OQ-8)
 
