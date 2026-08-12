@@ -125,6 +125,7 @@ When fixing a CI failure, also **harden** so the next release does not hit the s
 | **Local before push** | For release merges: at least `cargo test -p nytprof-format-v6 --lib`, `cargo test -p nytprof-cli --test cli_e5_v6 --test capability_selftest`, and `cargo clippy -p nytprof-cli -p nytprof-model -p nytprof-report --no-deps -- -D warnings`. Prefer `./scripts/ci/offline_gate.sh` when oracle pin time allows. |
 | **Clippy scope** | Prefer `-D warnings` on product CLI/model/report surfaces; preflight-heavy crates (e.g. format-v6) and C-ABI FFI raw pointers may stay outside `-D` until cleaned — document exceptions in the workflow comments. |
 | **Never trust bare `cargo fix`** | `cargo fix` / auto-import cleanup drops imports that are **only** used under `#[cfg(test)]`, which breaks `cargo test -p … --lib` (and thus `rust-smoke`) while `cargo check` still passes. Put test-only imports **inside** the `#[cfg(test)] mod tests` block; after any fix pass, re-run the local suite above before push. |
+| **Stack assemble must keep PR bodies** | Plain-git stack reassembly (`--theirs` / conflict mass-resolve) can keep **tests + schemas** while dropping **implementation** (e.g. HTML `--flame`, `index-subs-excl.html`, stderr style listing). Before tagging: run the full rust-smoke package list locally (`cargo test -p nytprof-cli …` includes `html_optional_flame`, `html_subs_excl`, `html_shared_css`). Do not ship a release when stack tip only “documents done.” |
 
 ### Suggested watch commands
 
