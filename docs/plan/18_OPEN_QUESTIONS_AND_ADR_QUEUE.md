@@ -237,12 +237,12 @@ Record decisions that affect stable semantics, wire bytes, platform support, pac
 
 ### ADR-Q024 - Native report default promotion criteria/field window
 
-- **Status:** deferred until opt-in release
-- **Blocks:** BUILD-014, BUILD-015, BENCH-013, TEST-020
-- **Question:** What release duration/usage/issue/performance evidence is sufficient for `auto` to prefer native reports?
-- **Evidence required:** R1 field data, platform success, fallback frequency, downstream reports, certifications.
-- **Recommended direction:** at least one stable opt-in cycle plus full required gates and rollback mechanism.
-- **Decision must specify:** eligible tiers and fallback policy.
+- **Status:** **criteria answered** by [ADR-0005](https://github.com/hilather/nytprof-modernization/blob/main/docs/adrs/0005-r3-engine-auto-default-promotion.md) (**PR-D02**); **product flip still gated** (not executed) until accepted field report recommends promote
+- **Blocks:** BUILD-014, BUILD-015, BENCH-013, TEST-020 (flip execution still blocked without field promote)
+- **Question:** What release duration/usage/issue/performance evidence is sufficient for `auto` to prefer native reports (and for product default to become `auto`)?
+- **Evidence required:** R1 field data, platform success, fallback frequency, downstream reports, certifications — pack via [R3_FIELD_WINDOW.md](https://github.com/hilather/nytprof-modernization/blob/main/docs/R3_FIELD_WINDOW.md); flip checklist [R3_DEFAULT_FLIP.md](https://github.com/hilather/nytprof-modernization/blob/main/docs/R3_DEFAULT_FLIP.md)
+- **Recommended direction:** at least one stable opt-in cycle plus full required gates and rollback mechanism — **accepted in ADR-0005**.
+- **Decision must specify:** eligible tiers and fallback policy — **specified in ADR-0005**; flip procedure + one-step force-legacy rollback in `docs/R3_DEFAULT_FLIP.md`.
 
 ### ADR-Q025 - v6 output default promotion criteria/field window
 

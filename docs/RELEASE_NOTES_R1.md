@@ -77,7 +77,7 @@ Do **not** advertise under this cut:
 7. **Full RUST-010** beyond open/query/close MVP (batch APIs, production dylib install, ABI freeze tooling).
 8. **COMPAT-007** bless-array fidelity or pure-XS binary decode without CLI.
 9. **Public performance SLOs** / certified P3–P4 package.
-10. **R3/R4 product default flips** (`engine=auto` as product default; format defaults).
+10. **R3/R4 product default flips** (`engine=auto` as product default; format defaults). R3 **policy** is [ADR-0005](https://github.com/hilather/nytprof-modernization/blob/main/docs/adrs/0005-r3-engine-auto-default-promotion.md) (PR-D02); **runtime flip not executed** — requires accepted field report + [R3_DEFAULT_FLIP.md](https://github.com/hilather/nytprof-modernization/blob/main/docs/R3_DEFAULT_FLIP.md).
 11. **CPAN upload** readiness.
 
 ---

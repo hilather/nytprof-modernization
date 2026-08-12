@@ -19,7 +19,7 @@ This package is the **field-window half** of Phase D:
 | Smoke | Fixture-backed check that the collector works | **yes** — [`scripts/field/r3_field_window_smoke.sh`](https://github.com/hilather/nytprof-modernization/blob/main/scripts/field/r3_field_window_smoke.sh) |
 | Report template | Human pack for multi-site review | **yes** — [`docs/templates/R3_FIELD_WINDOW_REPORT.md`](https://github.com/hilather/nytprof-modernization/blob/main/docs/templates/R3_FIELD_WINDOW_REPORT.md) |
 | Pack schema | Layout + machine-readable summary | **yes** — [`docs/schemas/r3-field-window-mvp-v0.md`](https://github.com/hilather/nytprof-modernization/blob/main/docs/schemas/r3-field-window-mvp-v0.md) |
-| Default-change ADR + product flip | PR-D02 / ADR-Q024 | **no** |
+| Default-change ADR + flip procedure | PR-D02 / ADR-Q024 / [ADR-0005](https://github.com/hilather/nytprof-modernization/blob/main/docs/adrs/0005-r3-engine-auto-default-promotion.md) | **policy landed** — flip **not** executed; see [`docs/R3_DEFAULT_FLIP.md`](https://github.com/hilather/nytprof-modernization/blob/main/docs/R3_DEFAULT_FLIP.md) |
 
 **Binding non-claims**
 
@@ -73,7 +73,7 @@ These are **engineering defaults for the report**, not a ratified REL-001 policy
 | Fallback bar | Document fallback frequency; fallback must not hide corruption |
 | Rollback bar | Document one-step force-legacy (`--engine=legacy` / `NYTPROF_ENGINE=legacy`) |
 
-Promotion itself is **PR-D02** (default-change ADR), not this package.
+Promotion policy is **[ADR-0005](https://github.com/hilather/nytprof-modernization/blob/main/docs/adrs/0005-r3-engine-auto-default-promotion.md)** (**PR-D02**); runtime flip is a later checklist in [`docs/R3_DEFAULT_FLIP.md`](https://github.com/hilather/nytprof-modernization/blob/main/docs/R3_DEFAULT_FLIP.md). **This package never flips defaults.**
 
 ---
 
@@ -118,15 +118,15 @@ Related facade smokes (already in offline gate; not substitutes for field packs)
 
 ## 6. Residual honesty
 
-| Claim | Status under PR-D01 |
-|-------|---------------------|
-| Field evidence **collection** tools + report template | **ready** |
-| R3 product default flip | **not** done — remains OUT-OF-R1 / charter R3 residual |
-| Default-change ADR (ADR-Q024 / PR-D02) | **not** this PR |
+| Claim | Status under PR-D01 + PR-D02 |
+|-------|------------------------------|
+| Field evidence **collection** tools + report template | **ready** (PR-D01) |
+| Default-change **policy** ADR (ADR-Q024 / ADR-0005) | **accepted (policy)** (PR-D02) |
+| R3 product default **runtime** flip | **not** executed — remains residual until flip checklist + accepted promote report |
 | R4 format default field window | separate PR-E01 package |
 | Public performance SLOs from field packs | **not** claimed |
 
-Residual matrix row: `engine=auto` product default flip remains **OUT-OF-R1** with pointer to this pack as **instrumentation only**.
+Residual matrix row: `engine=auto` product default flip remains **OUT-OF-R1** / flip-not-executed; this pack is **instrumentation only**.
 
 ---
 
@@ -140,7 +140,7 @@ The field window report is **accepted** when maintainers can answer yes to:
 4. Fallback when native is missing is documented and does not claim false native success.
 5. Report template completed with site list, duration, issue log, and recommendation (**promote** / **extend window** / **do not promote**).
 
-Only then may PR-D02 draft a default-change ADR. **This package never flips defaults.**
+Only then may maintainers run the flip checklist in [`docs/R3_DEFAULT_FLIP.md`](https://github.com/hilather/nytprof-modernization/blob/main/docs/R3_DEFAULT_FLIP.md) under [ADR-0005](https://github.com/hilather/nytprof-modernization/blob/main/docs/adrs/0005-r3-engine-auto-default-promotion.md). **This package never flips defaults.** Incomplete evidence → **do not flip**.
 
 ---
 
@@ -155,3 +155,5 @@ Only then may PR-D02 draft a default-change ADR. **This package never flips defa
 | Acceptance R3 criteria | https://github.com/hilather/nytprof-modernization/blob/main/docs/plan/16_ACCEPTANCE_CRITERIA_AND_DEFINITION_OF_DONE.md |
 | Rollout REL-005/006 | https://github.com/hilather/nytprof-modernization/blob/main/docs/plan/19_ROLLOUT_RELEASE_AND_MIGRATION_TASKS.md |
 | ADR-Q024 | https://github.com/hilather/nytprof-modernization/blob/main/docs/plan/18_OPEN_QUESTIONS_AND_ADR_QUEUE.md |
+| ADR-0005 (R3 promotion policy) | https://github.com/hilather/nytprof-modernization/blob/main/docs/adrs/0005-r3-engine-auto-default-promotion.md |
+| R3 flip / rollback procedure | https://github.com/hilather/nytprof-modernization/blob/main/docs/R3_DEFAULT_FLIP.md |

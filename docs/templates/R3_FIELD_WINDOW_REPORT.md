@@ -2,10 +2,11 @@
 
 **Status to fill:** draft | in-window | accepted | rejected  
 **Template version:** v0 (PR-D01)  
-**Does not flip defaults.** Promotion requires a separate default-change ADR (PR-D02 / ADR-Q024).
+**Does not flip defaults.** Promotion policy: [ADR-0005](https://github.com/hilather/nytprof-modernization/blob/main/docs/adrs/0005-r3-engine-auto-default-promotion.md) (PR-D02). Runtime flip only via [docs/R3_DEFAULT_FLIP.md](https://github.com/hilather/nytprof-modernization/blob/main/docs/R3_DEFAULT_FLIP.md) after this report is **accepted** with recommendation **Promote**. Incomplete evidence → do not flip.
 
 Guide: [docs/R3_FIELD_WINDOW.md](https://github.com/hilather/nytprof-modernization/blob/main/docs/R3_FIELD_WINDOW.md)  
 Pack schema: [docs/schemas/r3-field-window-mvp-v0.md](https://github.com/hilather/nytprof-modernization/blob/main/docs/schemas/r3-field-window-mvp-v0.md)  
+Flip procedure: [docs/R3_DEFAULT_FLIP.md](https://github.com/hilather/nytprof-modernization/blob/main/docs/R3_DEFAULT_FLIP.md)  
 Generic evidence bundle: [docs/plan/templates/EVIDENCE_BUNDLE_TEMPLATE.md](https://github.com/hilather/nytprof-modernization/blob/main/docs/plan/templates/EVIDENCE_BUNDLE_TEMPLATE.md)
 
 ---
@@ -96,7 +97,7 @@ Optional extra fixtures:
 | Fallback reasons (missing CLI / install / other) | |
 | Did fallback ever hide a corrupt profile as complete? | yes/no — evidence |
 | Force-legacy path verified (`--engine=legacy` / `NYTPROF_ENGINE=legacy`) | yes/no |
-| One-step rollback for a future default flip documented? | yes/no (plan only; not implemented here) |
+| One-step rollback for a future default flip documented? | yes/no — see [R3_DEFAULT_FLIP.md](https://github.com/hilather/nytprof-modernization/blob/main/docs/R3_DEFAULT_FLIP.md) (`--engine=legacy` / `NYTPROF_ENGINE=legacy`) |
 
 ---
 
@@ -150,9 +151,9 @@ Confirm each remains **true** for this report:
 
 | Option | Select one |
 |--------|------------|
-| **Promote** — draft PR-D02 default-change ADR | |
+| **Promote** — run flip checklist in [R3_DEFAULT_FLIP.md](https://github.com/hilather/nytprof-modernization/blob/main/docs/R3_DEFAULT_FLIP.md) under [ADR-0005](https://github.com/hilather/nytprof-modernization/blob/main/docs/adrs/0005-r3-engine-auto-default-promotion.md) (policy already landed; runtime flip is a separate change set) | |
 | **Extend window** — more sites / duration / fixes required | |
-| **Do not promote** — blockers listed above | |
+| **Do not promote** — blockers listed above; **do not** execute flip | |
 
 **Rationale (short):**
 

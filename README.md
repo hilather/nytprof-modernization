@@ -10,7 +10,9 @@ Hybrid modernization of [Devel::NYTProf](https://metacpan.org/dist/Devel-NYTProf
 | [`docs/PROGRAM_CHARTER.md`](https://github.com/hilather/nytprof-modernization/blob/main/docs/PROGRAM_CHARTER.md) | Mission, release levels, non-goals |
 | [`docs/FIRST_SLICE_BOARD.md`](https://github.com/hilather/nytprof-modernization/blob/main/docs/FIRST_SLICE_BOARD.md) | Ordered first-slice work board |
 | [`docs/RELEASE_NOTES_R1.md`](https://github.com/hilather/nytprof-modernization/blob/main/docs/RELEASE_NOTES_R1.md) | Full R1 MVP product cut release notes (PR-A10 honesty) |
-| [`docs/R3_FIELD_WINDOW.md`](https://github.com/hilather/nytprof-modernization/blob/main/docs/R3_FIELD_WINDOW.md) | R3 `engine=auto` field-window evidence pack (no default flip; PR-D01) |
+| [`docs/R3_FIELD_WINDOW.md`](https://github.com/hilather/nytprof-modernization/blob/main/docs/R3_FIELD_WINDOW.md) | R3 `engine=auto` field-window evidence pack (no runtime flip; PR-D01) |
+| [`docs/adrs/0005-r3-engine-auto-default-promotion.md`](https://github.com/hilather/nytprof-modernization/blob/main/docs/adrs/0005-r3-engine-auto-default-promotion.md) | **ADR-0005** R3 product default promotion policy (gated; flip not executed; PR-D02) |
+| [`docs/R3_DEFAULT_FLIP.md`](https://github.com/hilather/nytprof-modernization/blob/main/docs/R3_DEFAULT_FLIP.md) | R3 flip execution + rollback checklist |
 | [`docs/PHASE0_EXIT_CRITERIA.md`](https://github.com/hilather/nytprof-modernization/blob/main/docs/PHASE0_EXIT_CRITERIA.md) | Phase-0 “good enough” gates |
 | [`docs/plan/README.md`](https://github.com/hilather/nytprof-modernization/blob/main/docs/plan/README.md) | Full architecture + 206-task plan package |
 | [`docs/governance/COMPAT-000_RATIFICATION.md`](https://github.com/hilather/nytprof-modernization/blob/main/docs/governance/COMPAT-000_RATIFICATION.md) | Binding compatibility contract sign-off |
