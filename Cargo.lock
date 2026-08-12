@@ -161,6 +161,7 @@ name = "nytprof-model"
 version = "0.1.0"
 dependencies = [
  "nytprof-format-v5",
+ "nytprof-format-v6",
  "nytprof-types",
  "serde",
  "serde_json",

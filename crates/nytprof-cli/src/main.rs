@@ -37,8 +37,7 @@ use std::io::{self, Write};
 use std::path::{Path, PathBuf};
 use std::process;
 
-use nytprof_format_v5::decode_path;
-use nytprof_model::ProfileModel;
+use nytprof_model::{decode_events_from_path, ProfileModel};
 use nytprof_report::{
     render_callgrind, render_csv_report, render_edges_csv, render_folded_stacks,
     render_html_summary, render_subs_csv, render_summary_text, require_complete_stream,
@@ -393,7 +392,8 @@ fn resolve_capability_probe(forced: Option<&str>) -> Option<PathBuf> {
 }
 
 fn cmd_dump(path: &str) -> Result<(), Box<dyn std::error::Error>> {
-    let events = decode_path(path)?;
+    // Dual-dispatch v5/v6 product decode (same path as ProfileModel::from_path).
+    let events = decode_events_from_path(path)?;
     let stdout = io::stdout();
     let mut out = stdout.lock();
 

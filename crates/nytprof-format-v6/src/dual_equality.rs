@@ -19,7 +19,9 @@
 
 use crate::compressed_profile::OwnedEventRecord;
 use crate::decoded_event::{
-    decode_decoded_event_profile, decode_decoded_event_profile_with_string_dict,
+    decode_decoded_event_profile, decode_decoded_event_profile_auto_version,
+    decode_decoded_event_profile_auto_version_with_string_dict,
+    decode_decoded_event_profile_with_string_dict,
     encode_decoded_event_mid_stream_codec_switch_with_site_deltas_and_seq,
     encode_decoded_event_mid_stream_codec_switch_with_string_dict_and_site_deltas_and_seq,
     encode_decoded_event_profile, encode_decoded_event_profile_with_site_deltas_and_seq,
@@ -29,7 +31,77 @@ use crate::decoded_event::{
 };
 use crate::event_body::EventRecordSpec;
 use crate::string_dict::StringDictionary;
-use crate::SUPPORTED_MAJOR;
+use crate::{MAGIC, SUPPORTED_MAJOR};
+
+/// Profile wire family detected from file-prefix magic / text header.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ProfileWireKind {
+    /// Fixed-header `NYTPROF6` (provisional format v6).
+    V6,
+    /// Text header `NYTProf <major> <minor>` (format v5; major checked by v5 decoder).
+    V5,
+    /// Neither recognized product magic/header.
+    Unknown,
+}
+
+/// Detect product wire family from the leading bytes of a profile file.
+///
+/// - First 8 bytes equal [`MAGIC`] (`NYTPROF6`) → [`ProfileWireKind::V6`]
+/// - Leading text line starts with `NYTProf ` (v5 header form) → [`ProfileWireKind::V5`]
+/// - Otherwise [`ProfileWireKind::Unknown`] (callers fail closed)
+///
+/// Does **not** validate full headers or major version.
+pub fn detect_profile_wire_kind(buf: &[u8]) -> ProfileWireKind {
+    if buf.len() >= MAGIC.len() && &buf[..MAGIC.len()] == MAGIC.as_slice() {
+        return ProfileWireKind::V6;
+    }
+    // v5: first line `NYTProf <major> <minor>\n` (mixed case + space).
+    if let Some(nl) = buf.iter().position(|&b| b == b'\n') {
+        let line = &buf[..nl];
+        if line.starts_with(b"NYTProf ") {
+            return ProfileWireKind::V5;
+        }
+    } else if buf.starts_with(b"NYTProf ") {
+        // Incomplete single-line header still classifies as v5 for fail-closed decode.
+        return ProfileWireKind::V5;
+    }
+    ProfileWireKind::Unknown
+}
+
+/// Product always-inflate decode of a v6 EVENT profile for model/CLI ingest.
+///
+/// - Always-inflate EVENT chunks (optional CRC verify)
+/// - When FOOTER is a well-formed string dictionary, resolve string_ids (ADR-0002)
+/// - Auto-align body VERSION with fixed-header (inject when omitted)
+///
+/// Not a wire freeze; not full multi-kind SOURCE/INDEX/SUMMARY product path
+/// (E3-mixed residual). Default `parse_chunk_frame` remains non-inflating.
+pub fn product_decode_v6_event_profile(
+    wire: &[u8],
+    verify_crc: bool,
+) -> Result<E3Decoded, DecodedEventError> {
+    // Plain always-inflate first (fail-closed on corrupt EVENT body / CRC).
+    let (plain, n) = decode_decoded_event_profile_auto_version(wire, verify_crc)?;
+    if plain.has_footer {
+        // Prefer FOOTER string-dict resolve when the table is well-formed.
+        if let Ok((profile, dict, n2)) =
+            decode_decoded_event_profile_auto_version_with_string_dict(wire, verify_crc)
+        {
+            return Ok(E3Decoded {
+                profile,
+                dict: Some(dict),
+                bytes_consumed: n2,
+            });
+        }
+        // Footer present but not a resolvable dict table — keep plain records
+        // (inline string payloads only; unresolved string_ids stay as decoded).
+    }
+    Ok(E3Decoded {
+        profile: plain,
+        dict: None,
+        bytes_consumed: n,
+    })
+}
 
 /// Result of an E3 always-inflate decode of writer-produced bytes.
 #[derive(Debug)]
@@ -237,6 +309,44 @@ mod tests {
     use super::*;
     use crate::chunk::codec;
     use crate::string::FLAG_UTF8;
+
+    #[test]
+    fn detect_wire_kind_v6_and_v5() {
+        assert_eq!(
+            detect_profile_wire_kind(b"NYTPROF6\x06\0\0\0"),
+            ProfileWireKind::V6
+        );
+        assert_eq!(
+            detect_profile_wire_kind(b"NYTProf 5 0\n#Perl"),
+            ProfileWireKind::V5
+        );
+        assert_eq!(
+            detect_profile_wire_kind(b"garbage"),
+            ProfileWireKind::Unknown
+        );
+        assert_eq!(detect_profile_wire_kind(b""), ProfileWireKind::Unknown);
+    }
+
+    #[test]
+    fn product_decode_absolute_standin_matches_e3() {
+        let specs = sample_specs();
+        let wire = e3_standin_write_absolute(&specs, codec::NONE).expect("encode");
+        let e3 = product_decode_v6_event_profile(&wire, true).expect("product decode");
+        assert_eq!(e3.bytes_consumed, wire.len());
+        // Auto-VERSION inject prepends one Version record.
+        assert!(e3.profile.records.len() >= specs.len());
+        assert!(matches!(
+            e3.profile.records.first(),
+            Some(OwnedEventRecord::Version { .. })
+        ));
+        let timelines: Vec<_> = e3
+            .profile
+            .records
+            .iter()
+            .filter(|r| matches!(r, OwnedEventRecord::TimeLine { .. }))
+            .collect();
+        assert_eq!(timelines.len(), 2);
+    }
 
     fn sample_specs() -> [EventRecordSpec<'static>; 4] {
         [

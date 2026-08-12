@@ -153,10 +153,11 @@ pub use decoded_stream::{
     DecodedStreamError, DecodedStreamResult,
 };
 pub use dual_equality::{
-    e3_assert_logical_equal, e3_decode_writer_bytes, e3_standin_write_absolute,
-    e3_standin_write_mid_stream_packing, e3_standin_write_mid_stream_string_dict_packing,
-    e3_standin_write_packing, e3_standin_write_string_dict, e3_standin_write_string_dict_packing,
-    E3Decoded,
+    detect_profile_wire_kind, e3_assert_logical_equal, e3_decode_writer_bytes,
+    e3_standin_write_absolute, e3_standin_write_mid_stream_packing,
+    e3_standin_write_mid_stream_string_dict_packing, e3_standin_write_packing,
+    e3_standin_write_string_dict, e3_standin_write_string_dict_packing,
+    product_decode_v6_event_profile, E3Decoded, ProfileWireKind,
 };
 pub use decoded_summary::{
     decode_decoded_summary_profile, encode_decoded_summary_profile, DecodedSummaryError,

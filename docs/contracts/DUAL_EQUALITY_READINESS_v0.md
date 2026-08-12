@@ -29,8 +29,8 @@ Plan COL-007 lists dependencies **FMT-002 through FMT-010**. This program **inte
 | **E1 — v5 semantic surfaces** | Native v5 read/report vs oracle / pure-Perl JSONL bridges on advertised fixtures (already R1-preview ready for offline scope) | offline_gate + packaging smokes; residual matrix “Advertised ready” |
 | **E2 — v6 encode↔decode** | Rust (or C) encode → always-inflate decode recovers equal logical events/sites/seq/strings under packing/absolute policies | `cargo test -p nytprof-format-v6` always-inflate packing/mid-stream/multi-chunk tests |
 | **E3 — C writer ↔ Rust decode** | COL-007 C emitter produces streams that Rust always-inflate path decodes with E2 equality on golden workloads | **ready (EVENT)** — C fixtures `fixtures/v6/from-c/**` + `e3_c_*` tests + `tools/oracle/e3_c_writer_parity.sh`. Stand-in harness remains engineering only. **E3-mixed residual.** |
-| **E4 — v5↔v6 semantic** | Same workload profiled as v5 and v6 yields equal advertised aggregates / dump structure after normalize | **Open (runway advanced)** — policy draft shipped; **COL-014 dual-sink test/dev harness** (PR-B10a) proves same-run **logical** equality on M4 + primary-fixture-shaped streams; full oracle aggregate enforcement + fixture pairs residual |
-| **E5 — CLI product path** | CLI report/verify on v6 files as product surface (opt-in, not default) | **Open** — CLI v6 default residual; opt-in path not claimed done |
+| **E4 — v5↔v6 semantic** | Same workload profiled as v5 and v6 yields equal advertised aggregates / dump structure after normalize | **Open** — policy draft shipped; needs fixture pairs + enforcement |
+| **E5 — CLI product path** | CLI report/verify on v6 files as product surface (opt-in, not default) | **partial** — model+dump/verify prelim (PR-B11a); full report/html/capability residual (PR-B12); collection default remains v5 |
 
 ## Readiness matrix
 
@@ -49,19 +49,19 @@ Plan COL-007 lists dependencies **FMT-002 through FMT-010**. This program **inte
 | E3-mixed multi-kind C fixtures | E3 | **residual** | SOURCE/INDEX/SUMMARY product C matrix open |
 | Batched Rust COL-008 writer | E3/E4 | **deferred** (non-baseline) | After dual-equality + ADR re-open |
 | v5↔v6 semantic equality policy | E4 | **policy draft ready** | Enforcement open until fixture pairs |
-| COL-014 same-run dual writer (test/dev-only, OQ-4) | E4/M6 runway | **ready (harness)** | Fan-out v5+v6; logical equality on M4 + primary-fixture-shaped streams; **not** product UX; full oracle dual residual |
 | Wire freeze FMT-002..010 | — | **open** (deviated as COL-007 hard dep) | After E2/E3 evidence + freeze ADR |
-| CLI v6 opt-in report/verify | E5 | **open** | After E3/E4 gates |
+| Product v6→ProfileModel ingest | E5 runway | **ready (MVP)** | PR-B11a: dual-dispatch `from_path`; dump/verify prelim; schema [`product-v6-profilemodel-ingest-mvp-v0.md`](https://github.com/hilather/nytprof-modernization/blob/main/docs/schemas/product-v6-profilemodel-ingest-mvp-v0.md). **Not** full E5 capability / report matrix |
+| CLI v6 opt-in report/verify | E5 | **partial** | Model load + dump/verify work on v6 EVENT; full E5 report/html/capability residual until PR-B12 |
 | CLI v6 / format default flip (R4) | E5 | **out of scope** | Field window + ADR |
 | Full R1 HTML DOM / XS Data / FFI | E1 product depth | **residual** (not R1-preview claim) | Separate full-R1 work |
 
 ## Explicit open gates after COL-007 E3-EVENT
 
 1. **E3-mixed:** multi-kind SOURCE/INDEX/SUMMARY product C fixtures (EVENT path is ready).
-2. **E4 enforcement:** v5+v6 fixture pairs with documented normalize policy ([`E4_V5_V6_SEMANTIC_EQUALITY_POLICY_v0.md`](https://github.com/hilather/nytprof-modernization/blob/main/docs/contracts/E4_V5_V6_SEMANTIC_EQUALITY_POLICY_v0.md)). COL-014 dual-sink (test/dev-only) is **harness ready** for same-run logical equality; full oracle aggregate pairs residual.
+2. **E4 enforcement:** v5+v6 fixture pairs with documented normalize policy ([`E4_V5_V6_SEMANTIC_EQUALITY_POLICY_v0.md`](https://github.com/hilather/nytprof-modernization/blob/main/docs/contracts/E4_V5_V6_SEMANTIC_EQUALITY_POLICY_v0.md)).
 3. **Wire freeze ADR** (or explicit provisional product flag with major/minor negotiation) — **not** claimed by ADR-0001/0002 or the lockfile alone.
 4. **OI-001-03 / dual-output sequence-number freeze** if product requires permanent seq policy beyond preflight `FLAG_HAS_SEQ`.
-5. **CLI v6 opt-in / default** (E5) — residual.
+5. **CLI v6 full E5** (report/html/capability matrix + collection opt-in) — residual after model ingest MVP (PR-B11a dump/verify prelim only).
 6. **COL-008** batched Rust writer remains deferred / non-baseline.
 
 ## First-slice vs full-R1 vs R0–R5 (honesty)
@@ -70,7 +70,7 @@ Plan COL-007 lists dependencies **FMT-002 through FMT-010**. This program **inte
 |---------|----------------------------|
 | First-slice / offline R0 + R1-preview | **Complete** for advertised surfaces; COL-007 E3-EVENT **done**; COL-008 deferred |
 | Full product R1 | **Not complete** — residual: FFI/XS Data, full nytprofhtml DOM, multi-OS CI, perf cert, R3 engine default |
-| R2 v6 collection opt-in | **Runway advanced** — ADR-0001/0002 accepted; provisional ID lockfile; C writer + product E3-EVENT green; COL-014 dual-sink test/dev harness ready (OQ-4); E3-mixed / E4 enforcement / wire freeze open |
+| R2 v6 collection opt-in | **Runway advanced** — ADR-0001/0002 accepted; provisional ID lockfile; C writer + product E3-EVENT green; E3-mixed / E4 / wire freeze open |
 | R3–R5 defaults / retirement | **Not started** |
 
 ## Non-claims
@@ -93,6 +93,6 @@ Do **not** treat this document as:
 - C header stub: [`collector/include/nytprof_v6_ids.h`](https://github.com/hilather/nytprof-modernization/blob/main/collector/include/nytprof_v6_ids.h)
 - E3-C schema: [`docs/schemas/collector-v6-e3-c-fixtures-mvp-v0.md`](https://github.com/hilather/nytprof-modernization/blob/main/docs/schemas/collector-v6-e3-c-fixtures-mvp-v0.md)
 - E4 policy: [`docs/contracts/E4_V5_V6_SEMANTIC_EQUALITY_POLICY_v0.md`](https://github.com/hilather/nytprof-modernization/blob/main/docs/contracts/E4_V5_V6_SEMANTIC_EQUALITY_POLICY_v0.md)
-- COL-014 dual-sink (test/dev-only): [`docs/schemas/collector-dual-sink-mvp-v0.md`](https://github.com/hilather/nytprof-modernization/blob/main/docs/schemas/collector-dual-sink-mvp-v0.md); `collector/include/nytp_sink_dual.h`; `make -C collector test` (`test_dual_sink`); smoke step 10
 - E3 harness: `crates/nytprof-format-v6/src/dual_equality.rs` (engineering stand-in + `e3_decode_writer_bytes`); product `e3_c_*` in `crates/nytprof-format-v6/tests/e3_c.rs`. Evidence: `cargo test -p nytprof-format-v6 e3_c_` / `e3_harness`; `./tools/oracle/e3_c_writer_parity.sh`
+- Product v6→ProfileModel ingest: schema [`docs/schemas/product-v6-profilemodel-ingest-mvp-v0.md`](https://github.com/hilather/nytprof-modernization/blob/main/docs/schemas/product-v6-profilemodel-ingest-mvp-v0.md); `cargo test -p nytprof-model` (`v6_*`); CLI dump/verify on `fixtures/v6/from-c/**`
 - Offline gate: `./scripts/ci/offline_gate.sh` (step 11 when cargo)

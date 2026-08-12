@@ -1,8 +1,8 @@
 //! Compact profile model and exact aggregation (first-slice MVP).
 //!
 //! Aggregation rules: `docs/schemas/aggregate-comparison-v0.md` (A1–A9).
-//! Built by replaying the ordered logical event stream from the v5 decoder
-//! or from oracle `readstream.jsonl` dumps.
+//! Built by replaying the ordered logical event stream from the v5 decoder,
+//! product v6 always-inflate path, or oracle `readstream.jsonl` dumps.
 
 use std::collections::HashMap;
 use std::path::Path;
@@ -13,11 +13,25 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use thiserror::Error;
 
+mod v6_ingest;
+
+pub use v6_ingest::{decode_events_from_bytes, decode_events_from_path, owned_records_to_events};
+
 /// Errors while building a [`ProfileModel`].
 #[derive(Debug, Error)]
 pub enum ModelError {
     #[error(transparent)]
     Decode(#[from] DecodeError),
+    #[error("v6 decode: {0}")]
+    DecodeV6(String),
+    #[error("io error reading {path}: {source}")]
+    Io {
+        path: String,
+        #[source]
+        source: std::io::Error,
+    },
+    #[error("unsupported profile format: {detail}")]
+    UnsupportedProfile { detail: String },
     #[error("invalid {tag} args at seq {seq}: {detail}")]
     InvalidArgs {
         tag: String,
@@ -155,9 +169,23 @@ impl ProfileModel {
         &self.files
     }
 
-    /// Decode a v5 profile file and aggregate.
+    /// Decode a product profile file (v5 or v6) and aggregate.
+    ///
+    /// Dual dispatch on wire magic/header:
+    /// - `NYTPROF6` → always-inflate EVENT (+ FOOTER string-dict when present)
+    /// - `NYTProf 5 …` text header → existing v5 decoder
+    /// - otherwise fail closed ([`ModelError::UnsupportedProfile`])
+    ///
+    /// Aggregation rules (A1–A9) are format-agnostic once logical events exist.
+    /// Not a wire freeze; not full E5 CLI claim; not E3-mixed multi-kind.
     pub fn from_path(path: impl AsRef<Path>) -> Result<Self> {
-        let events = nytprof_format_v5::decode_path(path)?;
+        let events = decode_events_from_path(path)?;
+        Self::from_events(&events)
+    }
+
+    /// Decode product profile bytes (v5 or v6) and aggregate.
+    pub fn from_bytes(bytes: &[u8]) -> Result<Self> {
+        let events = decode_events_from_bytes(bytes)?;
         Self::from_events(&events)
     }
 
@@ -589,3 +617,5 @@ fn as_str(args: &[Value], idx: usize, tag: &str, seq: u64) -> Result<String> {
 
 #[cfg(test)]
 mod model_tests;
+#[cfg(test)]
+mod v6_model_tests;
