@@ -145,7 +145,9 @@ FOOTER-local packaging per ADR-0002. Global pool (OQ-6 / COL-010) **deferred**.
 | [`fixtures/v6/vectors/`](https://github.com/hilather/nytprof-modernization/blob/main/fixtures/v6/vectors/) | Immutable primitive / event / mini-profile vectors |
 | [`fixtures/v6/from-c/`](https://github.com/hilather/nytprof-modernization/blob/main/fixtures/v6/from-c/) | Product E3 C streams (cross-language) |
 
-Tests: `cargo test -p nytprof-format-v6 wire_freeze_` · `cargo test -p nytprof-format-v6 golden_vector_`
+Tests: `cargo test -p nytprof-format-v6 --test golden_vectors`  
+Checksums: `(cd fixtures/v6/vectors && sha256sum -c SHA256SUMS)`  
+Regen compile smoke: `cargo build -p nytprof-format-v6 --example gen_wire_vectors`
 
 ## Residual honesty
 

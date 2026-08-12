@@ -11,6 +11,11 @@
       "sha256": "bf60e4349cace6bce0d552e8d783428db66d0d649bd9e430a3627e2ee14ac839"
     },
     {
+      "path": "event/dual_output_seq_oq5.bin",
+      "bytes": 17,
+      "sha256": "9e53ecbc2c2e88bd2bb214e216cdaa99a11cda002c9a359354f37c719d0d3cab"
+    },
+    {
       "path": "event/dual_output_sequence.bin",
       "bytes": 26,
       "sha256": "54668f83d46b9181d65a290df56b7d43bfef22bf451ab33d6ad8786b135eb5a9"

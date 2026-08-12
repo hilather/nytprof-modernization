@@ -1,32 +1,26 @@
 # Format v6 event-body opcode codec (provisional) — v0
 
-**Status:** opcode/flag numeric IDs **frozen** for major=6 by [ADR-0006](https://github.com/hilather/nytprof-modernization/blob/main/docs/adrs/0006-v6-wire-freeze.md); detailed body layouts retained; not CLI v6 default  
+**Status:** numeric IDs / core frame **frozen** for major=6 by [ADR-0006](https://github.com/hilather/nytprof-modernization/blob/main/docs/adrs/0006-v6-wire-freeze.md) + catalog [`v6-wire-ids-frozen-v1.md`](https://github.com/hilather/nytprof-modernization/blob/main/docs/schemas/v6-wire-ids-frozen-v1.md); filename retains `provisional-v0` for link stability; **not** CLI v6 default / E3-mixed / COL-008  
 **Board IDs:** `FMT-V6-EVENT-BODY-PROVISIONAL` (contract), `FMT-V6-EVENT-BODY-MVP` (shipped encode/decode + tests)  
 **Depends on:** ULEB128 [`v6-varint-uleb128-provisional-v0.md`](https://github.com/hilather/nytprof-modernization/blob/main/docs/schemas/v6-varint-uleb128-provisional-v0.md); string/blob [`v6-string-blob-provisional-v0.md`](https://github.com/hilather/nytprof-modernization/blob/main/docs/schemas/v6-string-blob-provisional-v0.md); chunk frame (codec NONE payload role) [`v6-chunk-frame-provisional-v0.md`](https://github.com/hilather/nytprof-modernization/blob/main/docs/schemas/v6-chunk-frame-provisional-v0.md)  
-**Gate:** COL-007 runway preflight only — **before** full event catalog / payload inflate / C v6 writer
+**Gate:** IDs frozen after E3-EVENT(C)+E4-v0 (ADR-0006). Residual: CLI v6 default; default-parse non-inflate; E3-mixed; COL-008; full OI-002 vocabulary  
 
 ---
 
 ## Scope and non-claims
 
-This document freezes a **provisional** **event-body** byte layout used as a **codec NONE** chunk payload:
-
-```text
-event-body = record*
-record     = ULEB128 opcode || u8 flags || typed-body
-```
+This document is the detailed layout home for **event opcodes/flags (0–19 catalog)**. Numeric IDs and the core frame described here are **frozen for major=6** by ADR-0006 (see frozen catalog). Filename retains `provisional-v0` for stable links.
 
 It is **not**:
 
-- a permanent wire freeze or full logical-event catalog matching all v5 tags;
-- permission to mark **COL-007** (C v6 writer) or **COL-008** done;
-- payload inflate (zlib / zstd / LZ4);
-- permanent global string pools / permanent location-delta or run packing freeze, or CRC verification freeze (local dictionary + site-delta + TIME_LINE_RUN + TIME_BLOCK_RUN preflights are siblings);
-- default CLI report/dump of v6 profiles.
+- permission to flip CLI v6 / collection default (still v5 until R4 ADR);
+- E3-mixed multi-kind product C fixture claim;
+- COL-008 batched Rust writer;
+- default-parse always-inflate / CRC default flip;
+- complete OI-002 ATTRIBUTE/OPTION key vocabulary;
+- a new major without ADR supersession (renumbering requires major bump).
 
-Opcodes and field layouts may change under future ADR + golden vectors.
-
----
+Independent C/Rust implementations must match the frozen IDs and this layout. Golden vectors: [`fixtures/v6/vectors/`](https://github.com/hilather/nytprof-modernization/blob/main/fixtures/v6/vectors/).
 
 ## Record layout
 

@@ -33,7 +33,8 @@ fixtures/v6/vectors/
 | `event/discount.bin` | DISCOUNT empty body |
 | `event/time_line_run_n2.bin` | TIME_LINE_RUN N=2 ticks 10,20 |
 | `event/site_delta_seq_tl_tl_se.bin` | site-delta + seq TIME_LINE×2 + SUB_ENTRY |
-| `event/dual_output_sequence.bin` | VERSION→COMMENT→START_DEFLATE→PID… order |
+| `event/dual_output_sequence.bin` | VERSION→COMMENT→START_DEFLATE→PID… **order only** (no FLAG_HAS_SEQ) |
+| `event/dual_output_seq_oq5.bin` | OQ-5: VERSION+START_DEFLATE+TIME_LINE+DISCOUNT with FLAG_HAS_SEQ monotonic 0..3 |
 | `profiles/mini_absolute_none.bin` | Mini profile TIME_LINE + DISCOUNT |
 
 ## Product C streams (related, not re-encoded here)
@@ -46,11 +47,14 @@ and are loaded only as C-produced bytes by `e3_c_*` tests.
 
 Requires Cargo. **Do not** regenerate casually — changing bytes is a freeze regression unless ADR-0006 is superseded.
 
+The example writes `.bin` files, `SHA256SUMS`, and `manifest.json` in one pure-Rust pass (no shell glob quoting).
+
 ```sh
+cargo build -p nytprof-format-v6 --example gen_wire_vectors   # compile smoke
 cargo run -p nytprof-format-v6 --example gen_wire_vectors -- fixtures/v6/vectors
-# then verify:
-cargo test -p nytprof-format-v6 golden_vector_
-sha256sum -c fixtures/v6/vectors/SHA256SUMS
+# then verify (SHA256SUMS paths are relative to this directory):
+cargo test -p nytprof-format-v6 --test golden_vectors
+(cd fixtures/v6/vectors && sha256sum -c SHA256SUMS)
 ```
 
 ## Residuals

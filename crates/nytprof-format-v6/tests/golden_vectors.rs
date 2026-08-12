@@ -246,17 +246,50 @@ fn golden_vector_event_bodies() {
     let (full, n) = decode_event_body_full(&seq).expect("seq");
     assert_eq!(n, seq.len());
     assert_eq!(full.records.len(), 3);
-    assert!(seq.iter().any(|&b| b == FLAG_SITE_DELTA || b == (FLAG_SITE_DELTA | FLAG_HAS_SEQ)));
+    // Assert decoded sequences (not raw payload byte scan for flag bits).
     for (i, s) in full.sequences.iter().enumerate() {
         assert_eq!(*s, Some(i as u64), "seq[{i}]");
     }
+    // Absolute sites recovered from site-delta packing.
+    match &full.records[0] {
+        EventRecord::TimeLine { fid, line, ticks } => assert_eq!((*fid, *line, *ticks), (1, 10, 1)),
+        other => panic!("{other:?}"),
+    }
+    match &full.records[2] {
+        EventRecord::SubEntry {
+            caller_fid,
+            caller_line,
+        } => assert_eq!((*caller_fid, *caller_line), (1, 11)),
+        other => panic!("{other:?}"),
+    }
 
+    // Order-only dual-output stream (no FLAG_HAS_SEQ) — dump-aligned shape.
     let dual = read_vec("event/dual_output_sequence.bin");
-    let (recs, n) = decode_event_body(&dual).expect("dual");
+    let (full, n) = decode_event_body_full(&dual).expect("dual order");
     assert_eq!(n, dual.len());
-    assert!(matches!(recs[0], EventRecord::Version { major: 6, minor: 0 }));
-    assert!(matches!(recs[2], EventRecord::StartDeflate));
-    assert!(matches!(recs.last(), Some(EventRecord::PidEnd { .. })));
+    assert!(matches!(full.records[0], EventRecord::Version { major: 6, minor: 0 }));
+    assert!(matches!(full.records[2], EventRecord::StartDeflate));
+    assert!(matches!(full.records.last(), Some(EventRecord::PidEnd { .. })));
+    assert!(
+        full.sequences.iter().all(|s| s.is_none()),
+        "order-only dual_output has no FLAG_HAS_SEQ"
+    );
+
+    // OQ-5 / ADR-0006 §3: VERSION + START_DEFLATE participate in FLAG_HAS_SEQ space.
+    let oq5 = read_vec("event/dual_output_seq_oq5.bin");
+    let (full, n) = decode_event_body_full(&oq5).expect("oq5");
+    assert_eq!(n, oq5.len());
+    assert_eq!(full.records.len(), 4);
+    assert!(matches!(full.records[0], EventRecord::Version { major: 6, minor: 0 }));
+    assert!(matches!(full.records[1], EventRecord::StartDeflate));
+    match &full.records[2] {
+        EventRecord::TimeLine { ticks, .. } => assert_eq!(*ticks, 7),
+        other => panic!("{other:?}"),
+    }
+    assert!(matches!(full.records[3], EventRecord::Discount));
+    for (i, s) in full.sequences.iter().enumerate() {
+        assert_eq!(*s, Some(i as u64), "oq5 seq[{i}]");
+    }
 }
 
 #[test]
@@ -270,29 +303,90 @@ fn golden_vector_mini_absolute_profile() {
     assert!(matches!(prof.records[1], EventRecord::Discount));
 }
 
+/// Parse `#define NAME value` integer macros from the C lockfile header.
+fn parse_c_header_u64s(header: &str) -> std::collections::BTreeMap<String, u64> {
+    let mut map = std::collections::BTreeMap::new();
+    for line in header.lines() {
+        let line = line.trim();
+        if !line.starts_with("#define ") {
+            continue;
+        }
+        let rest = line.trim_start_matches("#define ").trim();
+        let mut parts = rest.split_whitespace();
+        let Some(name) = parts.next() else { continue };
+        let Some(raw) = parts.next() else { continue };
+        // Strip trailing `u`/`U` and hex/decimal.
+        let raw = raw.trim_end_matches(|c| c == 'u' || c == 'U');
+        let val = if let Some(hex) = raw.strip_prefix("0x").or_else(|| raw.strip_prefix("0X")) {
+            u64::from_str_radix(hex, 16).ok()
+        } else {
+            raw.parse::<u64>().ok()
+        };
+        if let Some(v) = val {
+            map.insert(name.to_string(), v);
+        }
+    }
+    map
+}
+
+fn c_header_path() -> PathBuf {
+    let mut p = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+    p.pop(); // crates
+    p.pop(); // repo root
+    p.join("collector/include/nytprof_v6_ids.h")
+}
+
 #[test]
 fn wire_freeze_id_catalog_matches_c_header_values() {
-    // Mirrors collector/include/nytprof_v6_ids.h (ADR-0006 frozen).
+    // Parse C header and compare to Rust constants (ADR-0006 freeze regression).
+    let text = std::fs::read_to_string(c_header_path()).expect("read nytprof_v6_ids.h");
+    let c = parse_c_header_u64s(&text);
+
     assert_eq!(MAGIC, b"NYTPROF6");
-    assert_eq!(SUPPORTED_MAJOR, 6);
-    assert_eq!(HEADER_LEN_FULL, 36);
-    assert_eq!(CHUNK_SYNC, 0x3654_594E);
-    assert_eq!(kind::EVENT, 1);
-    assert_eq!(kind::FOOTER, 5);
-    assert_eq!(codec::NONE, 0);
-    assert_eq!(codec::ZLIB, 1);
-    assert_eq!(codec::ZSTD, 2);
-    assert_eq!(codec::LZ4, 3);
-    assert_eq!(opcode::TIME_LINE, 2);
-    assert_eq!(opcode::TIME_LINE_RUN, 18);
-    assert_eq!(opcode::TIME_BLOCK_RUN, 19);
-    assert_eq!(FLAG_SITE_DELTA, 0x04);
-    assert_eq!(FLAG_HAS_SEQ, 0x08);
-    assert_eq!(type_id::END, 0x7e);
-    assert_eq!(MAX_TIME_LINE_RUN_LEN, 1_048_576);
-    assert_eq!(MAX_TIME_BLOCK_RUN_LEN, 1_048_576);
+    assert_eq!(
+        c.get("NYTPROF_V6_SUPPORTED_MAJOR").copied(),
+        Some(SUPPORTED_MAJOR as u64)
+    );
+    assert_eq!(
+        c.get("NYTPROF_V6_HEADER_LEN_FULL").copied(),
+        Some(HEADER_LEN_FULL as u64)
+    );
+    assert_eq!(
+        c.get("NYTPROF_V6_CHUNK_SYNC").copied(),
+        Some(CHUNK_SYNC as u64)
+    );
+    assert_eq!(c.get("NYTPROF_V6_KIND_EVENT").copied(), Some(kind::EVENT as u64));
+    assert_eq!(c.get("NYTPROF_V6_KIND_FOOTER").copied(), Some(kind::FOOTER as u64));
+    assert_eq!(c.get("NYTPROF_V6_CODEC_NONE").copied(), Some(codec::NONE as u64));
+    assert_eq!(c.get("NYTPROF_V6_CODEC_ZLIB").copied(), Some(codec::ZLIB as u64));
+    assert_eq!(c.get("NYTPROF_V6_CODEC_ZSTD").copied(), Some(codec::ZSTD as u64));
+    assert_eq!(c.get("NYTPROF_V6_CODEC_LZ4").copied(), Some(codec::LZ4 as u64));
+    assert_eq!(c.get("NYTPROF_V6_OP_TIME_LINE").copied(), Some(opcode::TIME_LINE));
+    assert_eq!(
+        c.get("NYTPROF_V6_OP_TIME_LINE_RUN").copied(),
+        Some(opcode::TIME_LINE_RUN)
+    );
+    assert_eq!(
+        c.get("NYTPROF_V6_OP_TIME_BLOCK_RUN").copied(),
+        Some(opcode::TIME_BLOCK_RUN)
+    );
+    assert_eq!(
+        c.get("NYTPROF_V6_FLAG_SITE_DELTA").copied(),
+        Some(FLAG_SITE_DELTA as u64)
+    );
+    assert_eq!(
+        c.get("NYTPROF_V6_FLAG_HAS_SEQ").copied(),
+        Some(FLAG_HAS_SEQ as u64)
+    );
+    assert_eq!(c.get("NYTPROF_V6_TLV_END").copied(), Some(type_id::END));
+    assert_eq!(
+        c.get("NYTPROF_V6_MAX_TIME_RUN_LEN").copied(),
+        Some(MAX_TIME_LINE_RUN_LEN as u64)
+    );
+    assert_eq!(MAX_TIME_LINE_RUN_LEN, MAX_TIME_BLOCK_RUN_LEN);
     assert!(is_known_opcode(opcode::TIME_LINE_RUN));
     assert!(is_known_opcode(opcode::TIME_BLOCK_RUN));
     // Ensure fixture tree present (regression: freeze without vectors).
     assert!(Path::new(&vectors_root().join("manifest.json")).is_file());
+    assert!(Path::new(&vectors_root().join("event/dual_output_seq_oq5.bin")).is_file());
 }

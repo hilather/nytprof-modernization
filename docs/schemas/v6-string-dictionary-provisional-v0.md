@@ -1,48 +1,26 @@
 # Format v6 string-dictionary intern table — provisional v0
 
-**Status:** provisional — **not** a v6 wire freeze (not FMT-002..010 ratification; not COL-007 C writer)  
+**Status:** numeric IDs / core frame **frozen** for major=6 by [ADR-0006](https://github.com/hilather/nytprof-modernization/blob/main/docs/adrs/0006-v6-wire-freeze.md) + catalog [`v6-wire-ids-frozen-v1.md`](https://github.com/hilather/nytprof-modernization/blob/main/docs/schemas/v6-wire-ids-frozen-v1.md); filename retains `provisional-v0` for link stability; **not** CLI v6 default / E3-mixed / COL-008  
 **Board IDs:** `FMT-V6-STRING-DICTIONARY-PROVISIONAL` (contract), `FMT-V6-STRING-DICTIONARY-MVP` (shipped table + resolve + always-inflate tests)  
 **Depends on:** [`v6-string-blob-provisional-v0.md`](https://github.com/hilather/nytprof-modernization/blob/main/docs/schemas/v6-string-blob-provisional-v0.md); event-body string-blobs; always-inflate EVENT/mixed consumers  
-**Gate:** COL-007 runway preflight only — **before** permanent global string-pool ADR / dual-equality / C v6 writer
+**Gate:** IDs frozen after E3-EVENT(C)+E4-v0 (ADR-0006). Residual: CLI v6 default; default-parse non-inflate; E3-mixed; COL-008; full OI-002 vocabulary  
 
 ---
 
 ## Scope and non-claims
 
-Defines a provisional **local string dictionary** mapping non-zero `string_id` values to byte payloads for intern resolution of length-prefixed string-blobs.
-
-### Table wire layout
-
-```text
-entry_count : ULEB128 u64
-entry*      : id ULEB128 || flags u8 || byte_length ULEB128 || bytes
-```
-
-| Rule | Detail |
-|------|--------|
-| `id == 0` | **Reserved** for inline-only blobs — not allowed as a dictionary key |
-| Duplicate ids | **Err** |
-| Entry payload cap | same as string-blob (`MAX_STRING_BYTES`) |
-| Total payload cap | 64 MiB |
-
-### Resolution policy (preflight)
-
-| `string_id` | Result |
-|-------------|--------|
-| `0` | Use inline blob `bytes` |
-| non-zero, present in table | Use dictionary payload (inline may be empty) |
-| non-zero, missing | **Err** (`UnknownId`) |
+This document is the detailed layout home for **FOOTER-local string dictionary table layout (ADR-0002)**. Numeric IDs and the core frame described here are **frozen for major=6** by ADR-0006 (see frozen catalog). Filename retains `provisional-v0` for stable links.
 
 It is **not**:
 
-- a permanent global / cross-file string pool ADR freeze;
-- permanent location-delta packing ADR for TIME_* / SUB_ENTRY sites (site-delta preflight is a sibling `FMT-V6-EVENT-BODY-SITE-DELTA-*`);
-- full OI-001-03 sequence-number freeze; complete OI-002 key inventory;
-- mutating default `parse_chunk_frame` to always inflate or verify CRC;
-- wire freeze / dual-equality / CLI v6 default;
-- permission to mark **COL-007** / **COL-008** done.
+- permission to flip CLI v6 / collection default (still v5 until R4 ADR);
+- E3-mixed multi-kind product C fixture claim;
+- COL-008 batched Rust writer;
+- default-parse always-inflate / CRC default flip;
+- complete OI-002 ATTRIBUTE/OPTION key vocabulary;
+- a new major without ADR supersession (renumbering requires major bump).
 
----
+Independent C/Rust implementations must match the frozen IDs and this layout. Golden vectors: [`fixtures/v6/vectors/`](https://github.com/hilather/nytprof-modernization/blob/main/fixtures/v6/vectors/).
 
 ## Shipped API
 

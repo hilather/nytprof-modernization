@@ -1,26 +1,26 @@
 # Format v6 signed varint — ZigZag + ULEB128 (provisional) — v0
 
-**Status:** provisional — **not** a v6 wire freeze (not FMT-002..010 / FMT-003 ratification; not COL-007 C writer)  
+**Status:** numeric IDs / core frame **frozen** for major=6 by [ADR-0006](https://github.com/hilather/nytprof-modernization/blob/main/docs/adrs/0006-v6-wire-freeze.md) + catalog [`v6-wire-ids-frozen-v1.md`](https://github.com/hilather/nytprof-modernization/blob/main/docs/schemas/v6-wire-ids-frozen-v1.md); filename retains `provisional-v0` for link stability; **not** CLI v6 default / E3-mixed / COL-008  
 **Board IDs:** `FMT-V6-SVARINT-PROVISIONAL` (contract), `FMT-V6-SVARINT-MVP` (shipped encode/decode + tests)  
 **Depends on:** plan draft [`docs/plan/04_FILE_FORMAT_V6_TASKS.md`](https://github.com/hilather/nytprof-modernization/blob/main/docs/plan/04_FILE_FORMAT_V6_TASKS.md) §5.2; unsigned ULEB128 [`v6-varint-uleb128-provisional-v0.md`](https://github.com/hilather/nytprof-modernization/blob/main/docs/schemas/v6-varint-uleb128-provisional-v0.md)  
-**Gate:** COL-007 runway preflight only — **before** full event codecs / C v6 writer
+**Gate:** IDs frozen after E3-EVENT(C)+E4-v0 (ADR-0006). Residual: CLI v6 default; default-parse non-inflate; E3-mixed; COL-008; full OI-002 vocabulary  
 
 ---
 
 ## Scope and non-claims
 
-This document freezes a **provisional** signed-integer wire dialect for future v6 payloads:
-
-**ZigZag map of `i64` → unsigned, then ULEB128** (same max width and strict overlong rules as the unsigned contract).
+This document is the detailed layout home for **ZigZag+ULEB128 signed algorithm**. Numeric IDs and the core frame described here are **frozen for major=6** by ADR-0006 (see frozen catalog). Filename retains `provisional-v0` for stable links.
 
 It is **not**:
 
-- a permanent wire freeze or ADR-ratified choice vs SLEB128;
-- permission to mark **COL-007** done;
-- a claim that SLEB128 is rejected forever — SLEB remains an **explicit residual alternative** until ADR;
-- v5 packed i32/u32 encoding.
+- permission to flip CLI v6 / collection default (still v5 until R4 ADR);
+- E3-mixed multi-kind product C fixture claim;
+- COL-008 batched Rust writer;
+- default-parse always-inflate / CRC default flip;
+- complete OI-002 ATTRIBUTE/OPTION key vocabulary;
+- a new major without ADR supersession (renumbering requires major bump).
 
----
+Independent C/Rust implementations must match the frozen IDs and this layout. Golden vectors: [`fixtures/v6/vectors/`](https://github.com/hilather/nytprof-modernization/blob/main/fixtures/v6/vectors/).
 
 ## ZigZag mapping (provisional)
 
