@@ -1,25 +1,21 @@
-//! Dual-equality **E3 harness** (COL-007 runway) — writer bytes → Rust always-inflate decode.
+//! Dual-equality **E3 harness** — writer bytes → Rust always-inflate decode.
 //!
 //! Contract: [`docs/contracts/DUAL_EQUALITY_READINESS_v0.md`]
 //!
-//! **E3** is: external writer-produced v6 profile bytes (future COL-007 C encoder, or any
+//! **E3** is: external writer-produced v6 profile bytes (COL-007 C encoder, or any
 //! independent encoder) must always-inflate decode via shipped consumers to a known
 //! logical event stream (absolute sites + sequences + optional FOOTER string-dict resolve).
 //!
-//! This module provides the **check harness**, not the C writer. Tests use the shipped
-//! Rust packing/absolute/string-dict/mid-stream encode paths as **stand-in writers** to prove
-//! the harness drives real encode→decode equality. Drop C-produced fixtures into the same
-//! check when COL-007 lands.
+//! This module provides the **check harness**. Product E3 evidence is **`e3_c_*` tests**
+//! that load **C-produced only** fixtures under `fixtures/v6/from-c/**` (never Rust stand-in
+//! encode). Stand-in writers (`e3_standin_*`) remain for harness unit coverage only.
 //!
 //! # Residual honesty (non-claims)
 //!
-//! Stand-in writer tests are **NOT product dual-equality evidence**. They do **not**:
-//! - complete COL-007 (C v6 writer);
-//! - freeze wire IDs or packing/string-pool ADRs;
-//! - claim CLI v6 product path or E4 enforcement;
-//! - substitute for E3 evidence with **C-produced** bytes.
-//!
-//! Not wire freeze; not COL-007 done; not CLI v6 default.
+//! - Stand-in writer tests are **NOT product dual-equality evidence**.
+//! - E3-EVENT with C is **ready** for the absolute/packing/dict/mid-stream matrix;
+//!   **E3-mixed** (SOURCE/INDEX/SUMMARY multi-kind product C fixtures) remains residual.
+//! - Not wire freeze; not CLI v6 default; not E4 enforcement; COL-008 still deferred.
 
 use crate::compressed_profile::OwnedEventRecord;
 use crate::decoded_event::{

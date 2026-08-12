@@ -12,8 +12,8 @@
  *         ADR-0002 FOOTER-local string dictionary
  *
  * Residuals (honest):
- *   - Not board COL-007 done (E3-C = PR-B09).
- *   - Not wire freeze; not CLI v6 default.
+ *   - Board COL-007 done for product E3-EVENT (PR-B09 fixtures/v6/from-c/).
+ *   - E3-mixed multi-kind C fixtures residual; not wire freeze; not CLI v6 default.
  *   - NEW_FID drops eval_*, flags, size, mtime (provisional absolute shape).
  *   - TIME_BLOCK drops sub_line (provisional absolute shape).
  *   - NV doubles projected to non-negative integer ULEB (fail closed).

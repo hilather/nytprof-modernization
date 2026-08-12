@@ -30,6 +30,12 @@ TESTBINS := \
 	$(BUILD)/test_v6_codec_chunk_crc \
 	$(BUILD)/test_v6_packing_footer
 
+# PR-B09 E3-C fixture generator (not part of unit-test suite)
+GEN_E3 := $(BUILD)/gen_e3_c_fixtures
+# Default outdir when invoked as `make -C collector gen-e3-fixtures`
+# (relative to collector/); override: make -C collector gen-e3-fixtures OUTDIR=...
+OUTDIR ?= ../fixtures/v6/from-c
+
 SRC := \
 	src/nytp_sink.c \
 	src/nytp_sink_counting.c \
@@ -40,9 +46,9 @@ SRC := \
 
 OBJ := $(patsubst src/%.c,$(BUILD)/%.o,$(SRC))
 
-.PHONY: all test clean dirs
+.PHONY: all test clean dirs gen-e3-fixtures
 
-all: $(LIB) $(TESTBINS)
+all: $(LIB) $(TESTBINS) $(GEN_E3)
 
 dirs:
 	@mkdir -p $(BUILD)
@@ -80,6 +86,15 @@ $(BUILD)/test_v6_codec_chunk_crc: t/test_v6_codec_chunk_crc.c $(LIB) | dirs
 
 $(BUILD)/test_v6_packing_footer: t/test_v6_packing_footer.c $(LIB) | dirs
 	$(CC) $(CPPFLAGS) $(CFLAGS) -o $@ t/test_v6_packing_footer.c $(LIB) $(LDFLAGS) $(LDLIBS)
+
+$(GEN_E3): t/gen_e3_c_fixtures.c $(LIB) | dirs
+	$(CC) $(CPPFLAGS) $(CFLAGS) -o $@ t/gen_e3_c_fixtures.c $(LIB) $(LDFLAGS) $(LDLIBS)
+
+# Produce committed product E3 C fixtures (PR-B09). Run from repo root preferred:
+#   make -C collector gen-e3-fixtures OUTDIR=$$(pwd)/fixtures/v6/from-c
+gen-e3-fixtures: $(GEN_E3)
+	@mkdir -p "$(OUTDIR)"
+	./$(GEN_E3) "$(OUTDIR)"
 
 test: all
 	./$(BUILD)/test_sink_api

@@ -251,7 +251,7 @@ if command -v cargo >/dev/null 2>&1; then
   ok "Rust always-inflate accepted packing/dict C bytes"
 fi
 
-echo "NOTE: COL-007 ABS+CODEC+PACK scaffold; E3-C residual — board COL-007 not done; not live XS hooks"
+echo "NOTE: COL-007 ABS+CODEC+PACK scaffold; product E3-EVENT = fixtures/v6/from-c + e3_c_* (see e3_c_writer_parity.sh); E3-mixed residual; not live XS hooks"
 echo "NOTE: M4 mini sample only — full oracle corpus under fake-clock needs complete TEST-003"
 echo "NOTE: batch light microbench is engineering only — not BENCH-003/006 certification"
 echo "NOTE: flush/compression discount timing vs BASE-003 remains residual"

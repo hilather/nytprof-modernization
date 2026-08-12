@@ -1,6 +1,6 @@
 # Collector v6 packing + FOOTER string-dict + mid-stream region — MVP v0 (COL-007 staged / PR-B08)
 
-**Status:** provisional scaffolding — **not** a v6 wire freeze; **not** board COL-007 done (E3-C = PR-B09)  
+**Status:** provisional scaffolding — **not** a v6 wire freeze; board COL-007 product E3-EVENT closed in PR-B09  
 **Task:** COL-007 packing / FOOTER dict / mid-stream codec region (PR-B08)  
 **Depends on:** [collector-v6-codecs-multi-chunk-crc-mvp-v0.md](https://github.com/hilather/nytprof-modernization/blob/main/docs/schemas/collector-v6-codecs-multi-chunk-crc-mvp-v0.md) (PR-B07)  
 **ADRs:** [0001 packing](https://github.com/hilather/nytprof-modernization/blob/main/docs/adrs/0001-v6-event-body-packing-candidate.md) (accepted intent); [0002 FOOTER-local dict](https://github.com/hilather/nytprof-modernization/blob/main/docs/adrs/0002-v6-string-pool-candidate.md) (accepted intent)  
@@ -84,7 +84,8 @@ entry*      : id ULEB128 || flags u8 || byte_length ULEB128 || bytes
 
 | Residual | Owner |
 |----------|-------|
-| Board **COL-007 done** + E3-C fixtures (`e3_c_*`) | PR-B09 |
+| Board **COL-007 done** + E3-C fixtures (`e3_c_*`) | **done** PR-B09 (`fixtures/v6/from-c/**`, `e3_c_*`, `e3_c_writer_parity.sh`) |
+| E3-mixed multi-kind C fixtures | residual after B09 |
 | Wire freeze / FMT-002..010 | after E3/E4 |
 | TIME_BLOCK_RUN emit API | optional follow-on (TIME_LINE_RUN covered) |
 | Global / cross-file string pool | separate ADR (not ADR-0002) |

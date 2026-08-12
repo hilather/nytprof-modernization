@@ -78,7 +78,7 @@ Matches [`v6-crc-provisional-v0.md`](https://github.com/hilather/nytprof-moderni
 | Packing (site-delta, TIME_*_RUN, FLAG_HAS_SEQ) | PR-B08 / ADR-0001 |
 | FOOTER string dictionary | PR-B08 / ADR-0002 |
 | Mid-stream payload codec switch after START_DEFLATE | PR-B08 |
-| Board **COL-007 done** + E3-C fixtures | PR-B09 |
+| Board **COL-007 done** + E3-C fixtures | **done** PR-B09 (`fixtures/v6/from-c/**`, `e3_c_*`) |
 | Wire freeze | after E3/E4 |
 | Always-on default CLI CRC verify | residual (optional verify flag) |
 | Live Perl/XS hooks | later COL |

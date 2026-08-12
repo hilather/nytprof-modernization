@@ -94,7 +94,7 @@ COL-003 sequence numbers are **not** written on the wire.
 | Packing (site-delta, TIME_*_RUN, FLAG_HAS_SEQ) | PR-B08 / ADR-0001 |
 | Multi-chunk EVENT + CRC + ZLIB/ZSTD/LZ4 | **PR-B07 done (scaffold)** — see [`collector-v6-codecs-multi-chunk-crc-mvp-v0.md`](https://github.com/hilather/nytprof-modernization/blob/main/docs/schemas/collector-v6-codecs-multi-chunk-crc-mvp-v0.md) |
 | FOOTER string dictionary | PR-B08 / ADR-0002 |
-| Board **COL-007 done** + E3-C fixtures | PR-B09 |
+| Board **COL-007 done** + E3-C fixtures | **done** PR-B09 (`fixtures/v6/from-c/**`, `e3_c_*`) |
 | Wire freeze | after E3/E4 (lockfile deviation note) |
 | Live Perl/XS hooks | later COL |
 | NEW_FID / TIME_BLOCK field drop vs full COMPAT-001 | residual until packing/catalog freeze |
