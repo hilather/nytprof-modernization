@@ -46,6 +46,7 @@ assert_no_bad_perl5lib "parent env" "${PERL5LIB-}"
 MATRIX=(
   absolute.nytprof
   packing.nytprof
+  packing_lz4.nytprof
   dict.nytprof
   packing_dict.nytprof
   mid_stream.nytprof
@@ -80,6 +81,8 @@ if command -v cargo >/dev/null 2>&1; then
     "$FIXTURE_DIR/absolute.nytprof"
   cargo run -q -p nytprof-format-v6 --example decode_c_b08 -- \
     "$FIXTURE_DIR/packing.nytprof"
+  cargo run -q -p nytprof-format-v6 --example decode_c_b08 -- \
+    "$FIXTURE_DIR/packing_lz4.nytprof"
   cargo run -q -p nytprof-format-v6 --example decode_c_b08 -- \
     "$FIXTURE_DIR/dict.nytprof" --dict
   cargo run -q -p nytprof-format-v6 --example decode_c_b08 -- \

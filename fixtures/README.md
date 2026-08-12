@@ -21,6 +21,7 @@ fixtures/v5/<name>/
 fixtures/v6/from-c/        # C-produced product E3-EVENT matrix (COL-007)
   absolute.nytprof
   packing.nytprof
+  packing_lz4.nytprof
   dict.nytprof
   packing_dict.nytprof
   mid_stream.nytprof

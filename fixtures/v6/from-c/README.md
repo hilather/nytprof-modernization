@@ -14,6 +14,7 @@ must never re-encode via Rust stand-in writers (`e3_standin_*`).
 |------|------|----------------|
 | `absolute.nytprof` | absolute NONE single-chunk | TIME_LINE×2 + TIME_BLOCK + SUB_ENTRY |
 | `packing.nytprof` | packing ZLIB multi-chunk (max 2) | same sample; continuous sites + FLAG_HAS_SEQ |
+| `packing_lz4.nytprof` | packing LZ4 multi-chunk (max 2) | same sample as packing; LZ4 EVENT payloads |
 | `dict.nytprof` | FOOTER string-dict absolute | ATTRIBUTE basetime + COMMENT + TIME_LINE |
 | `packing_dict.nytprof` | packing + FOOTER dict multi-chunk | COMMENT + TIME_LINE×2 + COMMENT |
 | `mid_stream.nytprof` | packing mid-stream NONE→ZLIB | TIME_LINE + TIME_LINE_RUN + START_DEFLATE + post site-delta |

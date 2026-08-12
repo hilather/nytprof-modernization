@@ -4,6 +4,9 @@
 //! `make -C collector gen-e3-fixtures` (`collector/t/gen_e3_c_fixtures.c`).
 //! Tests MUST load those bytes — never re-encode via `e3_standin_*`.
 //!
+//! Equality is against **hand-built expected logical streams** that mirror
+//! `gen_e3_c_fixtures.c` (not same-bytes re-decode, which would be tautological).
+//!
 //! Evidence: `cargo test -p nytprof-format-v6 e3_c_` ·
 //! `./tools/oracle/e3_c_writer_parity.sh`
 
@@ -11,10 +14,10 @@ use std::path::PathBuf;
 
 use nytprof_format_v6::chunk::codec;
 use nytprof_format_v6::compressed_profile::OwnedEventRecord;
-use nytprof_format_v6::decoded_event::{
-    decode_decoded_event_profile, decode_decoded_event_profile_with_string_dict,
+use nytprof_format_v6::event_body::EventRecordSpec;
+use nytprof_format_v6::{
+    e3_assert_logical_equal, e3_decode_writer_bytes, e3_standin_write_absolute,
 };
-use nytprof_format_v6::{e3_assert_logical_equal, e3_decode_writer_bytes};
 
 fn from_c_fixture(name: &str) -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR"))
@@ -32,82 +35,136 @@ fn load_c_bytes(name: &str) -> Vec<u8> {
     })
 }
 
-/// Product E3 absolute EVENT: C absolute sink → always-inflate logical sites.
+/// Sample events from `gen_e3_c_fixtures.c` `emit_sample_events`.
+fn expected_sample_records() -> Vec<OwnedEventRecord> {
+    vec![
+        OwnedEventRecord::TimeLine {
+            fid: 1,
+            line: 10,
+            ticks: 5,
+        },
+        OwnedEventRecord::TimeLine {
+            fid: 1,
+            line: 11,
+            ticks: 6,
+        },
+        OwnedEventRecord::TimeBlock {
+            fid: 1,
+            line: 12,
+            block_line: 4,
+            ticks: 20,
+        },
+        OwnedEventRecord::SubEntry {
+            caller_fid: 1,
+            caller_line: 10,
+        },
+    ]
+}
+
+fn expected_packing_sequences(n: usize) -> Vec<Option<u64>> {
+    (0..n).map(|i| Some(i as u64)).collect()
+}
+
+fn assert_e3_matches(
+    e3: &nytprof_format_v6::E3Decoded,
+    expected_records: &[OwnedEventRecord],
+    expected_sequences: &[Option<u64>],
+) {
+    e3_assert_logical_equal(&e3.profile, expected_records, expected_sequences)
+        .unwrap_or_else(|e| panic!("E3-C independent logical equality: {e}"));
+}
+
+/// Absolute path has no packing FLAG_HAS_SEQ → sequences are all None.
+fn expected_absolute_sequences(n: usize) -> Vec<Option<u64>> {
+    vec![None; n]
+}
+
+fn assert_profile_consumed(e3: &nytprof_format_v6::E3Decoded, wire: &[u8]) {
+    assert_eq!(e3.bytes_consumed, wire.len(), "must consume full C wire");
+}
+
+/// Product E3 absolute EVENT: C absolute sink → independent logical sites.
 #[test]
 fn e3_c_absolute_event_logical_equal() {
     let wire = load_c_bytes("absolute.nytprof");
     let e3 = e3_decode_writer_bytes(&wire, true, false).expect("E3-C absolute decode");
-    assert_eq!(e3.bytes_consumed, wire.len());
+    assert_profile_consumed(&e3, &wire);
     assert!(e3.dict.is_none());
-    assert_eq!(e3.profile.records.len(), 4);
     assert_eq!(e3.profile.event_chunk_count, 1);
-    match &e3.profile.records[0] {
-        OwnedEventRecord::TimeLine { fid, line, ticks } => {
-            assert_eq!((*fid, *line, *ticks), (1, 10, 5));
-        }
-        other => panic!("[0] {other:?}"),
-    }
-    match &e3.profile.records[1] {
-        OwnedEventRecord::TimeLine { fid, line, ticks } => {
-            assert_eq!((*fid, *line, *ticks), (1, 11, 6));
-        }
-        other => panic!("[1] {other:?}"),
-    }
-    match &e3.profile.records[2] {
-        OwnedEventRecord::TimeBlock {
-            fid,
-            line,
-            block_line,
-            ticks,
-        } => {
-            assert_eq!((*fid, *line, *block_line, *ticks), (1, 12, 4, 20));
-        }
-        other => panic!("[2] {other:?}"),
-    }
-    match &e3.profile.records[3] {
-        OwnedEventRecord::SubEntry {
-            caller_fid,
-            caller_line,
-        } => {
-            assert_eq!((*caller_fid, *caller_line), (1, 10));
-        }
-        other => panic!("[3] {other:?}"),
-    }
-    // Independent re-decode of the same C bytes (no stand-in write).
-    let (expected, n2) = decode_decoded_event_profile(&wire, true).unwrap();
-    assert_eq!(n2, wire.len());
-    e3_assert_logical_equal(&e3.profile, &expected.records, &expected.sequences)
-        .expect("E3-C absolute equality");
+    let expected = expected_sample_records();
+    assert_e3_matches(
+        &e3,
+        &expected,
+        &expected_absolute_sequences(expected.len()),
+    );
+    // Anti-stand-in: product C bytes must not be identical to Rust stand-in
+    // absolute encode of the same logical sample (independent encoder).
+    let specs = [
+        EventRecordSpec::TimeLine {
+            fid: 1,
+            line: 10,
+            ticks: 5,
+        },
+        EventRecordSpec::TimeLine {
+            fid: 1,
+            line: 11,
+            ticks: 6,
+        },
+        EventRecordSpec::TimeBlock {
+            fid: 1,
+            line: 12,
+            block_line: 4,
+            ticks: 20,
+        },
+        EventRecordSpec::SubEntry {
+            caller_fid: 1,
+            caller_line: 10,
+        },
+    ];
+    let standin = e3_standin_write_absolute(&specs, codec::NONE).expect("stand-in");
+    assert_ne!(
+        wire, standin,
+        "product C fixture must not be byte-identical to Rust stand-in encode"
+    );
 }
 
-/// Product E3 packing multi-chunk: C packing sink → continuous sites + seq.
+/// Product E3 packing multi-chunk (ZLIB): continuous sites + seq.
 #[test]
 fn e3_c_packing_multi_chunk_logical_equal() {
     let wire = load_c_bytes("packing.nytprof");
     let e3 = e3_decode_writer_bytes(&wire, true, false).expect("E3-C packing decode");
-    assert_eq!(e3.bytes_consumed, wire.len());
+    assert_profile_consumed(&e3, &wire);
     assert!(e3.profile.event_chunk_count >= 2);
-    assert_eq!(e3.profile.records.len(), 4);
-    match &e3.profile.records[0] {
-        OwnedEventRecord::TimeLine { fid, line, ticks } => {
-            assert_eq!((*fid, *line, *ticks), (1, 10, 5));
-        }
-        other => panic!("[0] {other:?}"),
-    }
-    match &e3.profile.records[1] {
-        OwnedEventRecord::TimeLine { fid, line, ticks } => {
-            assert_eq!((*fid, *line, *ticks), (1, 11, 6));
-        }
-        other => panic!("[1] {other:?}"),
-    }
-    // Packing path carries FLAG_HAS_SEQ → continuous seq 0..n-1.
-    assert_eq!(e3.profile.sequences.len(), e3.profile.records.len());
-    for (i, s) in e3.profile.sequences.iter().enumerate() {
-        assert_eq!(*s, Some(i as u64), "seq[{i}]");
-    }
-    let (expected, _) = decode_decoded_event_profile(&wire, true).unwrap();
-    e3_assert_logical_equal(&e3.profile, &expected.records, &expected.sequences)
-        .expect("E3-C packing equality");
+    let expected = expected_sample_records();
+    assert_e3_matches(
+        &e3,
+        &expected,
+        &expected_packing_sequences(expected.len()),
+    );
+}
+
+/// Product E3 packing multi-chunk (LZ4): same logical sample as packing.nytprof.
+#[test]
+fn e3_c_packing_lz4_multi_chunk_logical_equal() {
+    let wire = load_c_bytes("packing_lz4.nytprof");
+    let e3 = e3_decode_writer_bytes(&wire, true, false).expect("E3-C packing LZ4");
+    assert_profile_consumed(&e3, &wire);
+    assert!(e3.profile.event_chunk_count >= 2);
+    // First event chunk uses LZ4 payload codec under packing multi-chunk.
+    assert!(
+        e3.profile
+            .event_chunk_codecs
+            .iter()
+            .all(|&c| c == codec::LZ4),
+        "expected all EVENT chunks LZ4, got {:?}",
+        e3.profile.event_chunk_codecs
+    );
+    let expected = expected_sample_records();
+    assert_e3_matches(
+        &e3,
+        &expected,
+        &expected_packing_sequences(expected.len()),
+    );
 }
 
 /// Product E3 FOOTER string-dict: C dict sink → resolved ATTRIBUTE/COMMENT.
@@ -115,35 +172,32 @@ fn e3_c_packing_multi_chunk_logical_equal() {
 fn e3_c_dict_footer_resolve() {
     let wire = load_c_bytes("dict.nytprof");
     let e3 = e3_decode_writer_bytes(&wire, true, true).expect("E3-C dict decode");
-    assert_eq!(e3.bytes_consumed, wire.len());
+    assert_profile_consumed(&e3, &wire);
     assert!(e3.profile.has_footer);
     let dict = e3.dict.as_ref().expect("dict present");
     assert!(dict.len() >= 2);
-    assert_eq!(e3.profile.records.len(), 3);
-    match &e3.profile.records[0] {
-        OwnedEventRecord::Attribute { key, value } => {
-            assert_eq!(key, b"basetime");
-            assert_eq!(value, b"1786111723");
-        }
-        other => panic!("[0] {other:?}"),
-    }
-    match &e3.profile.records[1] {
-        OwnedEventRecord::Comment { text } => {
-            assert_eq!(text, b"e3-c-dict-label");
-        }
-        other => panic!("[1] {other:?}"),
-    }
-    match &e3.profile.records[2] {
-        OwnedEventRecord::TimeLine { fid, line, ticks } => {
-            assert_eq!((*fid, *line, *ticks), (1, 10, 5));
-        }
-        other => panic!("[2] {other:?}"),
-    }
-    let (expected, expected_dict, _) =
-        decode_decoded_event_profile_with_string_dict(&wire, true).unwrap();
-    assert_eq!(dict.len(), expected_dict.len());
-    e3_assert_logical_equal(&e3.profile, &expected.records, &expected.sequences)
-        .expect("E3-C dict equality");
+    // Hand-built expected from gen_e3_c_fixtures write_dict:
+    // ATTRIBUTE basetime=1786111723, COMMENT e3-c-dict-label, TIME_LINE 1:10 t=5
+    let expected = vec![
+        OwnedEventRecord::Attribute {
+            key: b"basetime".to_vec(),
+            value: b"1786111723".to_vec(),
+        },
+        OwnedEventRecord::Comment {
+            text: b"e3-c-dict-label".to_vec(),
+        },
+        OwnedEventRecord::TimeLine {
+            fid: 1,
+            line: 10,
+            ticks: 5,
+        },
+    ];
+    // Absolute + dict path: no packing FLAG_HAS_SEQ → None sequences.
+    assert_e3_matches(
+        &e3,
+        &expected,
+        &expected_absolute_sequences(expected.len()),
+    );
 }
 
 /// Product E3 packing + FOOTER dict multi-chunk.
@@ -151,37 +205,32 @@ fn e3_c_dict_footer_resolve() {
 fn e3_c_packing_dict_multi_chunk() {
     let wire = load_c_bytes("packing_dict.nytprof");
     let e3 = e3_decode_writer_bytes(&wire, true, true).expect("E3-C packing+dict");
-    assert_eq!(e3.bytes_consumed, wire.len());
+    assert_profile_consumed(&e3, &wire);
     assert!(e3.profile.event_chunk_count >= 2);
     assert!(e3.profile.has_footer);
-    assert_eq!(e3.profile.records.len(), 4);
-    match &e3.profile.records[0] {
-        OwnedEventRecord::Comment { text } => assert_eq!(text, b"pack-dict-mark"),
-        other => panic!("[0] {other:?}"),
-    }
-    match &e3.profile.records[1] {
-        OwnedEventRecord::TimeLine { fid, line, ticks } => {
-            assert_eq!((*fid, *line, *ticks), (1, 10, 5));
-        }
-        other => panic!("[1] {other:?}"),
-    }
-    match &e3.profile.records[2] {
-        OwnedEventRecord::TimeLine { fid, line, ticks } => {
-            assert_eq!((*fid, *line, *ticks), (1, 11, 6));
-        }
-        other => panic!("[2] {other:?}"),
-    }
-    match &e3.profile.records[3] {
-        OwnedEventRecord::Comment { text } => assert_eq!(text, b"# pack-dict-end"),
-        other => panic!("[3] {other:?}"),
-    }
-    assert_eq!(e3.profile.sequences.len(), e3.profile.records.len());
-    for (i, s) in e3.profile.sequences.iter().enumerate() {
-        assert_eq!(*s, Some(i as u64), "seq[{i}]");
-    }
-    let (expected, _, _) = decode_decoded_event_profile_with_string_dict(&wire, true).unwrap();
-    e3_assert_logical_equal(&e3.profile, &expected.records, &expected.sequences)
-        .expect("E3-C packing+dict equality");
+    let expected = vec![
+        OwnedEventRecord::Comment {
+            text: b"pack-dict-mark".to_vec(),
+        },
+        OwnedEventRecord::TimeLine {
+            fid: 1,
+            line: 10,
+            ticks: 5,
+        },
+        OwnedEventRecord::TimeLine {
+            fid: 1,
+            line: 11,
+            ticks: 6,
+        },
+        OwnedEventRecord::Comment {
+            text: b"# pack-dict-end".to_vec(),
+        },
+    ];
+    assert_e3_matches(
+        &e3,
+        &expected,
+        &expected_packing_sequences(expected.len()),
+    );
 }
 
 /// Product E3 mid-stream packing continuity (NONE→ZLIB + TIME_LINE_RUN site-delta).
@@ -189,72 +238,52 @@ fn e3_c_packing_dict_multi_chunk() {
 fn e3_c_mid_stream_packing_continuity() {
     let wire = load_c_bytes("mid_stream.nytprof");
     let e3 = e3_decode_writer_bytes(&wire, true, false).expect("E3-C mid-stream");
-    assert_eq!(e3.bytes_consumed, wire.len());
+    assert_profile_consumed(&e3, &wire);
     assert_eq!(e3.profile.event_chunk_count, 2);
     assert_eq!(
         e3.profile.event_chunk_codecs,
         vec![codec::NONE, codec::ZLIB]
     );
     // TL + 2 expanded run + StartDeflate + post TL + SubEntry + TimeBlock = 7
-    assert_eq!(e3.profile.records.len(), 7);
-    match &e3.profile.records[0] {
-        OwnedEventRecord::TimeLine { fid, line, ticks } => {
-            assert_eq!((*fid, *line, *ticks), (1, 10, 5));
-        }
-        other => panic!("[0] {other:?}"),
-    }
-    // Expanded TIME_LINE_RUN at (2,50) ticks 7,8
-    match &e3.profile.records[1] {
-        OwnedEventRecord::TimeLine { fid, line, ticks } => {
-            assert_eq!((*fid, *line, *ticks), (2, 50, 7));
-        }
-        other => panic!("[1] {other:?}"),
-    }
-    match &e3.profile.records[2] {
-        OwnedEventRecord::TimeLine { fid, line, ticks } => {
-            assert_eq!((*fid, *line, *ticks), (2, 50, 8));
-        }
-        other => panic!("[2] {other:?}"),
-    }
-    assert!(matches!(
-        e3.profile.records[3],
-        OwnedEventRecord::StartDeflate
-    ));
-    // Post-run site-delta lands on (2,51,9)
-    match &e3.profile.records[4] {
-        OwnedEventRecord::TimeLine { fid, line, ticks } => {
-            assert_eq!((*fid, *line, *ticks), (2, 51, 9));
-        }
-        other => panic!("[4] post site-delta {other:?}"),
-    }
-    match &e3.profile.records[5] {
+    // Matches gen_e3_c_fixtures write_mid_stream.
+    let expected = vec![
+        OwnedEventRecord::TimeLine {
+            fid: 1,
+            line: 10,
+            ticks: 5,
+        },
+        OwnedEventRecord::TimeLine {
+            fid: 2,
+            line: 50,
+            ticks: 7,
+        },
+        OwnedEventRecord::TimeLine {
+            fid: 2,
+            line: 50,
+            ticks: 8,
+        },
+        OwnedEventRecord::StartDeflate,
+        OwnedEventRecord::TimeLine {
+            fid: 2,
+            line: 51,
+            ticks: 9,
+        },
         OwnedEventRecord::SubEntry {
-            caller_fid,
-            caller_line,
-        } => {
-            assert_eq!((*caller_fid, *caller_line), (2, 50));
-        }
-        other => panic!("[5] {other:?}"),
-    }
-    match &e3.profile.records[6] {
+            caller_fid: 2,
+            caller_line: 50,
+        },
         OwnedEventRecord::TimeBlock {
-            fid,
-            line,
-            block_line,
-            ticks,
-        } => {
-            assert_eq!((*fid, *line, *block_line, *ticks), (3, 9, 7, 3));
-        }
-        other => panic!("[6] {other:?}"),
-    }
-    // Seq continuous across switch (StartDeflate also assigned under packing).
-    assert_eq!(e3.profile.sequences.len(), e3.profile.records.len());
-    for (i, s) in e3.profile.sequences.iter().enumerate() {
-        assert_eq!(*s, Some(i as u64), "seq[{i}]");
-    }
-    let (expected, _) = decode_decoded_event_profile(&wire, true).unwrap();
-    e3_assert_logical_equal(&e3.profile, &expected.records, &expected.sequences)
-        .expect("E3-C mid-stream equality");
+            fid: 3,
+            line: 9,
+            block_line: 7,
+            ticks: 3,
+        },
+    ];
+    assert_e3_matches(
+        &e3,
+        &expected,
+        &expected_packing_sequences(expected.len()),
+    );
 }
 
 /// Product E3 mid-stream packing + FOOTER dict (NONE→ZSTD).
@@ -262,7 +291,7 @@ fn e3_c_mid_stream_packing_continuity() {
 fn e3_c_mid_stream_dict_packing() {
     let wire = load_c_bytes("mid_stream_dict.nytprof");
     let e3 = e3_decode_writer_bytes(&wire, true, true).expect("E3-C mid-stream dict");
-    assert_eq!(e3.bytes_consumed, wire.len());
+    assert_profile_consumed(&e3, &wire);
     assert_eq!(e3.profile.event_chunk_count, 2);
     assert_eq!(
         e3.profile.event_chunk_codecs,
@@ -272,29 +301,44 @@ fn e3_c_mid_stream_dict_packing() {
     let dict = e3.dict.as_ref().unwrap();
     assert!(dict.len() >= 2);
     // TL + 2 run + StartDeflate + post TL + SubEntry + 2 comments = 8
-    assert_eq!(e3.profile.records.len(), 8);
-    match &e3.profile.records[4] {
-        OwnedEventRecord::TimeLine { fid, line, ticks } => {
-            assert_eq!((*fid, *line, *ticks), (2, 51, 9));
-        }
-        other => panic!("[4] {other:?}"),
-    }
-    let n = e3.profile.records.len();
-    match &e3.profile.records[n - 2] {
-        OwnedEventRecord::Comment { text } => {
-            assert_eq!(text, b"ms-e3-c-dict-mark");
-        }
-        other => panic!("mark-comment {other:?}"),
-    }
-    match &e3.profile.records[n - 1] {
-        OwnedEventRecord::Comment { text } => {
-            assert_eq!(text, b"# ms-e3-c-dict-end");
-        }
-        other => panic!("end-comment {other:?}"),
-    }
-    let (expected, _, _) = decode_decoded_event_profile_with_string_dict(&wire, true).unwrap();
-    e3_assert_logical_equal(&e3.profile, &expected.records, &expected.sequences)
-        .expect("E3-C mid-stream dict equality");
+    let expected = vec![
+        OwnedEventRecord::TimeLine {
+            fid: 1,
+            line: 10,
+            ticks: 5,
+        },
+        OwnedEventRecord::TimeLine {
+            fid: 2,
+            line: 50,
+            ticks: 7,
+        },
+        OwnedEventRecord::TimeLine {
+            fid: 2,
+            line: 50,
+            ticks: 8,
+        },
+        OwnedEventRecord::StartDeflate,
+        OwnedEventRecord::TimeLine {
+            fid: 2,
+            line: 51,
+            ticks: 9,
+        },
+        OwnedEventRecord::SubEntry {
+            caller_fid: 2,
+            caller_line: 50,
+        },
+        OwnedEventRecord::Comment {
+            text: b"ms-e3-c-dict-mark".to_vec(),
+        },
+        OwnedEventRecord::Comment {
+            text: b"# ms-e3-c-dict-end".to_vec(),
+        },
+    ];
+    assert_e3_matches(
+        &e3,
+        &expected,
+        &expected_packing_sequences(expected.len()),
+    );
 }
 
 /// Product E3 fail-closed: truncated C absolute fixture.
@@ -314,6 +358,7 @@ fn e3_c_fixture_matrix_present() {
     for name in [
         "absolute.nytprof",
         "packing.nytprof",
+        "packing_lz4.nytprof",
         "dict.nytprof",
         "packing_dict.nytprof",
         "mid_stream.nytprof",
@@ -327,3 +372,4 @@ fn e3_c_fixture_matrix_present() {
         );
     }
 }
+

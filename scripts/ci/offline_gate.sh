@@ -333,7 +333,7 @@ else
   echo "SKIP: cargo not on PATH — product E3 e3_c_* equality not run"
   echo "  (honest skip; committed fixtures under fixtures/v6/from-c/ still required present)"
   # Soft presence check without cargo decode.
-  for f in absolute packing dict packing_dict mid_stream mid_stream_dict; do
+  for f in absolute packing packing_lz4 dict packing_dict mid_stream mid_stream_dict; do
     [[ -f "$ROOT/fixtures/v6/from-c/${f}.nytprof" ]] \
       || fail "missing C fixture fixtures/v6/from-c/${f}.nytprof"
   done

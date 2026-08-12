@@ -5,7 +5,8 @@
  * Writes deterministic profiles under <outdir>/ (default:
  * fixtures/v6/from-c relative to CWD). Matrix:
  *   absolute.nytprof          — absolute EVENT (no packing / no FOOTER dict)
- *   packing.nytprof           — ADR-0001 packing multi-chunk (max 2)
+ *   packing.nytprof           — ADR-0001 packing multi-chunk (max 2, ZLIB)
+ *   packing_lz4.nytprof       — packing multi-chunk (max 2, LZ4)
  *   dict.nytprof              — ADR-0002 FOOTER string-dict (absolute bodies)
  *   packing_dict.nytprof      — packing + FOOTER dict multi-chunk
  *   mid_stream.nytprof        — packing + mid-stream NONE→ZLIB region
@@ -89,14 +90,15 @@ static void write_absolute(const char *outdir)
     nytp_sink_destroy(s);
 }
 
-static void write_packing(const char *outdir)
+static void write_packing_codec(const char *outdir, const char *name,
+                                uint8_t codec)
 {
     char path[1024];
     nytp_v6_sink_options opt;
     nytp_sink *s;
-    path_join(path, sizeof(path), outdir, "packing.nytprof");
+    path_join(path, sizeof(path), outdir, name);
     memset(&opt, 0, sizeof(opt));
-    opt.event_codec = (uint8_t)NYTPROF_V6_CODEC_ZLIB;
+    opt.event_codec = codec;
     opt.max_records_per_chunk = 2;
     opt.enable_packing = 1;
     s = nytp_v6_sink_create_opts(path, &opt);
@@ -105,9 +107,22 @@ static void write_packing(const char *outdir)
     EXPECT(nytp_sink_close(s) == NYTP_OK, "close packing");
     EXPECT(nytp_v6_sink_is_sealed(s), "sealed packing");
     EXPECT(nytp_v6_sink_event_chunk_count(s) >= 2, "multi-chunk packing");
-    printf("wrote %s (%zu bytes, chunks=%u)\n", path, nytp_v6_sink_wire_len(s),
-           nytp_v6_sink_event_chunk_count(s));
+    printf("wrote %s (%zu bytes, chunks=%u, codec=%u)\n", path,
+           nytp_v6_sink_wire_len(s), nytp_v6_sink_event_chunk_count(s),
+           (unsigned)codec);
     nytp_sink_destroy(s);
+}
+
+static void write_packing(const char *outdir)
+{
+    write_packing_codec(outdir, "packing.nytprof",
+                        (uint8_t)NYTPROF_V6_CODEC_ZLIB);
+}
+
+static void write_packing_lz4(const char *outdir)
+{
+    write_packing_codec(outdir, "packing_lz4.nytprof",
+                        (uint8_t)NYTPROF_V6_CODEC_LZ4);
 }
 
 static void write_dict(const char *outdir)
@@ -236,6 +251,7 @@ int main(int argc, char **argv)
 
     write_absolute(outdir);
     write_packing(outdir);
+    write_packing_lz4(outdir);
     write_dict(outdir);
     write_packing_dict(outdir);
     write_mid_stream(outdir);

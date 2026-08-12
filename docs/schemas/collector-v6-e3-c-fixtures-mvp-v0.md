@@ -32,6 +32,7 @@ Close board **COL-007** for the **EVENT** product path by:
 |------|---------|
 | `absolute.nytprof` | default create (absolute NONE) |
 | `packing.nytprof` | packing + ZLIB + max_records_per_chunk=2 |
+| `packing_lz4.nytprof` | packing + LZ4 + max_records_per_chunk=2 |
 | `dict.nytprof` | enable_string_dict |
 | `packing_dict.nytprof` | packing + dict + ZLIB multi-chunk |
 | `mid_stream.nytprof` | packing + `begin_codec_region(ZLIB)` after TIME_LINE_RUN |
@@ -42,8 +43,9 @@ Close board **COL-007** for the **EVENT** product path by:
 | Check | Evidence |
 |-------|----------|
 | C fixtures present with `NYTPROF6` magic | `e3_c_fixture_matrix_present`; parity script |
-| Absolute logical sites | `e3_c_absolute_event_logical_equal` |
+| Absolute logical sites (hand-built expected) | `e3_c_absolute_event_logical_equal` |
 | Packing multi-chunk continuous sites/seq | `e3_c_packing_multi_chunk_logical_equal` |
+| Packing LZ4 multi-chunk same logical sample | `e3_c_packing_lz4_multi_chunk_logical_equal` |
 | FOOTER dict resolve | `e3_c_dict_footer_resolve` |
 | Packing + dict multi-chunk | `e3_c_packing_dict_multi_chunk` |
 | Mid-stream packing continuity | `e3_c_mid_stream_packing_continuity` |
