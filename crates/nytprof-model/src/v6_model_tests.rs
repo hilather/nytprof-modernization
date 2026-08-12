@@ -54,7 +54,23 @@ fn assert_aggregate_parity(a: &ProfileModel, b: &ProfileModel, label: &str) {
             .unwrap_or_else(|| panic!("{label}: missing edge {:?}", key));
         assert_eq!(e.count, o.count, "{label}: edge {:?} count", key);
         assert_eq!(e.sites, o.sites, "{label}: edge {:?} sites", key);
+        assert_eq!(
+            e.max_rec_depth, o.max_rec_depth,
+            "{label}: edge {:?} max_rec_depth",
+            key
+        );
+        assert!(f64_close(e.incl, o.incl), "{label}: edge {:?} incl", key);
+        assert!(f64_close(e.excl, o.excl), "{label}: edge {:?} excl", key);
+        assert!(f64_close(e.reci, o.reci), "{label}: edge {:?} reci", key);
     }
+    assert_eq!(
+        a.pid_start_events, b.pid_start_events,
+        "{label}: pid_start_events"
+    );
+    assert_eq!(a.pid_end_events, b.pid_end_events, "{label}: pid_end_events");
+    // total_events may differ by auto-VERSION inject on one path only; compare
+    // only when both sides already include VERSION (stand-in pair does).
+    // Callers that need exact total_events equality assert it separately.
     assert_eq!(a.sub_defs, b.sub_defs, "{label}: A9 sub_defs");
     assert_eq!(a.source_lines, b.source_lines, "{label}: A8 source_lines");
     assert_eq!(a.files, b.files, "{label}: files");
@@ -115,6 +131,89 @@ fn from_path_unknown_magic_errors() {
         "got {err:?}"
     );
     let _ = std::fs::remove_file(&tmp);
+}
+
+/// FOOTER dict missing string_id → model must Err (no empty-attribute soft success).
+#[test]
+fn v6_footer_missing_string_id_from_bytes_fail_closed() {
+    use nytprof_format_v6::chunk::codec;
+    use nytprof_format_v6::event_body::EventRecordSpec;
+    use nytprof_format_v6::e3_standin_write_string_dict;
+    use nytprof_format_v6::string::FLAG_UTF8;
+
+    let events = [EventRecordSpec::Attribute {
+        key_string_id: 99,
+        key_string_flags: 0,
+        key: b"",
+        value_string_id: 0,
+        value_string_flags: 0,
+        value: b"1786111723",
+    }];
+    let dict_entries: &[(u64, u8, &[u8])] = &[(1, FLAG_UTF8, b"other")];
+    let wire = e3_standin_write_string_dict(&events, codec::NONE, dict_entries).expect("encode");
+    let err = ProfileModel::from_bytes(&wire).expect_err("missing dict id");
+    assert!(
+        matches!(err, ModelError::DecodeV6(_)),
+        "expected DecodeV6, got {err:?}"
+    );
+    // Must not have succeeded with blank key.
+    assert!(
+        !format!("{err}").is_empty(),
+        "error message present"
+    );
+}
+
+/// Truncated / trailing / CRC-corrupt v6 product fixtures fail closed.
+#[test]
+fn v6_corrupt_absolute_fail_closed() {
+    let path = v6_from_c_fixture("absolute.nytprof");
+    let bytes = std::fs::read(&path).expect("read absolute");
+    assert!(bytes.len() > 16);
+
+    // Half-truncated.
+    let err = ProfileModel::from_bytes(&bytes[..bytes.len() / 2]).expect_err("trunc");
+    assert!(
+        matches!(err, ModelError::DecodeV6(_)),
+        "trunc: {err:?}"
+    );
+
+    // Trailing garbage after a complete profile.
+    let mut trailing = bytes.clone();
+    trailing.extend_from_slice(b"GARBAGE");
+    let err = ProfileModel::from_bytes(&trailing).expect_err("trailing");
+    assert!(
+        matches!(err, ModelError::DecodeV6(_)),
+        "trailing: {err:?}"
+    );
+
+    // Flip last payload byte (CRC / body fail-closed).
+    let mut flipped = bytes.clone();
+    let i = flipped.len() - 1;
+    flipped[i] ^= 0xFF;
+    let err = ProfileModel::from_bytes(&flipped).expect_err("crc flip");
+    assert!(
+        matches!(err, ModelError::DecodeV6(_)),
+        "crc flip: {err:?}"
+    );
+}
+
+/// Dump seqs are unique and monotonic (packing auto-VERSION must not collide with body seq 0).
+#[test]
+fn v6_packing_dump_seqs_unique_monotonic() {
+    let events = decode_events_from_path(v6_from_c_fixture("packing.nytprof")).expect("decode");
+    assert!(!events.is_empty());
+    for (i, ev) in events.iter().enumerate() {
+        assert_eq!(ev.seq, i as u64, "dump seq must equal stream index");
+    }
+    // Mid-stream packing fixture as well.
+    let mid = decode_events_from_path(v6_from_c_fixture("mid_stream.nytprof")).expect("mid");
+    for (i, ev) in mid.iter().enumerate() {
+        assert_eq!(ev.seq, i as u64, "mid_stream dump seq[{i}]");
+    }
+    assert!(
+        matches!(mid.first().map(|e| e.tag.as_str()), Some("VERSION")),
+        "auto-VERSION first"
+    );
 }
 
 /// Pair parity: same logical stream via from_events (v5-style) vs v6 stand-in encode → from_path.

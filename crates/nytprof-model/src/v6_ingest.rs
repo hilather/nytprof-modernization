@@ -56,17 +56,19 @@ fn decode_v6_events(bytes: &[u8]) -> Result<Vec<Event>> {
 }
 
 /// Convert expanded/resolved owned v6 records to dump-aligned logical events.
+///
+/// **Dump `seq` is stream order (0..n-1)** after always-inflate expansion and
+/// auto-VERSION inject. Packing `FLAG_HAS_SEQ` values live on the decoded profile
+/// for E3 equality; reusing them here collided with injected VERSION (`None` → 0)
+/// when body packing also starts at 0. Dump schema assigns monotonic dumper seq.
 pub fn owned_records_to_events(
     records: &[OwnedEventRecord],
     sequences: &[Option<u64>],
 ) -> Result<Vec<Event>> {
+    let _ = sequences; // packing wire seq retained on DecodedEventProfile, not dump Event.seq
     let mut out = Vec::with_capacity(records.len());
     for (i, rec) in records.iter().enumerate() {
-        let seq = sequences
-            .get(i)
-            .and_then(|s| *s)
-            .unwrap_or(i as u64);
-        out.push(owned_record_to_event(seq, rec)?);
+        out.push(owned_record_to_event(i as u64, rec)?);
     }
     Ok(out)
 }

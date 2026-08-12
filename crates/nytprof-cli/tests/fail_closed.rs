@@ -110,6 +110,54 @@ fn fail_closed_cli_bad_magic() {
     let _ = fs::remove_file(&tmp);
 }
 
+fn fixture_v6_absolute() -> PathBuf {
+    PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../fixtures/v6/from-c/absolute.nytprof")
+}
+
+fn fixture_v6_dict() -> PathBuf {
+    PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../fixtures/v6/from-c/dict.nytprof")
+}
+
+/// Truncated product v6 absolute fixture — dump/verify/report fail closed.
+#[test]
+fn fail_closed_cli_truncated_v6_absolute() {
+    let golden = fixture_v6_absolute();
+    assert!(golden.is_file(), "missing {}", golden.display());
+    let bytes = fs::read(&golden).expect("read");
+    let half = bytes.len() / 2;
+    assert!(half > 8);
+    let tmp = temp_path("v6-trunc");
+    fs::write(&tmp, &bytes[..half]).expect("write half");
+    assert_all_shipped_cmds_fail(&tmp, "truncated half of absolute.nytprof");
+    let _ = fs::remove_file(&tmp);
+}
+
+/// Trailing garbage after complete v6 profile — fail closed.
+#[test]
+fn fail_closed_cli_v6_trailing_garbage() {
+    let golden = fixture_v6_absolute();
+    let mut bytes = fs::read(&golden).expect("read");
+    bytes.extend_from_slice(b"TRAIL");
+    let tmp = temp_path("v6-trail");
+    fs::write(&tmp, &bytes).expect("write");
+    assert_all_shipped_cmds_fail(&tmp, "v6 absolute + trailing");
+    let _ = fs::remove_file(&tmp);
+}
+
+/// Last-byte flip of dict.nytprof (CRC / body) — fail closed.
+#[test]
+fn fail_closed_cli_v6_dict_crc_flip() {
+    let golden = fixture_v6_dict();
+    assert!(golden.is_file(), "missing {}", golden.display());
+    let mut bytes = fs::read(&golden).expect("read");
+    let i = bytes.len() - 1;
+    bytes[i] ^= 0xFF;
+    let tmp = temp_path("v6-crc");
+    fs::write(&tmp, &bytes).expect("write");
+    assert_all_shipped_cmds_fail(&tmp, "dict.nytprof last-byte flip");
+    let _ = fs::remove_file(&tmp);
+}
+
 /// INCOMPLETE-STREAM: record-aligned short prefix → verify/report fail; dump may succeed.
 #[test]
 fn incomplete_stream_cli_prefix_default_calls1() {

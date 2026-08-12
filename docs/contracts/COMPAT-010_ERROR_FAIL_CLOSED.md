@@ -15,7 +15,7 @@
 
 ## Scope and non-claims
 
-This document freezes a **provisional fail-closed policy** for **corrupt or unreadable v5 profile input** on the **shipped native paths** of the first slice:
+This document freezes a **provisional fail-closed policy** for **corrupt or unreadable v5 or product v6 EVENT profile input** on the **shipped native paths** of the first slice (dual-dispatch `ProfileModel::from_path` / `decode_events_from_path`):
 
 | Path | Entry point | Model load / decode |
 |------|-------------|---------------------|

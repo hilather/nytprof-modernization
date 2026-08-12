@@ -52,6 +52,10 @@ Expanded packing (`TIME_*_RUN`, site-delta) and resolved FOOTER dict strings are
 
 Auto-VERSION inject when body omits VERSION (header major/minor).
 
+**Dump `seq`:** stream order `0..n-1` after expansion + auto-VERSION (dumper-monotonic). Packing `FLAG_HAS_SEQ` wire values are **not** reused for dump `Event.seq` (avoids VERSION/`None` colliding with body seq 0).
+
+**FOOTER fail-closed:** when a FOOTER chunk is present, product decode **requires** a well-formed string dictionary and full string_id resolve. Missing ids / corrupt table → `Err` (no empty-string soft fallback into attributes/names).
+
 ## Pair aggregate parity tests
 
 | Pair | Assertion |
@@ -59,6 +63,8 @@ Auto-VERSION inject when body omits VERSION (header major/minor).
 | C `absolute.nytprof` vs `packing.nytprof` / `packing_lz4.nytprof` | equal A1–A9 aggregates |
 | Stand-in absolute vs packing of same logical sample | equal aggregates vs `from_events` on dump Events |
 | C `dict.nytprof` | `attributes["basetime"]` resolved |
+| Stand-in FOOTER missing `string_id` | `from_bytes` / product decode `Err` |
+| Trunc / trailing / CRC-corrupt v6 | model + CLI dump/verify/report fail closed |
 
 Full **E4** same-workload v5+v6 fixture pairs and offline_gate product smoke remain residual (PR-B10 / B12b).
 

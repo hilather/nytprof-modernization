@@ -44,10 +44,16 @@ pub enum ProfileWireKind {
     Unknown,
 }
 
+/// Max bytes scanned for a v5 text header newline when classifying non-v6 input.
+///
+/// Caps full-file scans on huge non-profile blobs (Issue: header probe O(n)).
+pub const V5_HEADER_PROBE_MAX: usize = 4096;
+
 /// Detect product wire family from the leading bytes of a profile file.
 ///
 /// - First 8 bytes equal [`MAGIC`] (`NYTPROF6`) → [`ProfileWireKind::V6`]
-/// - Leading text line starts with `NYTProf ` (v5 header form) → [`ProfileWireKind::V5`]
+/// - Leading text line starts with `NYTProf ` (v5 header form) within
+///   [`V5_HEADER_PROBE_MAX`] → [`ProfileWireKind::V5`]
 /// - Otherwise [`ProfileWireKind::Unknown`] (callers fail closed)
 ///
 /// Does **not** validate full headers or major version.
@@ -56,12 +62,14 @@ pub fn detect_profile_wire_kind(buf: &[u8]) -> ProfileWireKind {
         return ProfileWireKind::V6;
     }
     // v5: first line `NYTProf <major> <minor>\n` (mixed case + space).
-    if let Some(nl) = buf.iter().position(|&b| b == b'\n') {
-        let line = &buf[..nl];
+    // Probe only a bounded prefix so huge garbage blobs stay O(1).
+    let probe = &buf[..buf.len().min(V5_HEADER_PROBE_MAX)];
+    if let Some(nl) = probe.iter().position(|&b| b == b'\n') {
+        let line = &probe[..nl];
         if line.starts_with(b"NYTProf ") {
             return ProfileWireKind::V5;
         }
-    } else if buf.starts_with(b"NYTProf ") {
+    } else if probe.starts_with(b"NYTProf ") {
         // Incomplete single-line header still classifies as v5 for fail-closed decode.
         return ProfileWireKind::V5;
     }
@@ -71,7 +79,8 @@ pub fn detect_profile_wire_kind(buf: &[u8]) -> ProfileWireKind {
 /// Product always-inflate decode of a v6 EVENT profile for model/CLI ingest.
 ///
 /// - Always-inflate EVENT chunks (optional CRC verify)
-/// - When FOOTER is a well-formed string dictionary, resolve string_ids (ADR-0002)
+/// - When FOOTER is present, **require** a well-formed string dictionary and resolve
+///   string_ids (ADR-0002) — fail closed on missing ids / corrupt table (no empty-string soft fallback)
 /// - Auto-align body VERSION with fixed-header (inject when omitted)
 ///
 /// Not a wire freeze; not full multi-kind SOURCE/INDEX/SUMMARY product path
@@ -83,18 +92,15 @@ pub fn product_decode_v6_event_profile(
     // Plain always-inflate first (fail-closed on corrupt EVENT body / CRC).
     let (plain, n) = decode_decoded_event_profile_auto_version(wire, verify_crc)?;
     if plain.has_footer {
-        // Prefer FOOTER string-dict resolve when the table is well-formed.
-        if let Ok((profile, dict, n2)) =
-            decode_decoded_event_profile_auto_version_with_string_dict(wire, verify_crc)
-        {
-            return Ok(E3Decoded {
-                profile,
-                dict: Some(dict),
-                bytes_consumed: n2,
-            });
-        }
-        // Footer present but not a resolvable dict table — keep plain records
-        // (inline string payloads only; unresolved string_ids stay as decoded).
+        // COL-007 product FOOTER is the string-dict table. Resolve fail-closed:
+        // never soft-fallback to unresolved inline empties (blank keys/names).
+        let (profile, dict, n2) =
+            decode_decoded_event_profile_auto_version_with_string_dict(wire, verify_crc)?;
+        return Ok(E3Decoded {
+            profile,
+            dict: Some(dict),
+            bytes_consumed: n2,
+        });
     }
     Ok(E3Decoded {
         profile: plain,
@@ -346,6 +352,50 @@ mod tests {
             .filter(|r| matches!(r, OwnedEventRecord::TimeLine { .. }))
             .collect();
         assert_eq!(timelines.len(), 2);
+    }
+
+    /// FOOTER present but missing string_id → product path must Err (no empty-key soft OK).
+    #[test]
+    fn product_decode_footer_missing_string_id_fail_closed() {
+        let events = [EventRecordSpec::Attribute {
+            key_string_id: 99,
+            key_string_flags: 0,
+            key: b"",
+            value_string_id: 0,
+            value_string_flags: 0,
+            value: b"1786111723",
+        }];
+        // Dict table has id 1 only — not 99.
+        let dict_entries: &[(u64, u8, &[u8])] = &[(1, FLAG_UTF8, b"other")];
+        let wire = e3_standin_write_string_dict(&events, codec::NONE, dict_entries)
+            .expect("encode with FOOTER");
+        let err = product_decode_v6_event_profile(&wire, true)
+            .expect_err("missing dict id must fail closed");
+        // Must not soft-succeed with empty Attribute key.
+        let _ = err;
+        // Sanity: e3 expect_string_dict=true also fails.
+        assert!(
+            e3_decode_writer_bytes(&wire, true, true).is_err(),
+            "E3 expect_string_dict path must also fail"
+        );
+    }
+
+    #[test]
+    fn detect_wire_kind_header_probe_capped() {
+        // Huge blob without early newline and without NYTPROF6 → Unknown without
+        // needing full-buffer semantics beyond the probe window.
+        let mut big = vec![0u8; V5_HEADER_PROBE_MAX + 10_000];
+        big[0] = b'X';
+        assert_eq!(detect_profile_wire_kind(&big), ProfileWireKind::Unknown);
+        // v5 header only after probe window must not be classified as V5.
+        let mut late = vec![b'Z'; V5_HEADER_PROBE_MAX + 32];
+        let hdr = b"NYTProf 5 0\n";
+        late[V5_HEADER_PROBE_MAX..V5_HEADER_PROBE_MAX + hdr.len()].copy_from_slice(hdr);
+        assert_eq!(
+            detect_profile_wire_kind(&late),
+            ProfileWireKind::Unknown,
+            "header past probe max must not be V5"
+        );
     }
 
     fn sample_specs() -> [EventRecordSpec<'static>; 4] {
