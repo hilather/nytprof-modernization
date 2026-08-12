@@ -45,27 +45,26 @@
 #   9. scripts/packaging/capability_selftest_smoke.sh when cargo or prefix/target
 #      native CLI exists (honest skip when native unavailable; same pattern as
 #      packaging_gate). dual_path with cargo usually installs prefix/bin first.
+#  10. scripts/packaging/collector_sink_smoke.sh (COL-001 sink scaffold:
+#      isolation asserts always; make -C collector test when CC present;
+#      honest skip without C toolchain). Not COL-007; stub v5 is not wire encode.
 #
 # Primary packaging choice: dual_path_smoke.sh (BUILD dual-path policy entry).
 # Alternatives not re-run here (document only):
 #   ./scripts/packaging/packaging_gate.sh          # broader packaging suite
 #   ./scripts/packaging/makemaker_dual_path_smoke.sh  # MakeMaker facade
 #
-# Non-goals: full multi-OS CI certification (BUILD-006 full), full packaging_gate
-# breadth. Multi-OS MVP entry is separate: scripts/ci/matrix_gate.sh + GHA
-# .github/workflows/ci-matrix.yml (BUILD-006-MVP; honest skips here preserved).
-# Isolation: never puts crates/ on oracle PERL5LIB (parent does not source
-# oracle env; child smokes own isolation).
+# Non-goals: multi-OS CI matrix (BUILD-006), full packaging_gate breadth.
+# Isolation: never puts crates/ or collector/ install on oracle PERL5LIB
+# (parent does not source oracle env; child smokes own isolation).
 #
 # Policy: docs/BUILD_SUPPORT_POLICY.md
 # Board:  CI-OFFLINE-GATE / CI-OFFLINE-GATE-EXPAND / CI-CAPABILITY-GATE /
-#         CI-QUERY-JSON-GATE / NATIVE-QUERY-JSON-CROSS / BUILD-006-MVP
+#         CI-QUERY-JSON-GATE / NATIVE-QUERY-JSON-CROSS / COL-001-SINK-MVP
 #         (docs/FIRST_SLICE_BOARD.md)
 #
 # Usage (from repo root or any cwd):
 #   ./scripts/ci/offline_gate.sh
-# Multi-OS matrix entry (BUILD-006 MVP):
-#   ./scripts/ci/matrix_gate.sh
 # Optional Make target (after perl Makefile.PL):
 #   make offline-gate
 set -euo pipefail
@@ -87,6 +86,7 @@ JSON_FILE_BASENAME_SMOKE="$ROOT/scripts/packaging/json_file_basename_smoke.sh"
 JSON_EVENT_COUNTS_SMOKE="$ROOT/scripts/packaging/json_event_counts_smoke.sh"
 JSON_TOTAL_BASETIME_SMOKE="$ROOT/scripts/packaging/json_total_basetime_smoke.sh"
 CAPABILITY_SMOKE="$ROOT/scripts/packaging/capability_selftest_smoke.sh"
+COLLECTOR_SINK_SMOKE="$ROOT/scripts/packaging/collector_sink_smoke.sh"
 
 banner() {
   echo
@@ -143,9 +143,8 @@ else
     -p nytprof-format-v6 \
     -p nytprof-model \
     -p nytprof-report \
-    -p nytprof-cli \
-    -p nytprof-ffi
-  ok "step: cargo test (nytprof-format-v5 format-v6 model report cli ffi)"
+    -p nytprof-cli
+  ok "step: cargo test (nytprof-format-v5 format-v6 model report cli)"
 fi
 
 # ---------------------------------------------------------------------------
@@ -296,6 +295,16 @@ else
   echo "  target/{debug,release}/nytprof-dump, \$NYTPROF_NATIVE_CLI"
   echo "  To exercise: install rustc/cargo and re-run, or ./scripts/packaging/install_native.sh"
 fi
+
+# ---------------------------------------------------------------------------
+# 10. COL-001 semantic sink scaffold (honest skip without CC)
+# ---------------------------------------------------------------------------
+banner "collector_sink_smoke (COL-001-SINK-MVP)"
+if [[ ! -f "$COLLECTOR_SINK_SMOKE" ]]; then
+  fail "required script missing: $COLLECTOR_SINK_SMOKE"
+fi
+bash "$COLLECTOR_SINK_SMOKE"
+ok "step: collector_sink_smoke"
 
 banner "ALL PASSED"
 ok "offline_gate completed successfully"

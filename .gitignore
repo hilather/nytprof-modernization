@@ -24,6 +24,10 @@ __pycache__/
 # Local native CLI install (scripts/packaging/install_native.sh)
 /prefix/
 
+# Collector overlay build products (COL-001+; never baseline/6.15/)
+/collector/build/
+/collector/install/
+
 # Candidate MakeMaker packaging entry products (root Makefile.PL)
 /Makefile
 /Makefile.old

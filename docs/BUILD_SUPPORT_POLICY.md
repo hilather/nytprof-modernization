@@ -116,7 +116,7 @@ Presence of `crates/` or a Rust toolchain is **allowed** on developer machines; 
 | Forbidden (oracle context) | Overlay `collector/` tree and candidate installs (`collector/install/`, `prefix/collector/`) — see [Collector overlay](#collector-overlay-source-tree-adr-0004--b0-a) |
 | Native tools | Use binaries (`prefix/bin`, `target/…`) or `cargo run`; not module path |
 
-Enforced by `tools/oracle/env.sh`, `scripts/baseline/build_oracle.sh`, and `scripts/packaging/legacy_only_smoke.sh` (today primarily `crates/` / non-install load paths; path-component asserts for `collector/` land with COL-001 smokes).
+Enforced by `tools/oracle/env.sh`, `scripts/baseline/build_oracle.sh`, and `scripts/packaging/legacy_only_smoke.sh` (primarily `crates/` / non-install load paths). Path-component asserts for `collector/` are exercised by `scripts/packaging/collector_sink_smoke.sh` (COL-001).
 
 ---
 
@@ -146,12 +146,13 @@ Enforced by `tools/oracle/env.sh`, `scripts/baseline/build_oracle.sh`, and `scri
 
 | Phase | Gate expectation |
 |-------|------------------|
-| **Pre-sink (today)** | `./scripts/ci/offline_gate.sh` must stay green when `collector/` is absent; no new hard dependency on a C toolchain for R1-preview steps |
-| **COL-001+ (sink)** | When overlay builds are available, add fail-fast **v5-via-sink neutrality** checks (oracle-aligned stream on the agreed corpus) plus isolation asserts; **honest skip** when C toolchain / overlay build is absent |
+| **Pre-sink** | Historical: gate stayed green with no `collector/` tree; no hard C toolchain dep for R1-preview steps |
+| **COL-001 scaffold (landed)** | Offline gate step **10** runs `./scripts/packaging/collector_sink_smoke.sh`: isolation asserts always; `make -C collector test` when CC present; **honest skip** without C toolchain. Stub v5 adapter is **not** wire-byte neutrality vs oracle (that is COL-006); full stream neutrality on corpus remains COL-002/006 |
+| **COL-002+ / COL-006** | Expand to oracle-aligned v5-via-sink stream equality on the agreed corpus once the real writer is adapted |
 | **Isolation** | Parent offline gate still must not put `crates/` (or `collector/` install) on oracle `PERL5LIB`; child smokes own isolation |
 | **Fixtures** | C writer / dual harness writes under `fixtures/v6/from-c/**` only; never mutates `baseline/6.15/archives/` |
 
-**Merge rule:** PR-B02 (COL-001 semantic sink) **must not merge** without ADR-0004 accepted (this policy section + ADR). This ADR alone does **not** claim COL-007 product, wire freeze, or CLI v6 default.
+**Merge rule:** PR-B02 (COL-001 semantic sink) required **ADR-0004 accepted** (this policy section + ADR). Scaffold does **not** claim COL-007 product, wire freeze, CLI v6 default, or full v5 wire parity.
 
 ---
 
@@ -257,8 +258,8 @@ Native install MVP contract: [`docs/schemas/native-install-mvp-v0.md`](https://g
 | COMPAT-009 final tier freeze / full BUILD-001 ADR | open | This doc is the runnable dual-path draft feeding that freeze |
 | MSRV freeze | open (ADR-Q017) | Optional-native uses whatever `rustc` is installed until frozen |
 | Default engine/format flips to native | out of first slice | Native remains opt-in |
-| Collector overlay sources / COL-001 sink | open (layout unblocked — **ADR-0004 accepted**; sources land in PR-B02+) | Tree lands in sink PRs under `collector/`; not shipped by dual-path policy alone |
-| COL-007 C v6 writer / wire freeze / CLI v6 default | deferred / open | ADR-0004 does **not** complete these |
+| Collector overlay sources / COL-001 sink scaffold | **partial (PR-B02)** | `collector/` headers + counting/stub-v5 sinks + unit tests + `collector_sink_smoke.sh` in offline_gate step 10; **not** live XS hooks, real v5 wire (COL-006), or COL-007 |
+| COL-007 C v6 writer / wire freeze / CLI v6 default | deferred / open | ADR-0004 + COL-001 scaffold do **not** complete these |
 
 ---
 
@@ -267,7 +268,7 @@ Native install MVP contract: [`docs/schemas/native-install-mvp-v0.md`](https://g
 - Spike charter and layout notes: [`docs/PACKAGING_SPIKE.md`](https://github.com/hilather/nytprof-modernization/blob/main/docs/PACKAGING_SPIKE.md)
 - Collector overlay layout (B0-A): [`docs/adrs/0004-collector-packaging-source-tree.md`](https://github.com/hilather/nytprof-modernization/blob/main/docs/adrs/0004-collector-packaging-source-tree.md)
 - This policy **lands** the dual-path contract with a dedicated smoke; the spike remains historical/background detail.
-- **CI-OFFLINE-GATE** / **CI-OFFLINE-GATE-EXPAND** / **CI-QUERY-JSON-GATE** / **CI-CAPABILITY-GATE** (`scripts/ci/offline_gate.sh`) is the single offline R1 fail-fast entry (cargo tests? + harness + dual-path packaging primary + engine_auto_fallback + pure-Perl JsonlData roll-up + required query-JSON smoke + capability_selftest when native available).
+- **CI-OFFLINE-GATE** / **CI-OFFLINE-GATE-EXPAND** / **CI-QUERY-JSON-GATE** / **CI-CAPABILITY-GATE** / **COL-001-SINK-MVP** (`scripts/ci/offline_gate.sh`) is the single offline R1 fail-fast entry (cargo tests? + harness + dual-path packaging primary + engine_auto_fallback + pure-Perl JsonlData roll-up + required query-JSON smoke + capability_selftest when native available + collector sink smoke with honest CC skip).
 - Unified packaging gate remains the broader packaging fail-fast suite; dual-path smoke is the support-tier-focused packaging half.
 - Candidate MakeMaker entry (`Makefile.PL` + `makemaker_dual_path_smoke.sh`) is the dual-path **packaging facade** before full BUILD-003.
 

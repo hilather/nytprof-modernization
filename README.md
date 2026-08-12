@@ -27,6 +27,7 @@ scripts/        baseline build/test helpers + packaging smokes + `ci/offline_gat
 Makefile.PL     candidate dual-path packaging entry (not full XS CPAN)
 crates/         Rust workspace (v5 reader, provisional v6 preflight crate, compact model, report MVP) — not required for oracle
 perl/           candidate Perl engine-dispatch facade (nytprof-engine) — not used by oracle builds
+collector/      B0-A overlay COL-001 semantic sink scaffold (opt-in C build; never on oracle PERL5LIB)
 AGENTS.md       binding agent quality bars (tests, docs, release notes, perf/size, benchmarks)
 ```
 
@@ -199,7 +200,7 @@ perl -Iperl/lib perl/bin/nytprof-engine --engine=native callgrind fixtures/v5/de
 ./scripts/packaging/perl_engine_export_smoke.sh
 ```
 
-- `scripts/ci/offline_gate.sh` is the **CI-OFFLINE-GATE** / **CI-OFFLINE-GATE-EXPAND** / **CI-QUERY-JSON-GATE** / **CI-CAPABILITY-GATE** single entry: optional focused cargo tests → required oracle harness → primary packaging `dual_path_smoke.sh` → `engine_auto_fallback_smoke.sh` → `perl_jsonl_data_all_smoke.sh` → required `perl_query_json_smoke.sh` (QUERY-JSON-MVP / QUERY-JSON-EXPAND golden `--jsonl`) → required `json_sub_entry_smoke` + `json_blocks_smoke` (JSON-BLOCKS-MVP **780**/**810**) → optional `native_agg_json_smoke` + `native_query_json_cross_smoke` when native available → `capability_selftest_smoke.sh` when cargo or prefix/target CLI present (honest skip otherwise); fails fast.
+- `scripts/ci/offline_gate.sh` is the **CI-OFFLINE-GATE** / **CI-OFFLINE-GATE-EXPAND** / **CI-QUERY-JSON-GATE** / **CI-CAPABILITY-GATE** / **COL-001-SINK-MVP** single entry: optional focused cargo tests → required oracle harness → primary packaging `dual_path_smoke.sh` → `engine_auto_fallback_smoke.sh` → `perl_jsonl_data_all_smoke.sh` → required `perl_query_json_smoke.sh` (QUERY-JSON-MVP / QUERY-JSON-EXPAND golden `--jsonl`) → required `json_sub_entry_smoke` + `json_blocks_smoke` (JSON-BLOCKS-MVP **780**/**810**) → optional `native_agg_json_smoke` + `native_query_json_cross_smoke` when native available → `capability_selftest_smoke.sh` when cargo or prefix/target CLI present (honest skip otherwise) → `collector_sink_smoke.sh` (COL-001 overlay; honest skip without CC); fails fast.
 - `packaging_gate.sh` runs the packaging smokes in order (legacy → engine_select → perl dispatch → native install if present → optional cargo tests) and fails fast.
 - Root `Makefile.PL` is a **candidate packaging facade** + **BUILD-003-DEPTH** (`NYTPROF_NATIVE=0|1|auto`): `make legacy-smoke` / `dual-path-smoke` / `offline-gate` / `install-facade` / `dual-install` / `native-install` / `build003-depth-smoke` wrap existing scripts; not a full Devel::NYTProf XS CPAN dist (see [`docs/BUILD_SUPPORT_POLICY.md`](https://github.com/hilather/nytprof-modernization/blob/main/docs/BUILD_SUPPORT_POLICY.md)).
 - `legacy_only_smoke.sh` sources oracle env isolation, refuses `/crates/` on `PERL5LIB`, and loads `Devel::NYTProf` from `baseline/6.15/install` only.
