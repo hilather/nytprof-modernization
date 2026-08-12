@@ -102,10 +102,10 @@ cargo run -q -p nytprof-cli -- capability --json
 ./scripts/packaging/capability_selftest_smoke.sh
 ```
 
-Expect (human): `OK: native capability self-test`, `decode: yes`, `report: yes`, `verify: yes`, plus E5 honesty `v6_decode: yes` / `v6_report: yes` / `convert: no` / `merge: no` / `collection_default: v5`.  
-Expect (JSON): `ok` / `decode` / `report` / `verify` true; `profile_ok` non-null when the default golden fixture is found.
+Expect (human): `OK: native capability self-test`, `decode: yes`, `report: yes`, `verify: yes`, plus E5 honesty `v6_decode: yes` / `v6_report: yes` / `convert: no` / `merge: no` / `collection_default: v5`; `profile_ok` / `v6_profile_ok` non-skip when the default v5 / dual-sink v6 fixtures resolve.  
+Expect (JSON): `ok` / `decode` / `report` / `verify` / `v6_decode` / `v6_report` true; `convert` / `merge` **false**; `collection_default` `"v5"`; `profile_ok` non-null when the default v5 golden is found; `v6_profile_ok` non-null when `fixtures/e4/dual-sink/default_calls1_v6.nytprof` resolves.
 
-Schema: [capability-selftest-mvp-v0.md](https://github.com/hilather/nytprof-modernization/blob/main/docs/schemas/capability-selftest-mvp-v0.md)
+Schema: [capability-selftest-mvp-v0.md](https://github.com/hilather/nytprof-modernization/blob/main/docs/schemas/capability-selftest-mvp-v0.md) (E5 fields); [cli-e5-v6-opt-in-mvp-v0.md](https://github.com/hilather/nytprof-modernization/blob/main/docs/schemas/cli-e5-v6-opt-in-mvp-v0.md)
 
 ### Native aggregates JSON (NATIVE-AGG-JSON)
 
