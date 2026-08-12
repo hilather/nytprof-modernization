@@ -8,7 +8,8 @@ Add a **new row near the top** when an implementation, optimization (including *
 
 | Date | Slug | Area | Tried | Why failed / residual | Detail |
 |------|------|------|-------|----------------------|--------|
-| — | — | — | *(no entries yet — agents append here)* | — | — |
+| 2026-08-12 | cargo-fix-test-only-imports | ci / format-v6 | `cargo fix` / import cleanup on format-v6 | Dropped imports used only in `#[cfg(test)]` modules; `cargo check` green but `cargo test -p nytprof-format-v6 --lib` (and GHA rust-smoke) red E0425. Do not retry bare `cargo fix` without re-running lib tests; put test-only imports inside the test module. | — |
+| 2026-08-12 | capability-json-stack-merge | ci / cli | Linear stack merge of parallel execute-plan PRs dropped `collection_default` / `v6_decode` from capability JSON | CI red on cli_e5_v6: assert collection_default==v5 got Null; restore keys + smoke/clippy gate | — |
 
 ## How to append (agents)
 
@@ -18,4 +19,3 @@ Add a **new row near the top** when an implementation, optimization (including *
 4. If someone might naively retry the same idea, put a “do not retry without …” clause in **Why** or in the detail file.  
 5. Successful pivots still keep the failed row — the win lives in code/docs; the failure stays here so it is not re-proposed blindly.  
 6. Keep cells **short** (context budget). Put benches, stack traces, or multi-step postmortems under `details/<slug>.md` and link from **Detail**.
-| 2026-08-12 | capability-json-stack-merge | Linear stack merge of parallel execute-plan PRs dropped `collection_default` / `v6_decode` from capability JSON | CI red on cli_e5_v6: assert collection_default==v5 got Null; restore keys + smoke/clippy gate | — |

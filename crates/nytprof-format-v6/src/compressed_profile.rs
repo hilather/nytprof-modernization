@@ -540,7 +540,7 @@ pub fn decode_compressed_mini_profile(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::chunk::{CHUNK_HEADER_LEN, CHUNK_SYNC};
+    use crate::chunk::{parse_chunk_frame, CHUNK_HEADER_LEN, CHUNK_SYNC};
     use crate::event_body::opcode;
     use crate::payload_codec::{compress_lz4, compress_zstd, deflate_zlib};
     use crate::varint::encode_u64;

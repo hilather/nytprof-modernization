@@ -180,8 +180,10 @@ pub fn decode_multi_chunk_compressed_profile(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::chunk::{CHUNK_HEADER_LEN, CHUNK_SYNC};
+    use crate::chunk::{parse_chunk_frame, ChunkError, CHUNK_HEADER_LEN, CHUNK_SYNC};
     use crate::event_body::opcode;
+    use crate::payload_codec::{compress_zstd, deflate_zlib, PayloadCodecError};
+    use crate::stream::StreamError;
     use crate::varint::encode_u64;
     use crate::{MAGIC, SUPPORTED_MAJOR};
 

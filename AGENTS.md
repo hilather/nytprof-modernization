@@ -122,8 +122,9 @@ When fixing a CI failure, also **harden** so the next release does not hit the s
 | **Keep smoke job first** | `.github/workflows/ci-matrix.yml` runs a Linux `rust-smoke` (`cargo test` on gate packages + targeted `clippy -D warnings --no-deps`) **before** the longer multi-OS offline_gate matrix. Preserve that ordering when editing CI. |
 | **Matrix deps** | Linux needs `zlib1g-dev` / `libzstd-dev` / `liblz4-dev` for collector codec links; macOS needs brew `zstd`/`lz4` when collector builds. Do not remove them without an honest skip path. |
 | **No soft-fail gates** | Matrix and offline_gate scripts must use `set -euo pipefail` (or equivalent) so a red suite fails the job. Do not wrap gates in `|| true`. |
-| **Local before push** | For release merges: at least `cargo test -p nytprof-cli --test cli_e5_v6 --test capability_selftest` and `cargo clippy -p nytprof-cli -p nytprof-model -p nytprof-report --no-deps -- -D warnings`. Prefer `./scripts/ci/offline_gate.sh` when oracle pin time allows. |
+| **Local before push** | For release merges: at least `cargo test -p nytprof-format-v6 --lib`, `cargo test -p nytprof-cli --test cli_e5_v6 --test capability_selftest`, and `cargo clippy -p nytprof-cli -p nytprof-model -p nytprof-report --no-deps -- -D warnings`. Prefer `./scripts/ci/offline_gate.sh` when oracle pin time allows. |
 | **Clippy scope** | Prefer `-D warnings` on product CLI/model/report surfaces; preflight-heavy crates (e.g. format-v6) and C-ABI FFI raw pointers may stay outside `-D` until cleaned — document exceptions in the workflow comments. |
+| **Never trust bare `cargo fix`** | `cargo fix` / auto-import cleanup drops imports that are **only** used under `#[cfg(test)]`, which breaks `cargo test -p … --lib` (and thus `rust-smoke`) while `cargo check` still passes. Put test-only imports **inside** the `#[cfg(test)] mod tests` block; after any fix pass, re-run the local suite above before push. |
 
 ### Suggested watch commands
 

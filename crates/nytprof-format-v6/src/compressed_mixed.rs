@@ -842,7 +842,8 @@ pub fn decode_compressed_mixed_profile(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::chunk::{CHUNK_HEADER_LEN, CHUNK_SYNC};
+    use crate::chunk::{parse_chunk_frame, CHUNK_HEADER_LEN, CHUNK_SYNC};
+    use crate::payload_codec::deflate_zlib;
     use crate::{MAGIC, SUPPORTED_MAJOR};
 
     fn sample_events() -> [EventRecordSpec<'static>; 2] {
