@@ -98,14 +98,14 @@ Every artifact class from [`REPORT_HTML_RESIDUAL_INVENTORY_v0.md`](https://githu
 
 | Artifact class | Inventory residual? | Disposition | Close PR or waive note |
 |----------------|---------------------|-------------|------------------------|
-| Index / home page | partial | **CLOSE** | **PR-A01** — structure/CSS depth; counts already ready |
-| Full sub index (excl sort) | yes | **CLOSE** | **PR-A02** (`index-subs-excl.html`) |
-| Exclusive-time ranking | partial | **CLOSE** | **PR-A02** (full excl page); index “Top exclusive” section already MVP |
+| Index / home page | partial | **CLOSE** | **PR-A01** — structure/CSS depth; counts already ready — **closed (MVP)** at PR-A10 |
+| Full sub index (excl sort) | partial | **CLOSE** | **PR-A02** (`index-subs-excl.html`) — **closed (MVP)** at PR-A10 (not oracle DOM) |
+| Exclusive-time ranking | partial | **CLOSE** | **PR-A02** (full excl page) — **closed (MVP)** at PR-A10; index “Top exclusive” section already MVP |
 | Per-file / line source pages | partial | **WAIVE** | Naming alias: keep permanent native `file-<fid>.html` + `source.html` (not oracle `{safe}-{fid}-line.html`) |
 | Block-level report pages | yes / partial | **WAIVE** | No oracle `*-block.html` page mode; native A4b block_line table remains MVP when present |
 | Sub-level report pages | yes | **WAIVE** | No `*-sub.html`; legacy `nytprofhtml` retains sub page mode |
-| Shared CSS | yes | **CLOSE** | **PR-A01** (`style.css` or documented equivalent) |
-| Shared JS (jquery / tablesorter / floatThead) | yes | **CLOSE** | **PR-A01** (minimal tablesorter **or** pure-CSS sort) |
+| Shared CSS | yes | **CLOSE** | **PR-A01** (`style.css` or documented equivalent) — **closed (MVP)** at PR-A10 |
+| Shared JS (jquery / tablesorter / floatThead) | yes | **CLOSE** | **PR-A01** mapped both CSS and JS; **A01 shipped CSS/structure only**. Shared JS/tablesorter remains **OPEN residual (CLOSE path)** at PR-A10 — **not** silently waived. Follow-on close PR or superseding ADR required before claiming closed |
 | JIT / treemap assets | yes | **WAIVE** | `js/jit/*` |
 | Treemap HTML page | yes | **WAIVE** | `subs-treemap-excl.html` |
 | Flame graph SVG | yes | **CLOSE** | **PR-A03** — optional `--flame`; no default site bloat (`all_stacks_by_time.svg`) |
@@ -130,7 +130,7 @@ Every artifact class from [`REPORT_HTML_RESIDUAL_INVENTORY_v0.md`](https://githu
 
 | PR | Role |
 |----|------|
-| **PR-A01** | Shared CSS + structure / tablesorter (or pure-CSS sort) |
+| **PR-A01** | Shared CSS + structure (**closed MVP**); Shared JS/tablesorter remaining OPEN CLOSE residual |
 | **PR-A02** | `index-subs-excl.html` + exclusive ranking page depth |
 | **PR-A03** | Optional flame path (`--flame`) |
 | **PR-A04** | **This ADR** + matrix / inventory / runbook map (policy only) |

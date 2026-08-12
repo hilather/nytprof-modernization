@@ -37,7 +37,6 @@ PR-A10 must not claim full R1 HTML posture without that map. Preview advertiseme
 | Full R1 **CLOSE / WAIVE** disposition per class (ADR-0003) | Claiming waived classes as native-ready |
 
 **Residual honesty (from REPORT_SURFACE_CONTRACT):** native HTML is an MVP summary + multi-file site (including MVP shared `style.css` / documented inline CSS policy and **`index-subs-excl.html`** exclusive ranking — **not** oracle CSS/JS/DOM). Flame, Graphviz, Shared JS / tablesorter, block/sub-level oracle page modes, and full DOM are **not advertised**.
-**Residual honesty (from REPORT_SURFACE_CONTRACT):** native HTML is an MVP summary + multi-file site. Flame, Graphviz, shared CSS/JS, tablesorter, block/sub-level oracle page modes, and full DOM are **not advertised** under R1-preview.
 
 ---
 
@@ -152,14 +151,14 @@ Legend for **Full R1 disposition** ([ADR-0003](https://github.com/hilather/nytpr
 
 | Artifact class | Oracle (yes / example names) | Native (yes / path) | residual? | Full R1 disposition (ADR-0003) |
 |----------------|------------------------------|---------------------|-----------|--------------------------------|
-| Index / home page | **yes** — `index.html` (summary, top subs, file table, optional flame embed, Graphviz links) | **yes** — multi-file: `{out-dir}/index.html`; single-file: entire summary is one HTML document (`html -o` / stdout) | **partial** — counts advertised; layout/DOM not oracle | **CLOSE** structure/CSS depth via **PR-A01** (counts already ready) |
-| Full sub index (excl sort) | **yes** — `index-subs-excl.html` | **no** dedicated page; sub table lives on `index.html` / single-file summary | **yes** | **CLOSE** via **PR-A02** |
-| Exclusive-time ranking | **yes** — top-N on index + full excl index page | **yes** — “Top exclusive” section on single-file and multi-file index | **partial** — section only, not oracle page/CSS | **CLOSE** full page via **PR-A02**; index section already MVP |
+| Index / home page | **yes** — `index.html` (summary, top subs, file table, optional flame embed, Graphviz links) | **yes** — multi-file: `{out-dir}/index.html`; single-file: entire summary is one HTML document (`html -o` / stdout) | **partial** — counts advertised; layout/DOM not oracle | **closed (MVP)** structure/CSS depth via **PR-A01** (counts already ready; not oracle DOM) |
+| Full sub index (excl sort) | **yes** — `index-subs-excl.html` | **yes** — multi-file `{out-dir}/index-subs-excl.html` (`INDEX_SUBS_EXCL_FILENAME`); exclusive-sorted `table.subs-excl` | **partial** — native MVP page **advertised**; not oracle DOM/tablesorter | **closed (MVP)** via **PR-A02** |
+| Exclusive-time ranking | **yes** — top-N on index + full excl index page | **yes** — “Top exclusive” on single/multi index **plus** dedicated multi-file `index-subs-excl.html` | **partial** — tables yes; not oracle interactive widgets | **closed (MVP)** full page via **PR-A02**; index section already MVP |
 | Per-file / line source pages | **yes** — `{html_safe}-{fid}-line.html` (e.g. `workload-pl-1-line.html`, `warnings-pm-2-line.html` after path sanitization; names from `Reader::fname_for_fileinfo`) | **yes** — `{out-dir}/file-<fid>.html` (e.g. `file-1.html` workload, `file-2.html` warnings); primary alias `source.html` | **partial** — different naming; MVP tables (A4 calls/ticks + source), not oracle DOM | **WAIVE** oracle naming alias — permanent native `file-<fid>.html` + `source.html` |
 | Block-level report pages | **yes** when profile levels include `block` — `{safe}-{fid}-block.html` (default-calls1 has `time_block_events: 0`; typically **absent** unless blocks enabled) | **partial** — A4b **Block line totals** table on HTML when model has `block_line_totals` (blocks-calls1); no oracle-style block *page mode* | **yes** (oracle page mode) / **partial** (A4b table only) | **WAIVE** oracle page mode; A4b MVP table stays when present |
 | Sub-level report pages | **yes** when levels include `sub` — `{safe}-{fid}-sub.html` | **no** | **yes** | **WAIVE** |
-| Shared CSS | **yes** — `style.css` (from `get_css()` / `_output_additional`) | **no** separate asset; styles are inline (if any) in generated HTML | **yes** | **CLOSE** via **PR-A01** |
-| Shared JS (jquery / tablesorter / floatThead) | **yes** — `js/jquery-min.js`, `js/jquery.tablesorter.min.js`, `js/style-tablesorter.css`, sort icons `js/asc.png` `js/bg.png` `js/desc.png`; HTML also references `js/jquery.floatThead.min.js` when jquery headers emit | **no** | **yes** | **CLOSE** via **PR-A01** (minimal tablesorter **or** pure-CSS sort) |
+| Shared CSS | **yes** — `style.css` (from `get_css()` / `_output_additional`) | **yes** — multi-file `{out-dir}/style.css` (`SHARED_STYLE_CSS`); single-file embeds same CSS inline | **partial** — native MVP shared asset **advertised**; not oracle `get_css()` / tablesorter CSS | **closed (MVP)** via **PR-A01** |
+| Shared JS (jquery / tablesorter / floatThead) | **yes** — `js/jquery-min.js`, `js/jquery.tablesorter.min.js`, `js/style-tablesorter.css`, sort icons `js/asc.png` `js/bg.png` `js/desc.png`; HTML also references `js/jquery.floatThead.min.js` when jquery headers emit | **no** | **yes** | **OPEN residual (CLOSE path)** — ADR-0003 mapped CLOSE via **PR-A01**; A01 closed **CSS/structure only**; jquery/tablesorter **not** shipped on this cut (same posture as A03 flame) |
 | JIT / treemap assets | **yes** — `js/jit/*` (jit.js, gradients, Treemap.css) when treemap page is generated | **no** | **yes** | **WAIVE** |
 | Treemap HTML page | **yes** when `JSON::MaybeXS` (or compatible) available — `subs-treemap-excl.html` | **no** | **yes** | **WAIVE** |
 | Flame graph SVG | **yes** when `--flame` (default) and `calls` option on — `all_stacks_by_time.svg` via bundled `flamegraph.pl` + `nytprofcalls` | **no** (folded export is a separate CLI for external flame tools; not embedded SVG site) | **yes** | **CLOSE** via **PR-A03** (optional `--flame`; no default bloat) |
@@ -219,19 +218,15 @@ report.html
 ## Residual highlights (operator summary)
 
 1. **Semantic counts are not residual** on default-calls1: native HTML must show leaf **15**, mid **3**, mid→leaf **15**; oracle must produce a non-empty HTML site under isolated `PERL5LIB`.  
-2. **Shared CSS (MVP closed as partial):** multi-file sites ship `style.css`; single-file inlines the same body — structure/CSS policy in [html-shared-css-structure-mvp-v0.md](https://github.com/hilather/nytprof-modernization/blob/main/docs/schemas/html-shared-css-structure-mvp-v0.md). Oracle `get_css()` / tablesorter CSS remain residual.  
-3. **Exclusive sub index (MVP closed as partial):** multi-file `index-subs-excl.html` with exclusive-sorted ranking — [html-subs-excl-index-mvp-v0.md](https://github.com/hilather/nytprof-modernization/blob/main/docs/schemas/html-subs-excl-index-mvp-v0.md). Oracle tablesorter / severity coloring remain residual.  
-4. **Largest residual classes** vs oracle site: shared **JS/tablesorter**, **flame SVG** + call-stack inputs, **Graphviz** (`packages-callgraph.dot`, `subs-callgraph.dot`, per-file `.dot`), **treemap**, **block/sub page modes** (`*-block.html` / `*-sub.html`).  
+2. **Shared CSS (MVP closed as partial):** multi-file sites ship `style.css`; single-file inlines the same body — [html-shared-css-structure-mvp-v0.md](https://github.com/hilather/nytprof-modernization/blob/main/docs/schemas/html-shared-css-structure-mvp-v0.md). Oracle `get_css()` / tablesorter CSS remain residual.  
+3. **Exclusive sub index (MVP closed as partial):** multi-file `index-subs-excl.html` — [html-subs-excl-index-mvp-v0.md](https://github.com/hilather/nytprof-modernization/blob/main/docs/schemas/html-subs-excl-index-mvp-v0.md). Oracle tablesorter / severity coloring remain residual.  
+4. **Largest residual classes** vs oracle site: shared **JS/tablesorter** (OPEN CLOSE residual after A01 CSS-only), **flame SVG** + call-stack inputs (A03 OPEN), **Graphviz** (`packages-callgraph.dot`, `subs-callgraph.dot`, per-file `.dot`), **treemap**, **block/sub page modes** (`*-block.html` / `*-sub.html`).  
 5. **Partial maps** (do not overclaim): multi-file `index.html` + `index-subs-excl.html` + `file-*.html` + `source.html` + MVP `style.css` vs oracle `{safe}-{fid}-line.html` + oracle CSS/JS tree; call-edges and excl ranking as **tables**, not oracle interactive widgets.  
 6. **Native-only (not an oracle residual to “fix”):** single-file `html -o` summary (inline CSS).  
-7. **Never** put `crates/` on oracle `PERL5LIB` when regenerating this inventory.
-2. **Largest residual classes** vs oracle site: shared **CSS/JS/tablesorter**, **flame SVG** + call-stack inputs, **Graphviz** (`packages-callgraph.dot`, `subs-callgraph.dot`, per-file `.dot`), **treemap**, **index-subs-excl.html**, **block/sub page modes** (`*-block.html` / `*-sub.html`).  
-3. **Partial maps** (do not overclaim): multi-file `index.html` + `file-*.html` + `source.html` vs oracle `{safe}-{fid}-line.html` tree; call-edges and excl ranking as **tables**, not oracle interactive widgets.  
-4. **Native-only (not an oracle residual to “fix”):** single-file `html -o` summary.  
-5. **Never** put `crates/` on oracle `PERL5LIB` when regenerating this inventory.  
-6. **Full R1 disposition (ADR-0003 / PR-A04):** **CLOSE** high-value classes via **PR-A01** (CSS/JS/structure), **PR-A02** (excl index), **PR-A03** (optional flame). **WAIVE** Graphviz, treemap, block/sub page modes, oracle per-file naming alias, browser `--open`, exact `-d`, mergeevals, oracle footer chrome. PR-A10 must not claim full oracle DOM. **PR-A10 readiness cut:** A01/A02 closed (MVP); A03 flame remains residual open; WAIVE classes residual-honest — see matrix § Full R1 ready + [`docs/RELEASE_NOTES_R1.md`](https://github.com/hilather/nytprof-modernization/blob/main/docs/RELEASE_NOTES_R1.md).
+7. **Never** put `crates/` on oracle `PERL5LIB` when regenerating this inventory.  
+8. **Full R1 disposition (ADR-0003 / PR-A04 + PR-A10 cut):** **closed (MVP)** A01 CSS/structure + A02 excl index. **OPEN residual (CLOSE path):** Shared JS/tablesorter (A01 CSS-only landed); A03 optional flame. **WAIVE** Graphviz, treemap, block/sub page modes, oracle per-file naming, browser `--open`, exact `-d`, mergeevals, oracle footer. PR-A10 must **not** claim full oracle DOM — see matrix § Full R1 ready + [`docs/RELEASE_NOTES_R1.md`](https://github.com/hilather/nytprof-modernization/blob/main/docs/RELEASE_NOTES_R1.md).
 
-These residuals match REPORT_SURFACE_CONTRACT **not advertised** list and R1 residual row “No full nytprofhtml DOM / REPORT-001..020”.
+These residuals match REPORT_SURFACE_CONTRACT **not advertised** list and R1 residual row for full nytprofhtml DOM / REPORT-001..020.
 ---
 
 ## Evidence capture procedure

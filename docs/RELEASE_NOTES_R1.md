@@ -18,6 +18,7 @@ These notes freeze the **advertised full R1 MVP product scope** after Phase A. T
 | **FFI (OQ-2 / PR-A05)** | `nytprof-ffi` cdylib open/query/close over `ProfileModel` | **MVP only** — not full RUST-010 |
 | **Perl Data/ReadStream (OQ-2 / PR-A06)** | Product `Data` / `ReadStream` over **binary** profiles (thin native-cli-jsonl) | **MVP only** — not COMPAT-007 / pure-XS wire decode |
 | **HTML (PR-A01 / A02)** | Shared CSS + structure; exclusive sub index page | **MVP only** — not full oracle DOM |
+| **HTML Shared JS** | — | **OPEN residual (CLOSE path)** — A01 CSS-only; tablesorter/jquery not shipped |
 | **HTML flame (PR-A03)** | — | **Residual open** — not claimed ready |
 | **Multi-OS CI (PR-A07)** | GHA Linux + macOS offline_gate matrix | **MVP only** — not full BUILD-006 |
 | **Packaging (PR-A08)** | MakeMaker facade + install-facade / dual-install depth | **Depth MVP** — not full BUILD-003 XS CPAN |
@@ -31,6 +32,7 @@ These notes freeze the **advertised full R1 MVP product scope** after Phase A. T
 - Native CLI surfaces remain as offline R0 / R1-preview: `dump`, `verify`/`inspect`, `report`/`summary` (+ `--json` / aggregates), `html` (± multi-file `--out-dir`), `csv`, `folded`, `callgrind`/`cg`, `capability`/`selftest`.
 - **HTML A01:** multi-file `style.css` + single-file inline CSS policy; stable structure classes (`table.subs`, call-edges, …). Schema: [`html-shared-css-structure-mvp-v0.md`](https://github.com/hilather/nytprof-modernization/blob/main/docs/schemas/html-shared-css-structure-mvp-v0.md).
 - **HTML A02:** multi-file `index-subs-excl.html` exclusive ranking; semantic leaf **15** / mid **3** on default-calls1. Schema: [`html-subs-excl-index-mvp-v0.md`](https://github.com/hilather/nytprof-modernization/blob/main/docs/schemas/html-subs-excl-index-mvp-v0.md).
+- **HTML Shared JS:** **not** shipped — ADR-0003 CLOSE residual remains open after A01 CSS-only close; do not advertise tablesorter/jquery as native-ready.
 - **HTML A03 flame:** **not** shipped on this cut — do not advertise native flame SVG / site flame inputs as ready. Related export: native `folded` for external flame tools.
 - Frozen semantic counts unchanged (default-calls1 leaf **15** / mid **3** / mid→leaf **15**; blocks-calls1 line5 **780**; JSON blocks **780**/**810**; calls2 `sub_entry` **27**; etc.).
 
@@ -69,7 +71,7 @@ Do **not** advertise under this cut:
 1. **COL-007** C v6 writer (or COL-008 batched Rust writer).
 2. **v6 wire freeze** or stable v6 numeric/wire IDs.
 3. **CLI v6 default** / default-parse always-inflate product path.
-4. **Full oracle `nytprofhtml` DOM** (tablesorter/JS chrome, Graphviz, treemap, flame site, block/sub page modes, oracle naming).
+4. **Full oracle `nytprofhtml` DOM** (tablesorter/JS chrome, Graphviz, treemap, flame site, block/sub page modes, oracle naming). Shared JS remains OPEN CLOSE residual after A01 CSS-only.
 5. **Full BUILD-003** XS CPAN dual-build with collector/XS in root Makefile.
 6. **Full BUILD-006** multi-Perl / multi-rustc / Windows / coverage dashboard certification.
 7. **Full RUST-010** beyond open/query/close MVP (batch APIs, production dylib install, ABI freeze tooling).
@@ -109,7 +111,7 @@ Do **not** advertise under this cut:
 
 | PR | Role | Status in this cut |
 |----|------|--------------------|
-| PR-A01 | Shared CSS + structure | closed (MVP) |
+| PR-A01 | Shared CSS + structure | closed (MVP); Shared JS OPEN residual |
 | PR-A02 | Exclusive sub index | closed (MVP) |
 | PR-A03 | Optional flame | residual open |
 | PR-A04 | ADR-0003 policy | done |

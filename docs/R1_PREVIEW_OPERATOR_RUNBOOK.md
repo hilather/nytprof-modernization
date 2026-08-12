@@ -350,7 +350,8 @@ Per [ADR-0003](https://github.com/hilather/nytprof-modernization/blob/main/docs/
 |------|--------------------|--------------|
 | **FFI (OQ-2 / A05)** | **closed (MVP)** — `crates/nytprof-ffi` open/query/close | full RUST-010 (batch APIs, BUILD-007, production dylib install, ABI freeze) |
 | **XS Data/ReadStream (OQ-2 / A06)** | **closed (MVP)** — binary via native dump → Jsonl* | COMPAT-007 bless-array; pure-XS wire decode |
-| **HTML A01/A02** | **closed (MVP)** — shared CSS/structure; `index-subs-excl.html` | full oracle DOM / Shared JS tablesorter |
+| **HTML A01/A02** | **closed (MVP)** — shared CSS/structure; `index-subs-excl.html` | full oracle DOM |
+| **HTML Shared JS** | **OPEN residual (CLOSE path)** — A01 CSS-only; tablesorter/jquery not shipped | Shared JS/tablesorter as native-ready |
 | **HTML A03 flame** | **residual open** | native flame SVG / site flame inputs as ready |
 | **HTML WAIVE classes** | **waived** (residual-honest) | Graphviz, treemap, block/sub pages, oracle naming as native-ready |
 | **Multi-OS (A07)** | **closed (MVP)** — GHA Linux + macOS | full multi-Perl/rustc/Windows certification |
@@ -368,7 +369,7 @@ Do **not** over-claim preview surfaces as complete product residual-table close.
 | Residual | Notes |
 |----------|--------|
 | **FFI / XS Data residual** | **FFI MVP (PR-A05 / `FFI-CDYLIB-MVP`):** `crates/nytprof-ffi` cdylib open/query/close C ABI over `ProfileModel` is shipped ([`docs/schemas/ffi-cdylib-mvp-v0.md`](https://github.com/hilather/nytprof-modernization/blob/main/docs/schemas/ffi-cdylib-mvp-v0.md)); panic-safe; dual-path still works **without** loading the dylib. **XS Data/ReadStream MVP (PR-A06 / `PERL-XS-DATA-READSTREAM-MVP`):** product `Devel::NYTProf::Data` + `::ReadStream` open **binary** profiles via native dump → JsonlData/JsonlReadStream ([`docs/schemas/perl-xs-data-readstream-mvp-v0.md`](https://github.com/hilather/nytprof-modernization/blob/main/docs/schemas/perl-xs-data-readstream-mvp-v0.md)); smoke `./scripts/packaging/perl_xs_data_readstream_smoke.sh`; `claims_compat007_shapes=0`. **Still residual:** full RUST-010; full PERL-004 pure-XS; full PERL-005 COMPAT-007. Preview primary = CLI subprocess + pure-Perl Jsonl* + product thin binary facades. |
-| **No full nytprofhtml DOM** | Native HTML is MVP summary / multi-file site (A01 CSS + A02 excl index) — not oracle DOM, tablesorter, flame SVG (A03 open), Graphviz. See HTML residual inventory + **ADR-0003** per-class map. |
+| **No full nytprofhtml DOM** | Native HTML is MVP summary / multi-file site (A01 CSS + A02 excl index) — not oracle DOM, Shared JS/tablesorter (**OPEN CLOSE residual**), flame SVG (A03 open), Graphviz. See HTML residual inventory + **ADR-0003** per-class map. |
 | **No v6 / COL-007** | No v6 wire freeze; C v6 writer (**COL-007**) deferred; COL-008 non-baseline. Collector remains 6.15 oracle / v5. Provisional `nytprof-format-v6` preflight only — **not** product writer / CLI v6 default. |
 | **No performance claims** | Public SLOs **WAIVED** (`docs/BENCH_NOTES.md`, `tools/bench/light_bench.sh` only). |
 | **No full MakeMaker XS CPAN dual-build** | **BUILD-MAKEMAKER-OPT** + **BUILD-003-DEPTH** partial only — **not** BUILD-003 full. |
