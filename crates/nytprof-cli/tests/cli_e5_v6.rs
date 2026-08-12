@@ -9,7 +9,7 @@
 //!
 //! Honesty:
 //! - Collection default remains v5 (`capability` → `collection_default: v5`).
-//! - Capability does **not** claim convert/merge.
+//! - Capability claims convert/merge true (PR-C01/C02 on R2-stable stack).
 //! - Magic auto-detect (no extra `--format=v6` flag required for offline tools).
 //! - Dual-sink pairs are scaled synthetic (not full oracle TEST-008 counts).
 
@@ -254,10 +254,10 @@ fn e5_dump_verify_v6_absolute() {
     );
 }
 
-/// No default format flip: capability always advertises collection_default=v5
-/// and never claims convert/merge.
+/// No default format flip: capability always advertises collection_default=v5.
+/// Convert/merge/repack/salvage are claimed true after PR-C01/C02 (R2-stable).
 #[test]
-fn e5_no_default_flip_and_no_convert_merge_claims() {
+fn e5_no_default_flip_and_convert_merge_true() {
     let (code, stdout, stderr) = run_cli(&["capability", "--json"]);
     assert_eq!(
         code, 0,
@@ -268,8 +268,10 @@ fn e5_no_default_flip_and_no_convert_merge_claims() {
         v["collection_default"], "v5",
         "collection_default must remain v5 (no R4 flip)\n{stdout}"
     );
-    assert_eq!(v["convert"], false, "must not claim convert\n{stdout}");
-    assert_eq!(v["merge"], false, "must not claim merge\n{stdout}");
+    assert_eq!(v["convert"], true, "convert must be claimed after PR-C01\n{stdout}");
+    assert_eq!(v["merge"], true, "merge must be claimed after PR-C02\n{stdout}");
+    assert_eq!(v["repack"], true, "repack must be claimed after PR-C02\n{stdout}");
+    assert_eq!(v["salvage"], true, "salvage must be claimed after PR-C02\n{stdout}");
     assert_eq!(v["v6_decode"], true);
     assert_eq!(v["v6_report"], true);
 }

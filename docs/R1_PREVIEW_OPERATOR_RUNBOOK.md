@@ -374,14 +374,14 @@ R2-preview is an **opt-in** horizon on top of the R0/R1-preview stack. Authorita
 |------------------------|--------|
 | Offline CLI on **v6** files (report/html/csv/… via magic) | **ready** (PR-B12 E5) |
 | Capability `v6_decode` / `v6_report` | **true** |
-| Capability `convert` / `merge` | **false** (residual) |
+| Capability `convert` / `merge` / `repack` / `salvage` | **true** on this R2-stable stack (PR-C01/C02; was false at PR-B13 preview cut) |
 | Collection default | **v5** (`collection_default: v5`) — **not** R4 |
 | COL-007 C writer E3-EVENT | **done** (PR-B09 — not packaging) |
 | COL-009 production writer backend | **C** reaffirmed (ADR-0007 / PR-B13) |
 | Wire freeze ADR-0006 | **done** |
 | E4 product smoke (offline_gate step 12) | **ready** on dual-sink scaled pairs |
 | Dual-path legacy without Cargo | **unchanged** |
-| R2-stable / R3 / R4 / convert-merge product | **not claimed** |
+| R2-stable honesty cut | **done** (PR-C05); R3 / R4 still **not claimed**; lossy convert residual |
 | Public P1/P2 performance certification | **waived** (methodology only; PR-C04) |
 
 ```sh

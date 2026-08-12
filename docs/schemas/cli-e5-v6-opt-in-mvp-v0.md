@@ -1,7 +1,8 @@
 # CLI E5 — v6 opt-in product surfaces (MVP v0)
 
 **Board ID:** `CLI-E5-V6-OPT-IN-MVP`  
-**Status:** implemented (PR-B12) — **not** collection default flip (R4); **not** convert/merge (PR-C01/C02); E4 product offline_gate: **E4-PRODUCT-CLI-SMOKE-MVP** (PR-B12b)  
+**Status:** implemented (PR-B12) — **not** collection default flip (R4); convert/merge **true** after PR-C01/C02 on R2-stable stack; E4 product offline_gate: **E4-PRODUCT-CLI-SMOKE-MVP** (PR-B12b)  
+**History:** At PR-B12 ship, capability advertised `convert`/`merge` **false**. Superseded on this branch by PR-C01/C02 — markers true; lossy convert residual remains.  
 **Depends on:** product v6→ProfileModel ingest ([`product-v6-profilemodel-ingest-mvp-v0.md`](https://github.com/hilather/nytprof-modernization/blob/main/docs/schemas/product-v6-profilemodel-ingest-mvp-v0.md)); wire freeze ADR-0006; capability self-test MVP  
 **Evidence:** `cargo test -p nytprof-cli --test cli_e5_v6`; `cargo test -p nytprof-cli --test capability_selftest`; `./scripts/packaging/capability_selftest_smoke.sh`
 
@@ -33,13 +34,15 @@ No extra `--format=v6` flag is required for offline tools: detection is magic-ba
 
 ## Capability honesty (E5)
 
-Human markers (stable order after `verify: yes`):
+Human markers (stable order after `verify: yes`). **Current (R2-stable / PR-C01+C02):**
 
 ```text
 v6_decode: yes
 v6_report: yes
-convert: no
-merge: no
+convert: yes
+merge: yes
+repack: yes
+salvage: yes
 collection_default: v5
 profile_ok: <path|skip>
 v6_profile_ok: <path|skip>
@@ -51,8 +54,10 @@ JSON fields (in addition to CAPABILITY-JSON-MVP `ok`/`decode`/`report`/`verify`/
 |-------|------|---------|
 | `v6_decode` | boolean `true` | Product v6 always-inflate decode is linked |
 | `v6_report` | boolean `true` | Product report/html/csv/… path accepts v6 via dual-dispatch model |
-| `convert` | boolean `false` | **Must not** claim until PR-C01 |
-| `merge` | boolean `false` | **Must not** claim until merge tooling ships |
+| `convert` | boolean `true` | Strict v5↔v6 convert linked (PR-C01); was `false` at PR-B12 E5 ship |
+| `merge` | boolean `true` | Stream-concat merge linked (PR-C02); was `false` at PR-B12 E5 ship |
+| `repack` | boolean `true` | Repack tooling linked (PR-C02) |
+| `salvage` | boolean `true` | Salvage tooling linked (PR-C02) |
 | `collection_default` | string `"v5"` | Collection format default; R4 residual to flip |
 | `v6_profile_ok` | string path **or** `null` | Optional v6 golden verify probe |
 
@@ -73,7 +78,7 @@ Fail-closed truncated / CRC-corrupt v6 remains under `fail_closed.rs` (PR-B11a).
 ## Non-claims / residuals
 
 - **Not** collection `format=v6` as product default (R4)
-- **Not** convert / merge / salvage tooling (PR-C01+; capability stays `false`)
+- Convert / merge / repack / salvage tooling: **done** (PR-C01/C02); capability markers **true**. Residual: **lossy** convert modes / packing fidelity (not advertised as lossless for all inputs)
 - E4 product CLI smoke: [`e4-product-cli-smoke-mvp-v0.md`](https://github.com/hilather/nytprof-modernization/blob/main/docs/schemas/e4-product-cli-smoke-mvp-v0.md)
 - **Not** full oracle dual pairs (TEST-003/TEST-008)
 - **Not** E3-mixed multi-kind product path

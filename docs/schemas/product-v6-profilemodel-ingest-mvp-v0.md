@@ -73,4 +73,4 @@ Auto-VERSION inject when body omits VERSION (header major/minor).
 - Not full multi-kind SOURCE/INDEX/SUMMARY product path (E3-mixed residual)
 - Not CLI collection `format=v6` default (R4 residual; E5 capability advertises `collection_default: v5`)
 - Full E5 report/html/csv/capability matrix: **PR-B12** ([`cli-e5-v6-opt-in-mvp-v0.md`](https://github.com/hilather/nytprof-modernization/blob/main/docs/schemas/cli-e5-v6-opt-in-mvp-v0.md)) — this ingest MVP is the load path only
-- Not COL-008; not convert/merge (capability must keep `convert`/`merge` false until PR-C01+)
+- Not COL-008. Convert/merge tooling is out of scope for this ingest MVP (capability markers true after PR-C01/C02 on R2-stable; lossy residual remains)
