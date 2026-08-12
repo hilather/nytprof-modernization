@@ -1,15 +1,19 @@
 /* SPDX-License-Identifier: Artistic-1.0-Perl OR GPL-1.0-or-later
  *
- * COL-007 (PR-B06) — Absolute v6 writer MVP (staged).
+ * COL-007 (PR-B06 + PR-B07) — Absolute v6 writer with codecs / multi-chunk / CRC.
  *
  * Routes COMPAT-001 emits through provisional format-v6 absolute EVENT
- * bodies (codec NONE). Layout matches crates/nytprof-format-v6 +
- * collector/include/nytprof_v6_ids.h lockfile constants.
+ * bodies. Layout matches crates/nytprof-format-v6 + nytprof_v6_ids.h.
+ *
+ * PR-B07 adds:
+ *   - EVENT payload codecs NONE / ZLIB / ZSTD / LZ4 (chunk-framed inflate)
+ *   - multi-chunk EVENT seal (records-per-chunk partition; not mid-record)
+ *   - header CRC32 + per-chunk payload CRC32 (IEEE / ISO-HDLC)
  *
  * Residuals (honest):
  *   - Not packing (ADR-0001 site-delta / TIME_*_RUN / FLAG_HAS_SEQ) — PR-B08.
- *   - Not multi-chunk / CRC / ZLIB|ZSTD|LZ4 payload codecs — PR-B07.
  *   - Not FOOTER string dict (ADR-0002) — PR-B08.
+ *   - Not mid-stream payload codec switch after START_DEFLATE — PR-B08.
  *   - Not wire freeze; not board COL-007 done (E3-C = PR-B09).
  *   - NEW_FID drops eval_*, flags, size, mtime (provisional absolute shape).
  *   - TIME_BLOCK drops sub_line (provisional absolute shape).
@@ -22,6 +26,7 @@
 
 #include "nytp_sink.h"
 #include "nytp_sink_counting.h"
+#include "nytprof_v6_ids.h"
 
 #include <stddef.h>
 #include <stdint.h>
@@ -31,7 +36,8 @@ extern "C" {
 #endif
 
 /*
- * Create an absolute v6 wire sink (codec NONE EVENT).
+ * Create an absolute v6 wire sink (codec NONE EVENT, unlimited single chunk).
+ * Header CRC and chunk payload CRC are sealed on write/close.
  * - path may be NULL: wire accumulates in memory only (tests).
  * - path non-NULL: on successful flush/close, sealed buffer is written
  *   to path (create/truncate). Path is copied; caller may free.
@@ -40,15 +46,36 @@ extern "C" {
 nytp_sink *nytp_v6_sink_create(const char *path);
 
 /*
- * Create with explicit header minor / feature bits / optional header CRC
- * (stored as-is; B06 does not compute real CRC — PR-B07).
+ * Create with explicit header minor / feature bits.
+ * header_crc is ignored — CRC is always sealed over the first 32 header bytes
+ * (PR-B07; matches format-v6 encode_fixed_header_full_sealed).
  */
 nytp_sink *nytp_v6_sink_create_ex(const char *path, uint16_t minor,
                                   uint64_t required_features,
                                   uint64_t optional_features,
                                   uint32_t header_crc);
 
-/* True if sink was created by nytp_v6_sink_create / create_ex. */
+/*
+ * Create with EVENT payload codec + multi-chunk partition limit.
+ * event_codec: NYTPROF_V6_CODEC_{NONE,ZLIB,ZSTD,LZ4}; others → NULL.
+ * max_records_per_chunk:
+ *   0  = unlimited → at most one EVENT chunk (mini-profile shape)
+ *   n>=1 = split into EVENT chunks of at most n records each (sequence 0..k-1)
+ * Header + payload CRCs always sealed.
+ */
+nytp_sink *nytp_v6_sink_create_codec(const char *path, uint8_t event_codec,
+                                     size_t max_records_per_chunk);
+
+/*
+ * Full create: minor/features + codec + multi-chunk. header_crc ignored (sealed).
+ */
+nytp_sink *nytp_v6_sink_create_codec_ex(const char *path, uint16_t minor,
+                                        uint64_t required_features,
+                                        uint64_t optional_features,
+                                        uint8_t event_codec,
+                                        size_t max_records_per_chunk);
+
+/* True if sink was created by nytp_v6_sink_create* / create_codec*. */
 int nytp_v6_sink_is_v6(const nytp_sink *sink);
 
 /* Stats share the counting layout so tests can compare routing. */
@@ -62,7 +89,7 @@ const char *nytp_v6_sink_path(const nytp_sink *sink);
 
 /*
  * Borrow sealed wire buffer after successful close, or prefix-only mid-stream.
- * Decoder-ready mini-profile only after nytp_sink_close (EVENT chunk sealed).
+ * Decoder-ready profile only after nytp_sink_close (EVENT chunk(s) sealed).
  * *out_len receives byte length. Returns NULL if not a v6 sink.
  */
 const uint8_t *nytp_v6_sink_wire(const nytp_sink *sink, size_t *out_len);
@@ -73,15 +100,27 @@ size_t nytp_v6_sink_wire_len(const nytp_sink *sink);
 /* 1 if a path was configured and the buffer has been written to it. */
 int nytp_v6_sink_file_written(const nytp_sink *sink);
 
-/* 1 after close has sealed the EVENT chunk into the wire buffer. */
+/* 1 after close has sealed EVENT chunk(s) into the wire buffer. */
 int nytp_v6_sink_is_sealed(const nytp_sink *sink);
 
 /* Header major/minor (always major 6 for this adapter). */
 void nytp_v6_sink_version(const nytp_sink *sink, uint16_t *major,
                           uint16_t *minor);
 
-/* Logical event count that will be written into the EVENT chunk header. */
+/* Logical event count that will be written across EVENT chunk headers. */
 uint32_t nytp_v6_sink_event_count(const nytp_sink *sink);
+
+/* Configured EVENT payload codec (NYTPROF_V6_CODEC_*). 0 if not v6. */
+uint8_t nytp_v6_sink_event_codec(const nytp_sink *sink);
+
+/* Configured max records per EVENT chunk (0 = unlimited). */
+size_t nytp_v6_sink_max_records_per_chunk(const nytp_sink *sink);
+
+/*
+ * Number of EVENT chunks sealed on close (0 if empty stream / refuse-seal).
+ * 0 before seal.
+ */
+uint32_t nytp_v6_sink_event_chunk_count(const nytp_sink *sink);
 
 /*
  * Borrow the open event-body buffer (absolute records, not yet framed).

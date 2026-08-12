@@ -1,6 +1,7 @@
 # COL-001..007 collector overlay build (ADR-0004 B0-A).
 # Compiles when a C toolchain is present. Not required for legacy-only packaging.
-# COL-006 v5 wire writer links zlib (-lz). COL-007 absolute v6 is pure C.
+# COL-006 v5 wire writer links zlib (-lz).
+# COL-007 v6 writer links zlib + zstd + lz4 for EVENT payload codecs (PR-B07).
 #
 # Usage (from repo root or collector/):
 #   make -C collector
@@ -14,7 +15,7 @@ CC      ?= cc
 CFLAGS  ?= -std=c11 -Wall -Wextra -Wpedantic -O2 -g
 CPPFLAGS += -Iinclude
 LDFLAGS ?=
-LDLIBS  ?= -lz
+LDLIBS  ?= -lz -lzstd -llz4
 AR      ?= ar
 
 BUILD   := build
@@ -25,7 +26,8 @@ TESTBINS := \
 	$(BUILD)/test_fake_clock \
 	$(BUILD)/test_batch_fast \
 	$(BUILD)/test_v5_wire \
-	$(BUILD)/test_v6_abs_wire
+	$(BUILD)/test_v6_abs_wire \
+	$(BUILD)/test_v6_codec_chunk_crc
 
 SRC := \
 	src/nytp_sink.c \
@@ -72,6 +74,9 @@ $(BUILD)/test_v5_wire: t/test_v5_wire.c $(LIB) | dirs
 $(BUILD)/test_v6_abs_wire: t/test_v6_abs_wire.c $(LIB) | dirs
 	$(CC) $(CPPFLAGS) $(CFLAGS) -o $@ t/test_v6_abs_wire.c $(LIB) $(LDFLAGS) $(LDLIBS)
 
+$(BUILD)/test_v6_codec_chunk_crc: t/test_v6_codec_chunk_crc.c $(LIB) | dirs
+	$(CC) $(CPPFLAGS) $(CFLAGS) -o $@ t/test_v6_codec_chunk_crc.c $(LIB) $(LDFLAGS) $(LDLIBS)
+
 test: all
 	./$(BUILD)/test_sink_api
 	./$(BUILD)/test_lifecycle_seq
@@ -79,6 +84,7 @@ test: all
 	./$(BUILD)/test_batch_fast
 	./$(BUILD)/test_v5_wire
 	./$(BUILD)/test_v6_abs_wire
+	./$(BUILD)/test_v6_codec_chunk_crc
 
 clean:
 	rm -rf $(BUILD)

@@ -1,9 +1,10 @@
 /* SPDX-License-Identifier: Artistic-1.0-Perl OR GPL-1.0-or-later
  *
- * COL-007 (PR-B06) — Absolute provisional v6 wire sink (codec NONE EVENT).
+ * COL-007 (PR-B06 + PR-B07) — Absolute provisional v6 wire sink.
  *
  * Layout matches crates/nytprof-format-v6 encode_file_prefix + encode_chunk_frame
- * + absolute event_body (no packing flags). IDs from nytprof_v6_ids.h.
+ * + absolute event_body (no packing flags) + payload codecs + multi-chunk + CRC.
+ * IDs from nytprof_v6_ids.h.
  */
 #include "nytp_sink_v6.h"
 #include "nytprof_v6_ids.h"
@@ -14,12 +15,18 @@
 #include <stdlib.h>
 #include <string.h>
 
+#include <lz4.h>
+#include <zlib.h>
+#include <zstd.h>
+
 #define NYTP_V6_INIT_CAP 4096u
+#define NYTP_V6_ZSTD_LEVEL 3
+#define NYTP_V6_ZLIB_LEVEL 6
 
 typedef struct v6_impl {
     nytp_counting_stats stats;
     char *path;
-    /* Sealed file bytes: prefix [+ EVENT chunk]. Grows on create/seal. */
+    /* Sealed file bytes: prefix [+ EVENT chunk(s)]. Grows on create/seal. */
     uint8_t *wire;
     size_t wire_len;
     size_t wire_cap;
@@ -27,11 +34,18 @@ typedef struct v6_impl {
     uint8_t *body;
     size_t body_len;
     size_t body_cap;
+    /* Body offset of each committed record start (for multi-chunk partition). */
+    size_t *rec_off;
+    uint32_t rec_off_len;
+    uint32_t rec_off_cap;
     uint16_t minor;
     uint64_t required_features;
     uint64_t optional_features;
-    uint32_t header_crc;
-    uint32_t event_count; /* logical EVENT records (not START_DEFLATE alone? all body recs) */
+    uint32_t header_crc; /* sealed value after write_file_prefix */
+    uint32_t event_count; /* logical EVENT body records */
+    uint32_t event_chunk_count; /* EVENT frames sealed on close */
+    uint8_t event_codec; /* NYTPROF_V6_CODEC_* */
+    size_t max_records_per_chunk; /* 0 = unlimited */
     int sealed;
     int file_written;
     int header_ok;
@@ -109,14 +123,185 @@ static void body_rollback(v6_impl *vi, size_t mark)
     }
 }
 
+static nytp_status rec_off_push(v6_impl *vi, size_t off)
+{
+    if (vi->rec_off_len == vi->rec_off_cap) {
+        uint32_t ncap = vi->rec_off_cap ? vi->rec_off_cap * 2u : 32u;
+        size_t *nbuf;
+        if (ncap < vi->rec_off_len + 1u) {
+            ncap = vi->rec_off_len + 1u;
+        }
+        nbuf = (size_t *)realloc(vi->rec_off, (size_t)ncap * sizeof(size_t));
+        if (!nbuf) {
+            return NYTP_ERR_IO;
+        }
+        vi->rec_off = nbuf;
+        vi->rec_off_cap = ncap;
+    }
+    vi->rec_off[vi->rec_off_len++] = off;
+    return NYTP_OK;
+}
+
 /*
  * On any emit failure after body bytes may have been written: restore mark.
  * Call only for non-OK statuses from mid-record paths.
+ * Also drops any record offsets at/after mark (defensive; after_record is last).
  */
 static nytp_status emit_fail(v6_impl *vi, size_t mark, nytp_status st)
 {
     body_rollback(vi, mark);
+    while (vi->rec_off_len > 0 &&
+           vi->rec_off[vi->rec_off_len - 1u] >= mark) {
+        vi->rec_off_len--;
+    }
+    if (vi->event_count > vi->rec_off_len) {
+        vi->event_count = vi->rec_off_len;
+    }
     return st;
+}
+
+/* CRC-32/IEEE (ISO-HDLC) via zlib — matches format-v6 crc32_ieee. */
+static uint32_t v6_crc32_ieee(const uint8_t *data, size_t len)
+{
+    uLong c = crc32(0L, Z_NULL, 0);
+    if (len > 0 && data) {
+        /* zlib crc32 takes uInt; chunk large buffers. */
+        size_t off = 0;
+        while (off < len) {
+            uInt n = (uInt)((len - off) > 0xffffffffu ? 0xffffffffu
+                                                     : (len - off));
+            if (n == 0) {
+                break;
+            }
+            c = crc32(c, data + off, n);
+            off += (size_t)n;
+        }
+    }
+    return (uint32_t)c;
+}
+
+static int codec_supported(uint8_t c)
+{
+    return c == NYTPROF_V6_CODEC_NONE || c == NYTPROF_V6_CODEC_ZLIB ||
+           c == NYTPROF_V6_CODEC_ZSTD || c == NYTPROF_V6_CODEC_LZ4;
+}
+
+/*
+ * Compress plain partition into *out / *out_len (malloc'd; caller frees).
+ * NONE: copy. Fail-closed on oversize / codec errors.
+ */
+static nytp_status compress_payload(uint8_t codec, const uint8_t *plain,
+                                    size_t plain_len, uint8_t **out,
+                                    size_t *out_len)
+{
+    *out = NULL;
+    *out_len = 0;
+    if (plain_len > NYTPROF_V6_MAX_CHUNK_PAYLOAD) {
+        return NYTP_ERR_OVERFLOW;
+    }
+    if (codec == NYTPROF_V6_CODEC_NONE) {
+        if (plain_len == 0) {
+            *out = NULL;
+            *out_len = 0;
+            return NYTP_OK;
+        }
+        *out = (uint8_t *)malloc(plain_len);
+        if (!*out) {
+            return NYTP_ERR_IO;
+        }
+        memcpy(*out, plain, plain_len);
+        *out_len = plain_len;
+        return NYTP_OK;
+    }
+    if (codec == NYTPROF_V6_CODEC_ZLIB) {
+        uLongf bound = compressBound((uLong)plain_len);
+        uint8_t *buf;
+        uLongf clen;
+        int zst;
+        if (bound == 0) {
+            bound = 64; /* empty / tiny */
+        }
+        buf = (uint8_t *)malloc((size_t)bound);
+        if (!buf) {
+            return NYTP_ERR_IO;
+        }
+        clen = bound;
+        zst = compress2(buf, &clen, plain, (uLong)plain_len, NYTP_V6_ZLIB_LEVEL);
+        if (zst != Z_OK) {
+            free(buf);
+            return NYTP_ERR_IO;
+        }
+        if (clen > NYTPROF_V6_MAX_CHUNK_PAYLOAD) {
+            free(buf);
+            return NYTP_ERR_OVERFLOW;
+        }
+        *out = buf;
+        *out_len = (size_t)clen;
+        return NYTP_OK;
+    }
+    if (codec == NYTPROF_V6_CODEC_ZSTD) {
+        size_t bound = ZSTD_compressBound(plain_len);
+        uint8_t *buf;
+        size_t clen;
+        if (ZSTD_isError(bound)) {
+            return NYTP_ERR_IO;
+        }
+        if (bound == 0) {
+            bound = 64;
+        }
+        buf = (uint8_t *)malloc(bound);
+        if (!buf) {
+            return NYTP_ERR_IO;
+        }
+        clen = ZSTD_compress(buf, bound, plain, plain_len, NYTP_V6_ZSTD_LEVEL);
+        if (ZSTD_isError(clen)) {
+            free(buf);
+            return NYTP_ERR_IO;
+        }
+        if (clen > NYTPROF_V6_MAX_CHUNK_PAYLOAD) {
+            free(buf);
+            return NYTP_ERR_OVERFLOW;
+        }
+        *out = buf;
+        *out_len = clen;
+        return NYTP_OK;
+    }
+    if (codec == NYTPROF_V6_CODEC_LZ4) {
+        int bound = LZ4_compressBound((int)plain_len);
+        uint8_t *buf;
+        int clen;
+        if (plain_len > (size_t)LZ4_MAX_INPUT_SIZE) {
+            return NYTP_ERR_OVERFLOW;
+        }
+        if (bound <= 0) {
+            bound = 64;
+        }
+        buf = (uint8_t *)malloc((size_t)bound);
+        if (!buf) {
+            return NYTP_ERR_IO;
+        }
+        if (plain_len == 0) {
+            /* Empty raw block: zero-length payload is valid (uncompressed_len=0). */
+            free(buf);
+            *out = NULL;
+            *out_len = 0;
+            return NYTP_OK;
+        }
+        clen = LZ4_compress_default((const char *)plain, (char *)buf,
+                                    (int)plain_len, bound);
+        if (clen <= 0) {
+            free(buf);
+            return NYTP_ERR_IO;
+        }
+        if ((size_t)clen > NYTPROF_V6_MAX_CHUNK_PAYLOAD) {
+            free(buf);
+            return NYTP_ERR_OVERFLOW;
+        }
+        *out = buf;
+        *out_len = (size_t)clen;
+        return NYTP_OK;
+    }
+    return NYTP_ERR_UNSUPPORTED;
 }
 
 /* ---- ULEB128 (canonical, matches Rust encode_u64) ---- */
@@ -297,7 +482,7 @@ static v6_impl *vi_of(nytp_sink *sink)
 static const char *v6_name(const nytp_sink *sink)
 {
     (void)sink;
-    return "v6-abs";
+    return "v6";
 }
 
 static nytp_status v6_activate(nytp_sink *sink)
@@ -344,6 +529,15 @@ static nytp_status write_file_prefix(v6_impl *vi)
         hdr[33] = (uint8_t)((crc >> 8) & 0xffu);
         hdr[34] = (uint8_t)((crc >> 16) & 0xffu);
         hdr[35] = (uint8_t)((crc >> 24) & 0xffu);
+    }
+    /* Seal header CRC over first 32 bytes (excludes CRC field). */
+    {
+        uint32_t crc = v6_crc32_ieee(hdr, 32);
+        hdr[32] = (uint8_t)(crc & 0xffu);
+        hdr[33] = (uint8_t)((crc >> 8) & 0xffu);
+        hdr[34] = (uint8_t)((crc >> 16) & 0xffu);
+        hdr[35] = (uint8_t)((crc >> 24) & 0xffu);
+        vi->header_crc = crc;
     }
     st = wire_append(vi, hdr, sizeof(hdr));
     if (st != NYTP_OK) {
@@ -413,13 +607,15 @@ static nytp_status encode_chunk_frame(v6_impl *vi, uint8_t kind, uint8_t codec,
 static nytp_status seal_event_chunk(v6_impl *vi, const nytp_sink *sink)
 {
     nytp_status st;
-    uint32_t unc;
+    uint32_t nrec;
+    size_t start;
+    uint64_t seq;
     if (vi->sealed) {
         return NYTP_OK;
     }
     /*
      * Sticky FAILED (OVERFLOW/IO after emit): do **not** seal a product
-     * mini-profile. Emit paths checkpoint/rollback so open body has no
+     * profile. Emit paths checkpoint/rollback so open body has no
      * truncated record; discard remaining complete-but-failed-stream body
      * so close cannot report OK with a sealed EVENT after sticky fail.
      * Lifecycle close-from-FAILED still returns OK (prefix-only wire).
@@ -427,28 +623,85 @@ static nytp_status seal_event_chunk(v6_impl *vi, const nytp_sink *sink)
     if (sink && sink->state == NYTP_SINK_FAILED) {
         vi->body_len = 0;
         vi->event_count = 0;
+        vi->rec_off_len = 0;
+        vi->event_chunk_count = 0;
         vi->sealed = 1; /* finished; no EVENT chunk */
         return NYTP_OK;
     }
-    if (vi->body_len > NYTPROF_V6_MAX_CHUNK_PAYLOAD ||
-        vi->body_len > NYTPROF_V6_MAX_EVENT_BODY_BYTES) {
+    if (vi->body_len > NYTPROF_V6_MAX_EVENT_BODY_BYTES) {
         return NYTP_ERR_OVERFLOW;
     }
-    unc = (uint32_t)vi->body_len;
+    nrec = vi->event_count;
+    if (nrec != vi->rec_off_len) {
+        /* Internal invariant: every committed record has a start offset. */
+        return NYTP_ERR_IO;
+    }
     /*
-     * Empty body → no EVENT chunk (Rust encode_mini_profile empty parity).
-     * Non-empty / event_count > 0 → one codec-NONE EVENT chunk.
+     * Empty body → no EVENT chunks (Rust encode_mini_profile empty parity).
+     * Else partition by max_records_per_chunk (0 = unlimited single chunk).
      */
-    if (vi->body_len > 0 || vi->event_count > 0) {
+    if (vi->body_len == 0 || nrec == 0) {
+        vi->event_chunk_count = 0;
+        vi->sealed = 1;
+        return NYTP_OK;
+    }
+
+    start = 0;
+    seq = 0;
+    while (start < (size_t)nrec) {
+        size_t count;
+        size_t off0;
+        size_t off1;
+        size_t plain_len;
+        const uint8_t *plain;
+        uint8_t *payload = NULL;
+        size_t payload_len = 0;
+        uint32_t checksum;
+
+        if (vi->max_records_per_chunk == 0) {
+            count = (size_t)nrec - start;
+        } else {
+            size_t rem = (size_t)nrec - start;
+            count = rem < vi->max_records_per_chunk ? rem
+                                                   : vi->max_records_per_chunk;
+        }
+        if (count == 0 || count > (size_t)UINT32_MAX) {
+            return NYTP_ERR_OVERFLOW;
+        }
+        off0 = vi->rec_off[start];
+        off1 = (start + count < (size_t)nrec) ? vi->rec_off[start + count]
+                                              : vi->body_len;
+        if (off1 < off0 || off1 > vi->body_len) {
+            return NYTP_ERR_IO;
+        }
+        plain = vi->body + off0;
+        plain_len = off1 - off0;
+        if (plain_len > NYTPROF_V6_MAX_CHUNK_PAYLOAD) {
+            return NYTP_ERR_OVERFLOW;
+        }
+        st = compress_payload(vi->event_codec, plain, plain_len, &payload,
+                              &payload_len);
+        if (st != NYTP_OK) {
+            free(payload);
+            return st;
+        }
+        checksum = v6_crc32_ieee(payload, payload_len);
         st = encode_chunk_frame(vi, (uint8_t)NYTPROF_V6_KIND_EVENT,
-                                (uint8_t)NYTPROF_V6_CODEC_NONE, 0 /* flags */,
-                                0 /* sequence */, 0 /* first_logical */,
-                                vi->event_count, unc, vi->body, vi->body_len,
-                                0 /* checksum placeholder */);
+                                vi->event_codec, 0 /* flags */, seq,
+                                0 /* first_logical */, (uint32_t)count,
+                                (uint32_t)plain_len, payload, payload_len,
+                                checksum);
+        free(payload);
         if (st != NYTP_OK) {
             return st;
         }
+        seq++;
+        start += count;
+        if (seq > (uint64_t)UINT32_MAX) {
+            return NYTP_ERR_OVERFLOW;
+        }
     }
+    vi->event_chunk_count = (uint32_t)seq;
     vi->sealed = 1;
     return NYTP_OK;
 }
@@ -524,6 +777,7 @@ static void v6_destroy(nytp_sink *sink)
         free(vi->path);
         free(vi->wire);
         free(vi->body);
+        free(vi->rec_off);
         free(vi);
     }
     free(sink);
@@ -531,10 +785,16 @@ static void v6_destroy(nytp_sink *sink)
 
 /* ---- emit ops (absolute bodies) ---- */
 
-static nytp_status after_record(v6_impl *vi, nytp_event_kind kind)
+static nytp_status after_record(v6_impl *vi, nytp_event_kind kind,
+                                size_t rec_start)
 {
+    nytp_status st;
     if (vi->event_count == UINT32_MAX) {
         return NYTP_ERR_OVERFLOW;
+    }
+    st = rec_off_push(vi, rec_start);
+    if (st != NYTP_OK) {
+        return st;
     }
     vi->event_count++;
     note_kind(vi, kind);
@@ -571,7 +831,7 @@ static nytp_status v6_emit_attribute(nytp_sink *sink, nytp_string_view key,
     if (st != NYTP_OK) {
         return emit_fail(vi, mark, st);
     }
-    st = after_record(vi, NYTP_EVT_ATTRIBUTE);
+    st = after_record(vi, NYTP_EVT_ATTRIBUTE, mark);
     if (st != NYTP_OK) {
         return emit_fail(vi, mark, st);
     }
@@ -608,7 +868,7 @@ static nytp_status v6_emit_option(nytp_sink *sink, nytp_string_view key,
     if (st != NYTP_OK) {
         return emit_fail(vi, mark, st);
     }
-    st = after_record(vi, NYTP_EVT_OPTION);
+    st = after_record(vi, NYTP_EVT_OPTION, mark);
     if (st != NYTP_OK) {
         return emit_fail(vi, mark, st);
     }
@@ -636,7 +896,7 @@ static nytp_status v6_emit_comment(nytp_sink *sink, nytp_string_view text)
     if (st != NYTP_OK) {
         return emit_fail(vi, mark, st);
     }
-    st = after_record(vi, NYTP_EVT_COMMENT);
+    st = after_record(vi, NYTP_EVT_COMMENT, mark);
     if (st != NYTP_OK) {
         return emit_fail(vi, mark, st);
     }
@@ -679,7 +939,7 @@ static nytp_status v6_emit_time_line(nytp_sink *sink, nytp_ticks ticks,
     vi->stats.last_line = line;
     vi->stats.last_block_line = 0;
     vi->stats.last_sub_line = 0;
-    st = after_record(vi, NYTP_EVT_TIME_LINE);
+    st = after_record(vi, NYTP_EVT_TIME_LINE, mark);
     if (st != NYTP_OK) {
         return emit_fail(vi, mark, st);
     }
@@ -728,7 +988,7 @@ static nytp_status v6_emit_time_block(nytp_sink *sink, nytp_ticks ticks,
     vi->stats.last_line = line;
     vi->stats.last_block_line = block_line;
     vi->stats.last_sub_line = sub_line;
-    st = after_record(vi, NYTP_EVT_TIME_BLOCK);
+    st = after_record(vi, NYTP_EVT_TIME_BLOCK, mark);
     if (st != NYTP_OK) {
         return emit_fail(vi, mark, st);
     }
@@ -748,7 +1008,7 @@ static nytp_status v6_emit_discount(nytp_sink *sink)
     if (st != NYTP_OK) {
         return emit_fail(vi, mark, st);
     }
-    st = after_record(vi, NYTP_EVT_DISCOUNT);
+    st = after_record(vi, NYTP_EVT_DISCOUNT, mark);
     if (st != NYTP_OK) {
         return emit_fail(vi, mark, st);
     }
@@ -790,7 +1050,7 @@ static nytp_status v6_emit_new_fid(nytp_sink *sink, nytp_fid fid,
         return emit_fail(vi, mark, st);
     }
     vi->stats.last_fid = fid;
-    st = after_record(vi, NYTP_EVT_NEW_FID);
+    st = after_record(vi, NYTP_EVT_NEW_FID, mark);
     if (st != NYTP_OK) {
         return emit_fail(vi, mark, st);
     }
@@ -832,7 +1092,7 @@ static nytp_status v6_emit_src_line(nytp_sink *sink, nytp_fid fid,
     vi->stats.last_src_fid = fid;
     vi->stats.last_src_line = line;
     copy_src_text(vi, text);
-    st = after_record(vi, NYTP_EVT_SRC_LINE);
+    st = after_record(vi, NYTP_EVT_SRC_LINE, mark);
     if (st != NYTP_OK) {
         return emit_fail(vi, mark, st);
     }
@@ -878,7 +1138,7 @@ static nytp_status v6_emit_sub_info(nytp_sink *sink, nytp_fid fid,
     vi->stats.last_line = first_line;
     vi->stats.last_block_line = last_line;
     copy_subname(vi, name);
-    st = after_record(vi, NYTP_EVT_SUB_INFO);
+    st = after_record(vi, NYTP_EVT_SUB_INFO, mark);
     if (st != NYTP_OK) {
         return emit_fail(vi, mark, st);
     }
@@ -963,7 +1223,7 @@ static nytp_status v6_emit_sub_callers(nytp_sink *sink, nytp_fid fid,
     vi->stats.last_fid = fid;
     vi->stats.last_line = line;
     copy_subname(vi, called);
-    st = after_record(vi, NYTP_EVT_SUB_CALLERS);
+    st = after_record(vi, NYTP_EVT_SUB_CALLERS, mark);
     if (st != NYTP_OK) {
         return emit_fail(vi, mark, st);
     }
@@ -1002,7 +1262,7 @@ static nytp_status v6_emit_pid_start(nytp_sink *sink, nytp_pid pid,
         return emit_fail(vi, mark, st);
     }
     vi->stats.last_fid = (nytp_fid)pid;
-    st = after_record(vi, NYTP_EVT_PID_START);
+    st = after_record(vi, NYTP_EVT_PID_START, mark);
     if (st != NYTP_OK) {
         return emit_fail(vi, mark, st);
     }
@@ -1037,7 +1297,7 @@ static nytp_status v6_emit_pid_end(nytp_sink *sink, nytp_pid pid,
         return emit_fail(vi, mark, st);
     }
     vi->stats.last_fid = (nytp_fid)pid;
-    st = after_record(vi, NYTP_EVT_PID_END);
+    st = after_record(vi, NYTP_EVT_PID_END, mark);
     if (st != NYTP_OK) {
         return emit_fail(vi, mark, st);
     }
@@ -1068,7 +1328,7 @@ static nytp_status v6_emit_sub_entry(nytp_sink *sink, nytp_fid caller_fid,
     }
     vi->stats.last_fid = caller_fid;
     vi->stats.last_line = caller_line;
-    st = after_record(vi, NYTP_EVT_SUB_ENTRY);
+    st = after_record(vi, NYTP_EVT_SUB_ENTRY, mark);
     if (st != NYTP_OK) {
         return emit_fail(vi, mark, st);
     }
@@ -1121,7 +1381,7 @@ static nytp_status v6_emit_sub_return(nytp_sink *sink, nytp_depth depth,
     }
     vi->stats.last_depth = depth;
     copy_subname(vi, subname);
-    st = after_record(vi, NYTP_EVT_SUB_RETURN);
+    st = after_record(vi, NYTP_EVT_SUB_RETURN, mark);
     if (st != NYTP_OK) {
         return emit_fail(vi, mark, st);
     }
@@ -1129,9 +1389,10 @@ static nytp_status v6_emit_sub_return(nytp_sink *sink, nytp_depth depth,
 }
 
 /*
- * START_DEFLATE: absolute empty marker opcode only (PR-B06).
- * Does **not** switch payload codecs (PR-B07) and is still a control event
- * for COL-003 (no logical seq via public wrappers).
+ * START_DEFLATE: absolute empty marker opcode only.
+ * Does **not** switch payload codecs mid-stream (PR-B08) and is still a
+ * control event for COL-003 (no logical seq via public wrappers).
+ * Chunk payload codec is configured at sink create (PR-B07).
  */
 static nytp_status v6_emit_start_deflate(nytp_sink *sink)
 {
@@ -1147,7 +1408,7 @@ static nytp_status v6_emit_start_deflate(nytp_sink *sink)
         return emit_fail(vi, mark, st);
     }
     /* Counts as a body record for chunk logical_event_count. */
-    st = after_record(vi, NYTP_EVT_START_DEFLATE);
+    st = after_record(vi, NYTP_EVT_START_DEFLATE, mark);
     if (st != NYTP_OK) {
         return emit_fail(vi, mark, st);
     }
@@ -1181,10 +1442,16 @@ static const nytp_sink_ops v6_ops = {
 static nytp_sink *v6_create_common(const char *path, uint16_t minor,
                                    uint64_t required_features,
                                    uint64_t optional_features,
-                                   uint32_t header_crc)
+                                   uint8_t event_codec,
+                                   size_t max_records_per_chunk)
 {
-    nytp_sink *sink = (nytp_sink *)calloc(1, sizeof(*sink));
-    v6_impl *vi = (v6_impl *)calloc(1, sizeof(*vi));
+    nytp_sink *sink;
+    v6_impl *vi;
+    if (!codec_supported(event_codec)) {
+        return NULL;
+    }
+    sink = (nytp_sink *)calloc(1, sizeof(*sink));
+    vi = (v6_impl *)calloc(1, sizeof(*vi));
     if (!sink || !vi) {
         free(sink);
         free(vi);
@@ -1203,7 +1470,8 @@ static nytp_sink *v6_create_common(const char *path, uint16_t minor,
     vi->minor = minor;
     vi->required_features = required_features;
     vi->optional_features = optional_features;
-    vi->header_crc = header_crc;
+    vi->event_codec = event_codec;
+    vi->max_records_per_chunk = max_records_per_chunk;
     if (write_file_prefix(vi) != NYTP_OK) {
         free(vi->path);
         free(vi->wire);
@@ -1224,7 +1492,7 @@ static nytp_sink *v6_create_common(const char *path, uint16_t minor,
 
 nytp_sink *nytp_v6_sink_create(const char *path)
 {
-    return v6_create_common(path, 0, 0, 0, 0);
+    return v6_create_common(path, 0, 0, 0, (uint8_t)NYTPROF_V6_CODEC_NONE, 0);
 }
 
 nytp_sink *nytp_v6_sink_create_ex(const char *path, uint16_t minor,
@@ -1232,8 +1500,25 @@ nytp_sink *nytp_v6_sink_create_ex(const char *path, uint16_t minor,
                                   uint64_t optional_features,
                                   uint32_t header_crc)
 {
+    (void)header_crc; /* PR-B07: always sealed */
     return v6_create_common(path, minor, required_features, optional_features,
-                            header_crc);
+                            (uint8_t)NYTPROF_V6_CODEC_NONE, 0);
+}
+
+nytp_sink *nytp_v6_sink_create_codec(const char *path, uint8_t event_codec,
+                                     size_t max_records_per_chunk)
+{
+    return v6_create_common(path, 0, 0, 0, event_codec, max_records_per_chunk);
+}
+
+nytp_sink *nytp_v6_sink_create_codec_ex(const char *path, uint16_t minor,
+                                        uint64_t required_features,
+                                        uint64_t optional_features,
+                                        uint8_t event_codec,
+                                        size_t max_records_per_chunk)
+{
+    return v6_create_common(path, minor, required_features, optional_features,
+                            event_codec, max_records_per_chunk);
 }
 
 int nytp_v6_sink_is_v6(const nytp_sink *sink)
@@ -1346,6 +1631,31 @@ nytp_status nytp_v6_sink_test_force_body_len(nytp_sink *sink, size_t len)
     }
     vi->body_len = len;
     return NYTP_OK;
+}
+
+
+uint8_t nytp_v6_sink_event_codec(const nytp_sink *sink)
+{
+    if (!nytp_v6_sink_is_v6(sink) || !sink->impl) {
+        return 0;
+    }
+    return ((const v6_impl *)sink->impl)->event_codec;
+}
+
+size_t nytp_v6_sink_max_records_per_chunk(const nytp_sink *sink)
+{
+    if (!nytp_v6_sink_is_v6(sink) || !sink->impl) {
+        return 0;
+    }
+    return ((const v6_impl *)sink->impl)->max_records_per_chunk;
+}
+
+uint32_t nytp_v6_sink_event_chunk_count(const nytp_sink *sink)
+{
+    if (!nytp_v6_sink_is_v6(sink) || !sink->impl) {
+        return 0;
+    }
+    return ((const v6_impl *)sink->impl)->event_chunk_count;
 }
 
 uint32_t nytp_v6_sink_event_count(const nytp_sink *sink)

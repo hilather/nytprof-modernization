@@ -1,10 +1,10 @@
 
-# Collector overlay (ADR-0004 B0-A) — COL-001..007-abs + fake-clock scaffold
+# Collector overlay (ADR-0004 B0-A) — COL-001..007-codec + fake-clock scaffold
 
-**Status:** scaffolding (PR-B02..**B05 v5 wire** + **B06 absolute v6**)  
+**Status:** scaffolding (PR-B02..**B05 v5 wire** + **B06 absolute v6** + **B07 codecs/multi-chunk/CRC**)  
 **Layout decision:** [ADR-0004](https://github.com/hilather/nytprof-modernization/blob/main/docs/adrs/0004-collector-packaging-source-tree.md)  
 **Logical events:** [COMPAT-001](https://github.com/hilather/nytprof-modernization/blob/main/docs/contracts/COMPAT-001_LOGICAL_EVENT_CONTRACT.md)  
-**Schemas:** [collector-sink-api-mvp-v0.md](https://github.com/hilather/nytprof-modernization/blob/main/docs/schemas/collector-sink-api-mvp-v0.md), [collector-lifecycle-seq-fake-clock-mvp-v0.md](https://github.com/hilather/nytprof-modernization/blob/main/docs/schemas/collector-lifecycle-seq-fake-clock-mvp-v0.md), [collector-batch-fast-mvp-v0.md](https://github.com/hilather/nytprof-modernization/blob/main/docs/schemas/collector-batch-fast-mvp-v0.md), [collector-v5-wire-mvp-v0.md](https://github.com/hilather/nytprof-modernization/blob/main/docs/schemas/collector-v5-wire-mvp-v0.md), [collector-v6-absolute-wire-mvp-v0.md](https://github.com/hilather/nytprof-modernization/blob/main/docs/schemas/collector-v6-absolute-wire-mvp-v0.md)  
+**Schemas:** [collector-sink-api-mvp-v0.md](https://github.com/hilather/nytprof-modernization/blob/main/docs/schemas/collector-sink-api-mvp-v0.md), [collector-lifecycle-seq-fake-clock-mvp-v0.md](https://github.com/hilather/nytprof-modernization/blob/main/docs/schemas/collector-lifecycle-seq-fake-clock-mvp-v0.md), [collector-batch-fast-mvp-v0.md](https://github.com/hilather/nytprof-modernization/blob/main/docs/schemas/collector-batch-fast-mvp-v0.md), [collector-v5-wire-mvp-v0.md](https://github.com/hilather/nytprof-modernization/blob/main/docs/schemas/collector-v5-wire-mvp-v0.md), [collector-v6-absolute-wire-mvp-v0.md](https://github.com/hilather/nytprof-modernization/blob/main/docs/schemas/collector-v6-absolute-wire-mvp-v0.md), [collector-v6-codecs-multi-chunk-crc-mvp-v0.md](https://github.com/hilather/nytprof-modernization/blob/main/docs/schemas/collector-v6-codecs-multi-chunk-crc-mvp-v0.md)  
 **Timing notes:** [BASE-003](https://github.com/hilather/nytprof-modernization/blob/main/baseline/inventories/timing-lifecycle-notes.md)
 
 Modernization C sources for the **semantic event sink** live here — **not** under `baseline/6.15/` (oracle pin remains immutable).
@@ -15,9 +15,9 @@ Modernization C sources for the **semantic event sink** live here — **not** un
 collector/
   include/     public C headers (sink API, types, clock, batch/event, counting + v5/v6 wire + v6 IDs)
   src/         sink wrappers + backends + fake-clock + batch/fast path + v5 + absolute v6 writers
-  t/           unit tests (no Perl; pure C; zlib for v5 wire)
+  t/           unit tests (no Perl; pure C; zlib/zstd/lz4 for wire)
   xs/          reserved for future XS glue (empty)
-  Makefile     opt-in C build (links -lz for COL-006)
+  Makefile     opt-in C build (links -lz -lzstd -llz4)
   build/       gitignored objects / test binaries / sample .nytprof
   README.md    this file
 ```
@@ -34,14 +34,15 @@ collector/
 | **COL-005 batching** | Fixed event buffer + side arena; high-water / full flush; emergency oversized path; batch sink facade |
 | Counting sink | Test dual companion — multiplicities, seq ring, last src/sub fingerprints |
 | **COL-006 v5 wire** | Real FileHandle.xs protocol encode + optional zlib after `START_DEFLATE`; path and/or in-memory buffer |
-| **COL-007-ABS v6 wire** | Absolute provisional v6 (file-prefix + codec NONE EVENT); unit vectors; lockfile IDs |
+| **COL-007-ABS v6 wire** | Absolute provisional v6 EVENT bodies + file-prefix; lockfile IDs |
+| **COL-007-CODEC (PR-B07)** | EVENT codecs NONE/ZLIB/ZSTD/LZ4; multi-chunk seal; header + payload CRC32 |
 | **Fake-clock harness** | Scripted ticks + BASE-003 stmt driver + M4 **mini** sample |
-| `make -C collector test` | `test_sink_api` + `test_lifecycle_seq` + `test_fake_clock` + `test_batch_fast` + **`test_v5_wire`** + **`test_v6_abs_wire`** |
+| `make -C collector test` | `test_sink_api` + `test_lifecycle_seq` + `test_fake_clock` + `test_batch_fast` + **`test_v5_wire`** + **`test_v6_abs_wire`** + **`test_v6_codec_chunk_crc`** |
 
 ## Explicit non-claims
 
 - **Not full M4 oracle corpus** — mini sample only; full `fixtures/v5/*` v5-via-sink equality needs complete TEST-003  
-- **Not board COL-007 done** — absolute MVP only; packing/codecs/E3-C remain (B07–B09); not wire freeze  
+- **Not board COL-007 done** — absolute + codecs/multi-chunk/CRC scaffold only; packing/dict/E3-C remain (B08–B09); not wire freeze  
 - **Not COL-015** — full fork buffer ownership / signal-safe finalization matrix  
 - **Not** hooked into live Perl opcode profiler yet  
 - **Not** a default dependency of `make legacy-smoke` or dual-path legacy half  
@@ -53,7 +54,7 @@ collector/
 
 ## Build / test
 
-Requires a C toolchain (`cc` / `gcc` / `clang`) and **zlib** (`-lz`). Honest skip in CI when CC absent.
+Requires a C toolchain (`cc` / `gcc` / `clang`) and **zlib + zstd + lz4** (`-lz -lzstd -llz4`). Honest skip in CI when CC absent.
 
 ```sh
 # from repo root

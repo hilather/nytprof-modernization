@@ -5,7 +5,7 @@
 **Layout:** [ADR-0004](https://github.com/hilather/nytprof-modernization/blob/main/docs/adrs/0004-collector-packaging-source-tree.md) B0-A `collector/`  
 **Sources:** [`collector/include/nytp_sink_v6.h`](https://github.com/hilather/nytprof-modernization/blob/main/collector/include/nytp_sink_v6.h), [`collector/src/nytp_sink_v6.c`](https://github.com/hilather/nytprof-modernization/blob/main/collector/src/nytp_sink_v6.c)  
 **IDs:** [`collector/include/nytprof_v6_ids.h`](https://github.com/hilather/nytprof-modernization/blob/main/collector/include/nytprof_v6_ids.h) + [`docs/contracts/V6_PROVISIONAL_ID_LOCKFILE_v0.md`](https://github.com/hilather/nytprof-modernization/blob/main/docs/contracts/V6_PROVISIONAL_ID_LOCKFILE_v0.md)  
-**Independent reader:** `nytprof-format-v6` `decode_mini_profile` (codec NONE EVENT)
+**Independent reader:** `nytprof-format-v6` `decode_mini_profile` (codec NONE EVENT); after PR-B07 prefer `decode_decoded_event_profile` for compressed/multi-chunk
 
 ---
 
@@ -90,7 +90,7 @@ COL-003 sequence numbers are **not** written on the wire.
 | Residual | Owner |
 |----------|-------|
 | Packing (site-delta, TIME_*_RUN, FLAG_HAS_SEQ) | PR-B08 / ADR-0001 |
-| Multi-chunk EVENT + CRC + ZLIB/ZSTD/LZ4 | PR-B07 |
+| Multi-chunk EVENT + CRC + ZLIB/ZSTD/LZ4 | **PR-B07 done (scaffold)** — see [`collector-v6-codecs-multi-chunk-crc-mvp-v0.md`](https://github.com/hilather/nytprof-modernization/blob/main/docs/schemas/collector-v6-codecs-multi-chunk-crc-mvp-v0.md) |
 | FOOTER string dictionary | PR-B08 / ADR-0002 |
 | Board **COL-007 done** + E3-C fixtures | PR-B09 |
 | Wire freeze | after E3/E4 (lockfile deviation note) |

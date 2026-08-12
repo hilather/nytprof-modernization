@@ -29,7 +29,7 @@ Plan COL-007 lists dependencies **FMT-002 through FMT-010**. This program **inte
 |-------|---------|-------------------|
 | **E1 — v5 semantic surfaces** | Native v5 read/report vs oracle / pure-Perl JSONL bridges on advertised fixtures (already R1-preview ready for offline scope) | offline_gate + packaging smokes; residual matrix “Advertised ready” |
 | **E2 — v6 encode↔decode** | Rust (or future C) encode → always-inflate decode recovers equal logical events/sites/seq/strings under packing/absolute policies | `cargo test -p nytprof-format-v6` always-inflate tests |
-| **E3 — C writer ↔ Rust decode** | COL-007 C emitter produces streams that Rust always-inflate path decodes with E2 equality on golden workloads | **Open** — absolute C MVP (PR-B06 / `nytp_sink_v6`) can emit codec-NONE EVENT mini-profiles; product E3-C fixtures + board COL-007 flip remain PR-B09 |
+| **E3 — C writer ↔ Rust decode** | COL-007 C emitter produces streams that Rust always-inflate path decodes with E2 equality on golden workloads | **Open** — C scaffold (PR-B06 absolute + PR-B07 codecs/multi-chunk/CRC via `nytp_sink_v6`) emits EVENT profiles Rust always-inflate accepts; product E3-C fixtures + board COL-007 flip remain PR-B09 |
 | **E4 — v5↔v6 semantic** | Same workload profiled as v5 and v6 yields equal advertised aggregates / dump structure after normalize | **Open** — needs COL-007 + fixture pairs + policy enforcement |
 | **E5 — CLI product path** | CLI report/verify on v6 files as product surface (opt-in, not default) | **Open** — CLI v6 default residual; opt-in path not claimed done |
 
@@ -45,8 +45,9 @@ Plan COL-007 lists dependencies **FMT-002 through FMT-010**. This program **inte
 | Auto-VERSION header/body align | E2 | **preflight ready** | Full dual-output VERSION policy (OI-001-03) open |
 | Default `parse_chunk_frame` inflate/CRC | — | **residual** (stays non-inflating) | Product policy ADR if default flips |
 | E3 harness (writer bytes → Rust decode) | E3 | **open / runway** | COL-007 C producer + harness |
-| C COL-007 absolute MVP | E3 runway | **partial (PR-B06)** | Absolute codec-NONE EVENT only; not packing/dict/codecs; not E3-C product |
-| C COL-007 product (board done) | E3 | **deferred** | PR-B09 after B07/B08 packing+codecs; use lockfile + ADR-0001/0002 |
+| C COL-007 absolute MVP | E3 runway | **partial (PR-B06)** | Absolute EVENT bodies; sealed CRC default after B07 |
+| C COL-007 codecs/multi-chunk/CRC | E3 runway | **partial (PR-B07)** | NONE/ZLIB/ZSTD/LZ4 + multi-chunk; not packing/dict/mid-stream switch; not E3-C product |
+| C COL-007 product (board done) | E3 | **deferred** | PR-B09 after B08 packing+dict; use lockfile + ADR-0001/0002 |
 | Batched Rust COL-008 writer | E3/E4 | **deferred** (non-baseline) | After dual-equality + ADR re-open |
 | v5↔v6 semantic equality policy | E4 | **open** | Policy + enforcement after COL-007 |
 | Wire freeze FMT-002..010 | — | **open** (deviated as COL-007 hard dep) | After E2/E3 evidence + freeze ADR |

@@ -23,7 +23,7 @@ ok() { printf 'OK: %s\n' "$*"; }
 fail() { printf 'ERROR: %s\n' "$*" >&2; exit 1; }
 banner() { printf '\n=== %s ===\n' "$*"; }
 
-banner "collector_sink_smoke (COL-001..007-abs + fake-clock + v5/v6 wire)"
+banner "collector_sink_smoke (COL-001..007-codec + fake-clock + v5/v6 wire)"
 
 # ---------------------------------------------------------------------------
 # Tree present (this smoke is only meaningful after PR-B02 lands sources)
@@ -43,6 +43,7 @@ banner "collector_sink_smoke (COL-001..007-abs + fake-clock + v5/v6 wire)"
 [[ -f "$COLLECTOR/src/nytp_batch.c" ]] || fail "missing nytp_batch.c (PR-B04)"
 [[ -f "$COLLECTOR/t/test_v5_wire.c" ]] || fail "missing test_v5_wire.c (PR-B05)"
 [[ -f "$COLLECTOR/t/test_v6_abs_wire.c" ]] || fail "missing test_v6_abs_wire.c (PR-B06)"
+[[ -f "$COLLECTOR/t/test_v6_codec_chunk_crc.c" ]] || fail "missing test_v6_codec_chunk_crc.c (PR-B07)"
 ok "collector/ overlay tree present (B0-A; COL-001..007-abs)"
 
 # ---------------------------------------------------------------------------
@@ -124,12 +125,12 @@ if ! CC_BIN="$(resolve_cc)"; then
 fi
 ok "C toolchain: $CC_BIN"
 
-# zlib required for COL-006 wire writer (-lz)
-if ! echo 'int main(void){return 0;}' | "$CC_BIN" -x c - -lz -o /tmp/nytp_zcheck_$$ 2>/dev/null; then
-  fail "zlib (-lz) required for COL-006 v5 wire writer; install zlib-dev / zlib1g-dev"
+# zlib/zstd/lz4 required for COL-006 v5 + COL-007 v6 codecs
+if ! echo 'int main(void){return 0;}' | "$CC_BIN" -x c - -lz -lzstd -llz4 -o /tmp/nytp_zcheck_$$ 2>/dev/null; then
+  fail "zlib+zstd+lz4 (-lz -lzstd -llz4) required for COL-006/007 wire writers; install zlib/zstd/lz4 dev packages"
 fi
 rm -f /tmp/nytp_zcheck_$$
-ok "zlib link (-lz) available"
+ok "zlib/zstd/lz4 link available"
 
 # ---------------------------------------------------------------------------
 # Build + unit test (real entry: collector/Makefile)
@@ -171,17 +172,31 @@ printf 'NYTPROF6' | cmp -n 8 - "$WIRE6" >/dev/null 2>&1 \
   || fail "v6 mini missing NYTPROF6 magic"
 ok "absolute v6 mini artifact present with NYTPROF6 magic ($WIRE6)"
 
-# Optional: Rust decode_mini_profile on C absolute v6 artifact (honest skip without cargo).
+
+# Codec / multi-chunk artifacts from test_v6_codec_chunk_crc
+for art in v6_zlib_one.nytprof v6_zstd_one.nytprof v6_lz4_one.nytprof v6_zlib_multi.nytprof; do
+  ART="$COLLECTOR/build/$art"
+  [[ -f "$ART" ]] || fail "expected codec artifact $ART after test_v6_codec_chunk_crc"
+  printf 'NYTPROF6' | cmp -n 8 - "$ART" >/dev/null 2>&1 \
+    || fail "codec artifact $art missing NYTPROF6 magic"
+done
+ok "v6 codec/multi-chunk artifacts present with NYTPROF6 magic"
+
+# Optional: Rust always-inflate decode on C absolute + compressed artifacts.
 if command -v cargo >/dev/null 2>&1; then
-  banner "Rust v6 decode_mini_profile (COL-007-ABS dual-path check)"
-  if (cd "$ROOT" && cargo run -q -p nytprof-format-v6 --example decode_abs_c_mini -- "$WIRE6"); then
-    ok "Rust decode_mini_profile accepted C absolute v6 mini"
-  else
-    fail "Rust decode_mini_profile failed on C absolute v6 mini"
-  fi
+  banner "Rust v6 always-inflate decode (COL-007 dual-path check)"
+  for art in m4_mini_v6.nytprof v6_zlib_one.nytprof v6_zstd_one.nytprof v6_lz4_one.nytprof v6_zlib_multi.nytprof; do
+    ART="$COLLECTOR/build/$art"
+    if (cd "$ROOT" && cargo run -q -p nytprof-format-v6 --example decode_abs_c_mini -- "$ART" --require-crc); then
+      ok "Rust decode accepted C artifact $art"
+    else
+      fail "Rust decode failed on C artifact $art"
+    fi
+  done
 else
-  echo "NOTE: skip Rust v6 decode_mini_profile (no cargo) — C self-tests still cover wire"
+  echo "NOTE: skip Rust v6 decode (no cargo) — C self-tests still cover wire"
 fi
+
 
 # Optional: independent Rust v5 decoder when already built or cargo available.
 resolve_dump() {
@@ -216,7 +231,7 @@ fi
 
 # Residual honesty banner.
 echo "NOTE: COL-006 real v5 wire on mini samples — full fixtures/v5/* oracle corpus is complete TEST-003 residual"
-echo "NOTE: COL-007-ABS MVP only (codec NONE EVENT); packing/codecs/E3-C residual — board COL-007 not done; not live XS hooks"
+echo "NOTE: COL-007 ABS+CODEC scaffold (codecs/multi-chunk/CRC); packing/dict/E3-C residual — board COL-007 not done; not live XS hooks"
 echo "NOTE: M4 mini sample only — full oracle corpus under fake-clock needs complete TEST-003"
 echo "NOTE: batch light microbench is engineering only — not BENCH-003/006 certification"
 echo "NOTE: flush/compression discount timing vs BASE-003 remains residual"
