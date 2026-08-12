@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Light measurement harness for first-slice offline paths (decode / report / optional csv).
+# Light measurement harness for first-slice offline paths (P3/P4 engineering proxies).
 #
 # NOT a performance certification. Local exploratory timings only.
 # See docs/BENCH_NOTES.md — no public performance claims.
@@ -7,13 +7,17 @@
 # Usage:
 #   bash tools/bench/light_bench.sh
 #   OUT=/tmp/light_bench.txt bash tools/bench/light_bench.sh
+#   RELEASE=1 RUNS=3 bash tools/bench/light_bench.sh
 #
 # Env:
-#   OUT=path     Optional file to also write the same report (stdout always printed)
-#   FIXTURES=…   Space-separated fixture dirs relative to repo root
-#                (default: fixtures/v5/default-calls1 fixtures/v5/default-calls2 if present)
+#   OUT=path       Optional file to also write the same report (stdout always printed)
+#   FIXTURES=…     Space-separated fixture dirs relative to repo root
+#                  (default: fixtures/v5/default-calls1 fixtures/v5/default-calls2 if present)
+#   STEPS=…        Comma-separated steps (default: dump,verify,report,csv,html)
+#   RUNS=N         Timed repetitions per step (default: 1)
+#   RELEASE=0|1    When 1, cargo build/run --release (default: 0 / debug)
 #
-# Exit 0 on success (missing optional fixtures/csv are skipped, not failures).
+# Exit 0 on success (missing optional fixtures/steps are skipped, not failures).
 
 set -euo pipefail
 
@@ -26,6 +30,40 @@ REPORT_LINES=()
 emit() {
   REPORT_LINES+=("$*")
   printf '%s\n' "$*"
+}
+
+# --- config ---
+RUNS="${RUNS:-1}"
+if ! [[ "$RUNS" =~ ^[1-9][0-9]*$ ]]; then
+  emit "ERROR: RUNS must be a positive integer (got: $RUNS)"
+  exit 1
+fi
+
+RELEASE_FLAG=()
+PROFILE_LABEL=debug
+if [[ "${RELEASE:-0}" == "1" ]]; then
+  RELEASE_FLAG=(--release)
+  PROFILE_LABEL=release
+fi
+
+DEFAULT_STEPS="dump,verify,report,csv,html"
+STEPS_CSV="${STEPS:-$DEFAULT_STEPS}"
+# shellcheck disable=SC2206
+IFS=',' read -r -a STEP_LIST <<<"$STEPS_CSV"
+# trim whitespace on each step name
+for i in "${!STEP_LIST[@]}"; do
+  STEP_LIST[$i]="$(printf '%s' "${STEP_LIST[$i]}" | tr -d '[:space:]')"
+done
+
+step_wanted() {
+  local want="$1"
+  local s
+  for s in "${STEP_LIST[@]}"; do
+    if [[ "$s" == "$want" ]]; then
+      return 0
+    fi
+  done
+  return 1
 }
 
 # --- timing: prefer /usr/bin/time -f, else bash TIMEFORMAT, else python3 ---
@@ -108,17 +146,16 @@ PY
   emit "  ${label}: ${sec}s wall"
 }
 
-cli_has_csv() {
-  # Probe help / usage text after build; do not fail the suite if missing.
+cli_help() {
+  cargo run -q -p nytprof-cli "${RELEASE_FLAG[@]}" -- --help 2>&1 || true
+}
+
+cli_has_subcommand() {
+  # Probe help text after build; do not fail the suite if missing.
+  local name="$1"
   local help
-  help=$(cargo run -q -p nytprof-cli -- --help 2>&1 || true)
-  # Also accept bare unknown-subcommand message that lists csv.
-  if printf '%s' "$help" | grep -Eqi '(^|[[:space:]])csv([[:space:]]|$)'; then
-    return 0
-  fi
-  # Fallback: try running csv with no args and look for usage that mentions csv
-  help=$(cargo run -q -p nytprof-cli -- csv 2>&1 || true)
-  if printf '%s' "$help" | grep -Eqi 'Usage:.*csv|nytprof-cli csv'; then
+  help=$(cli_help)
+  if printf '%s' "$help" | grep -Eqi "(^|[[:space:]])${name}([[:space:]]|$)"; then
     return 0
   fi
   return 1
@@ -148,24 +185,62 @@ fi
 emit "nytprof light_bench"
 emit "root: $ROOT"
 emit "timing: $TIME_MODE"
+emit "profile: $PROFILE_LABEL"
+emit "runs: $RUNS"
+emit "steps: $STEPS_CSV"
 emit "commit: $(git -C "$ROOT" rev-parse --short HEAD 2>/dev/null || echo unknown)"
 emit "rustc: $(rustc --version 2>/dev/null || echo unknown)"
 emit "note: exploratory local timings only — NOT certification; no public claims"
+emit "note: P3 proxies=dump,verify; P4 proxies=report,csv,html (see docs/BENCH_NOTES.md)"
 emit ""
 
-emit "build: cargo build -q -p nytprof-cli"
-cargo build -q -p nytprof-cli
+emit "build: cargo build -q -p nytprof-cli ${RELEASE_FLAG[*]:-}"
+cargo build -q -p nytprof-cli "${RELEASE_FLAG[@]}"
 emit "build: ok"
 emit ""
 
+# Capability probes (after build)
 HAS_CSV=0
-if cli_has_csv; then
+HAS_HTML=0
+HAS_VERIFY=0
+if step_wanted csv && cli_has_subcommand csv; then
   HAS_CSV=1
   emit "csv: available"
-else
+elif step_wanted csv; then
   emit "csv: skipped (subcommand not present)"
+else
+  emit "csv: not requested"
+fi
+if step_wanted html && cli_has_subcommand html; then
+  HAS_HTML=1
+  emit "html: available"
+elif step_wanted html; then
+  emit "html: skipped (subcommand not present)"
+else
+  emit "html: not requested"
+fi
+if step_wanted verify && cli_has_subcommand verify; then
+  HAS_VERIFY=1
+  emit "verify: available"
+elif step_wanted verify; then
+  emit "verify: skipped (subcommand not present)"
+else
+  emit "verify: not requested"
 fi
 emit ""
+
+run_step_reps() {
+  local step_name="$1"
+  shift
+  local r
+  for ((r = 1; r <= RUNS; r++)); do
+    if [[ "$RUNS" -gt 1 ]]; then
+      run_timed "${step_name}#${r}" -- "$@"
+    else
+      run_timed "$step_name" -- "$@"
+    fi
+  done
+}
 
 for fixdir in "${FIXTURE_LIST[@]}"; do
   out="$fixdir/nytprof.out"
@@ -176,17 +251,48 @@ for fixdir in "${FIXTURE_LIST[@]}"; do
   fi
   emit "fixture: $out"
 
-  run_timed "dump" -- cargo run -q -p nytprof-cli -- dump "$out"
-  run_timed "report" -- cargo run -q -p nytprof-cli -- report "$out"
-  if [[ "$HAS_CSV" -eq 1 ]]; then
-    run_timed "csv" -- cargo run -q -p nytprof-cli -- csv "$out"
-  else
-    emit "  csv: skipped"
+  if step_wanted dump; then
+    run_step_reps "dump" cargo run -q -p nytprof-cli "${RELEASE_FLAG[@]}" -- dump "$out"
   fi
+
+  if step_wanted verify; then
+    if [[ "$HAS_VERIFY" -eq 1 ]]; then
+      run_step_reps "verify" cargo run -q -p nytprof-cli "${RELEASE_FLAG[@]}" -- verify "$out"
+    else
+      emit "  verify: skipped"
+    fi
+  fi
+
+  if step_wanted report; then
+    run_step_reps "report" cargo run -q -p nytprof-cli "${RELEASE_FLAG[@]}" -- report "$out"
+  fi
+
+  if step_wanted csv; then
+    if [[ "$HAS_CSV" -eq 1 ]]; then
+      run_step_reps "csv" cargo run -q -p nytprof-cli "${RELEASE_FLAG[@]}" -- csv "$out"
+    else
+      emit "  csv: skipped"
+    fi
+  fi
+
+  if step_wanted html; then
+    if [[ "$HAS_HTML" -eq 1 ]]; then
+      html_tmp=$(mktemp "${TMPDIR:-/tmp}/nytprof-light-bench-html.XXXXXX.html")
+      # shellcheck disable=SC2064
+      trap "rm -f '$html_tmp'" RETURN
+      run_step_reps "html" cargo run -q -p nytprof-cli "${RELEASE_FLAG[@]}" -- html "$out" -o "$html_tmp"
+      rm -f "$html_tmp"
+      trap - RETURN
+    else
+      emit "  html: skipped"
+    fi
+  fi
+
   emit ""
 done
 
 emit "done (exit 0)"
+emit "claim: none — not certification (docs/BENCH_NOTES.md)"
 
 if [[ -n "${OUT:-}" ]]; then
   {
