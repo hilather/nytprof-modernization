@@ -202,7 +202,8 @@ sub MY::postamble {
         '$(NOECHO) $(ECHO) "Candidate packaging entry (not full XS CPAN)"',
         '$(NOECHO) $(ECHO) "  make legacy-smoke      # no cargo"',
         '$(NOECHO) $(ECHO) "  make dual-path-smoke   # legacy + optional native"',
-        '$(NOECHO) $(ECHO) "  make offline-gate      # CI-OFFLINE-GATE-EXPAND (cargo? + harness + dual-path + auto-fallback + JsonlData)"',
+        '$(NOECHO) $(ECHO) "  make offline-gate      # CI-OFFLINE-GATE-EXPAND (cargo? + harness + dual-path + auto-fallback + JsonlData + collector sink)"',
+        '$(NOECHO) $(ECHO) "  make collector-sink-smoke  # COL-001 overlay (CC? honest skip)"',
         '$(NOECHO) $(ECHO) "  make native-install    # requires cargo"',
         '$(NOECHO) $(ECHO) "  make native            # alias for native-install"',
         '$(NOECHO) $(ECHO) "  make test              # legacy-smoke (cargo-free)"',
@@ -221,6 +222,11 @@ sub MY::postamble {
         '$(NOECHO) $(ECHO) "=== make offline-gate -> ' . $offline_sh . ' ==="',
         'bash ' . $offline_sh,
     );
+    my $collector_sink_sh = 'scripts/packaging/collector_sink_smoke.sh';
+    my $collector_sink_body = $lines->(
+        '$(NOECHO) $(ECHO) "=== make collector-sink-smoke -> ' . $collector_sink_sh . ' ==="',
+        'bash ' . $collector_sink_sh,
+    );
     my $native_body = $lines->(
         '$(NOECHO) $(ECHO) "=== make native-install -> ' . $install_sh . ' ==="',
         '@command -v cargo >/dev/null 2>&1 || (echo "ERROR: cargo required for native-install" >&2; exit 1)',
@@ -238,7 +244,7 @@ sub MY::postamble {
 # Never put crates/ on oracle PERL5LIB; child smokes own isolation.
 # ---------------------------------------------------------------------------
 
-.PHONY: legacy-smoke dual-path-smoke offline-gate native-install native native-smoke packaging-help packaging-all
+.PHONY: legacy-smoke dual-path-smoke offline-gate collector-sink-smoke native-install native native-smoke packaging-help packaging-all
 
 # Hook default `all` so `perl Makefile.PL && make` is meaningful.
 all :: packaging-all
@@ -253,6 +259,8 @@ dual-path-smoke:
 $dual_body
 offline-gate:
 $offline_body
+collector-sink-smoke:
+$collector_sink_body
 native-install:
 $native_body
 native: native-install

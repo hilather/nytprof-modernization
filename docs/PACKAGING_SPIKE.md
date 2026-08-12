@@ -116,7 +116,8 @@ command -v cargo >/dev/null && echo "cargo present (ok; must still not be requir
 perl Makefile.PL && make legacy-smoke          # no cargo required
 ./scripts/packaging/makemaker_dual_path_smoke.sh
 # optional native via Make:
-#   make native-install    # or: NYTPROF_NATIVE=1 perl Makefile.PL && make
+#   make dual-install      # or: NYTPROF_NATIVE=1 perl Makefile.PL && make
+#   make native-install    # CLI only alias via make native
 
 # Unified packaging gate (broader operator entry)
 ./scripts/packaging/packaging_gate.sh
@@ -250,14 +251,18 @@ A thin root [`Makefile.PL`](../Makefile.PL) now exists as a **candidate packagin
 | Control / target | Behavior |
 |------------------|----------|
 | `NYTPROF_NATIVE=0` (default) | Legacy-only configure; no Cargo required |
-| `NYTPROF_NATIVE=1` | Configure requires cargo; `make all` → `native-install` |
+| `NYTPROF_NATIVE=1` | Configure requires cargo; `make all` → `dual-install` (native CLI + facade; `make native` remains native-install-only) |
 | `NYTPROF_NATIVE=auto` | Enable native targets when cargo present |
 | `make legacy-smoke` | `scripts/packaging/legacy_only_smoke.sh` |
 | `make dual-path-smoke` | `scripts/packaging/dual_path_smoke.sh` |
 | `make native-install` / `make native` | `scripts/packaging/install_native.sh` (needs cargo) |
+| `make install-facade` | `scripts/packaging/install_facade.sh` (pure-Perl engine → prefix; **no cargo**) |
+| `make dual-install` | `native-install` + `install-facade` (needs cargo) |
+| `make cargo-build` | `cargo build -p nytprof-cli` (needs cargo) |
+| `make build003-depth-smoke` | `scripts/packaging/makemaker_build003_depth_smoke.sh` |
 | `make test` | `legacy-smoke` only (honest: not full XS suite) |
 
-Policy detail: [`docs/BUILD_SUPPORT_POLICY.md`](BUILD_SUPPORT_POLICY.md) (MakeMaker dual-path section). Full MakeMaker↔Cargo XS dual-build remains **BUILD-003**.
+Policy detail: [`docs/BUILD_SUPPORT_POLICY.md`](https://github.com/hilather/nytprof-modernization/blob/main/docs/BUILD_SUPPORT_POLICY.md) (MakeMaker dual-path + **BUILD-003-DEPTH** sections). Full MakeMaker↔Cargo XS dual-build remains **BUILD-003 full** (depth is partial only).
 
 ---
 
@@ -297,7 +302,7 @@ Support tiers and dual-path verification are landed beyond this spike’s prose:
 ./scripts/packaging/packaging_gate.sh
 ```
 
-Full MakeMaker↔Cargo XS CPAN dual-build (**BUILD-003** full), multi-OS CI matrix (BUILD-006), and prebuilt policy remain open. The candidate MakeMaker facade (**BUILD-MAKEMAKER-OPT**) is intentionally thinner than BUILD-003.
+Full MakeMaker↔Cargo XS CPAN dual-build (**BUILD-003** full), multi-OS CI matrix (BUILD-006), and prebuilt policy remain open. The candidate MakeMaker facade (**BUILD-MAKEMAKER-OPT**) plus **BUILD-003-DEPTH** (facade + prefix dual-install) is intentionally thinner than BUILD-003 full.
 
 ---
 
@@ -308,6 +313,7 @@ Full MakeMaker↔Cargo XS CPAN dual-build (**BUILD-003** full), multi-OS CI matr
 - `./scripts/packaging/legacy_only_smoke.sh` proves that isolation without Cargo (operator packaging gate).
 - `./scripts/packaging/dual_path_smoke.sh` is the dual-path policy entry (legacy + optional native).
 - Root `Makefile.PL` + `./scripts/packaging/makemaker_dual_path_smoke.sh` — candidate dual-path packaging entry (BUILD-MAKEMAKER-OPT).
+- `./scripts/packaging/install_facade.sh` + `./scripts/packaging/makemaker_build003_depth_smoke.sh` — **BUILD-003-DEPTH** (partial dual-build; not full XS CPAN).
 - `./scripts/packaging/native_optional_smoke.sh` exercises optional crates when a toolchain is present.
 - Future candidate code under `crates/` / `perl/` must not be required for `scripts/baseline/build_oracle.sh` or any oracle tool.
 - Engine env / CLI names for optional native tools: [`docs/schemas/engine-selection-mvp-v0.md`](schemas/engine-selection-mvp-v0.md).
@@ -318,4 +324,4 @@ Full MakeMaker↔Cargo XS CPAN dual-build (**BUILD-003** full), multi-OS CI matr
 - ADR-Q016 native distribution model (source-only vs prebuilt vs both)
 - ADR-Q017 MSRV and dependency pinning
 - COMPAT-009 support-tier freeze
-- BUILD-003 full MakeMaker optional Cargo + XS dual-build (beyond the BUILD-MAKEMAKER-OPT candidate facade)
+- BUILD-003 full MakeMaker optional Cargo + XS dual-build (beyond BUILD-MAKEMAKER-OPT + BUILD-003-DEPTH partial facade/prefix dual-install)

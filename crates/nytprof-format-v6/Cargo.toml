@@ -2,7 +2,7 @@
 name = "nytprof-format-v6"
 version = "0.1.0"
 edition.workspace = true
-description = "Provisional format v6 fixed-header parse (COL-007 runway; not a wire freeze)"
+description = "Format v6 codec (major=6 IDs frozen ADR-0006; COL-007 product path)"
 license.workspace = true
 
 [dependencies]

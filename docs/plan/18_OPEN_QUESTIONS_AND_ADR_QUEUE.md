@@ -60,21 +60,23 @@ Record decisions that affect stable semantics, wire bytes, platform support, pac
 
 ### ADR-Q005 - Dictionary scope and reset policy
 
-- **Status:** open
+- **Status:** partially accepted (FOOTER-local intent frozen); residual open for global/cross-file
 - **Blocks:** FMT-005, COL-010, RUST-011
-- **Question:** Stream-wide, process-generation, chunk-local, or hybrid dictionaries by string class?
-- **Evidence required:** hit rate, collector memory/CPU, chunk independence, recovery, fork/high-cardinality workloads.
-- **Recommended direction:** stream/process-scoped stable dictionaries for high-value identity strings plus chunk reset/snapshot rules that retain independent recovery; exact choice may differ by class.
-- **Decision must specify:** definition ordering, reset, maximum entries/bytes, OOM/fallback, fork behavior.
+- **Accepted binding ADR:** [`docs/adrs/0002-v6-string-pool-candidate.md`](https://github.com/hilather/nytprof-modernization/blob/main/docs/adrs/0002-v6-string-pool-candidate.md) (**accepted** OQ-1) — FOOTER-local, single-profile string dictionary intent for COL-007 dict emit + E3 dict cases.
+- **Question (remaining open):** Global / cross-file / process-lifetime intern pool (COL-010 class), fork/reset inheritance across profiles, and multi-FOOTER policy beyond FOOTER-local.
+- **Evidence required (residual):** hit rate, collector memory/CPU, chunk independence, recovery, fork/high-cardinality workloads for any **global** pool.
+- **Recommended direction (residual):** keep FOOTER-local as product baseline until COL-010 evidence; do **not** re-litigate FOOTER-local without superseding ADR-0002.
+- **Decision must specify (residual):** global definition ordering, reset, maximum entries/bytes, OOM/fallback, fork behavior — only if global pool is adopted later.
 
 ### ADR-Q006 - Reversible run/pattern records
 
-- **Status:** open
+- **Status:** accepted (packing intent frozen via ADR-0001); wire encode residual open
 - **Blocks:** FMT-007, COL-012
-- **Question:** Which repeated event patterns justify specialized records without complicating exactness/recovery?
-- **Evidence required:** real event distributions, collector encode cost, worst-case expansion, decoder complexity, canonical equality.
-- **Recommended direction:** defer beyond first stable v6 unless a simple pattern has clear benefit after dictionaries/deltas/compression. Any accepted run record must preserve per-event timing/order exactly.
-- **Decision must specify:** expansion semantics, limits, chunk interaction.
+- **Accepted binding ADR:** [`docs/adrs/0001-v6-event-body-packing-candidate.md`](https://github.com/hilather/nytprof-modernization/blob/main/docs/adrs/0001-v6-event-body-packing-candidate.md) (**accepted** OQ-1) — site deltas, `FLAG_HAS_SEQ`, `TIME_LINE_RUN` / `TIME_BLOCK_RUN` expansion, multi-chunk/mid-stream packing continuity.
+- **IDs:** opcodes 18/19 + flags `FLAG_SITE_DELTA`/`FLAG_HAS_SEQ` in [`V6_PROVISIONAL_ID_LOCKFILE_v0.md`](https://github.com/hilather/nytprof-modernization/blob/main/docs/contracts/V6_PROVISIONAL_ID_LOCKFILE_v0.md) — **frozen** for major=6 by [ADR-0006](https://github.com/hilather/nytprof-modernization/blob/main/docs/adrs/0006-v6-wire-freeze.md).
+- **Question (closed for product intent):** Which repeated event patterns justify specialized records — answered by ADR-0001 (runs + site-delta + seq compose; absolute baseline retained).
+- **Residual open:** E3-mixed multi-kind C fixtures; full oracle E4; convert tooling depth (not ID freeze).
+- **Decision must specify (done in ADR-0001 + ADR-0006):** expansion semantics, continuity, limits; wire numeric freeze accepted after E3/E4-v0.
 
 ### ADR-Q007 - Source blob hashing and identity
 
@@ -177,12 +179,14 @@ Record decisions that affect stable semantics, wire bytes, platform support, pac
 
 ### ADR-Q018 - Native FFI versus subprocess for report operations
 
-- **Status:** open
+- **Status:** partial (full-R1 product disposition fixed; operation map open)
 - **Blocks:** PERL-005, RUST-010, TOOL-010
 - **Question:** Which operations run in-process through XS/FFI versus invoke a native CLI subprocess?
 - **Evidence required:** API compatibility, startup overhead, failure isolation, packaging, old Perl, callback needs.
 - **Recommended direction:** in-process coarse FFI for public Perl Data/ReadStream compatibility; CLI/subprocess acceptable for standalone report commands where it improves isolation and preserves behavior.
 - **Decision must specify:** operation map and error/stream handling.
+- **Full-R1 disposition (resolved by user OQ-2 / ADR-0003):** do **not** waive production FFI or XS Data/ReadStream for full R1. Close via **PR-A05** (`nytprof-ffi`) and **PR-A06** (XS Data / ReadStream). CLI subprocess remains the R0/R1-preview bridge and standalone report path. Normative: [`docs/adrs/0003-r1-full-residual-policy.md`](https://github.com/hilather/nytprof-modernization/blob/main/docs/adrs/0003-r1-full-residual-policy.md).
+- **Still open:** exact per-operation map (which report/query surfaces are in-process vs subprocess), error/stream handling, and packaging load rules for the dylib — decided when A05/A06 implement, not re-openable as “waive FFI/XS for full R1” without a superseding ADR.
 
 ### ADR-Q019 - Lazy Perl object materialization
 
@@ -195,12 +199,14 @@ Record decisions that affect stable semantics, wire bytes, platform support, pac
 
 ### ADR-Q020 - Report compatibility threshold
 
-- **Status:** open
+- **Status:** partial (full-R1 CLOSE/WAIVE map fixed; per-artifact comparison class open)
 - **Blocks:** REPORT-001, REPORT-002, REPORT-009, TEST-009
 - **Question:** Which HTML details require byte identity, normalized DOM identity, semantic identity, or may intentionally change?
 - **Evidence required:** existing tests/downstream consumers, links/bookmarks/styles, user expectations.
 - **Recommended direction:** exact data/filenames/anchors/links/source/order and normalized DOM semantics; byte identity only for machine formats or known consumers. Visual redesign is out of scope for default compatibility mode.
 - **Decision must specify:** per-artifact comparison class.
+- **Full-R1 disposition (resolved by ADR-0003 / PR-A04):** every HTML residual **class** is mapped to **CLOSE** (PR-A01–A03) or **WAIVE** (Graphviz, treemap, block/sub page modes, naming alias, presentation chrome, etc.). Semantic counts remain exact; full oracle DOM is not required for full R1. Normative map: [`docs/adrs/0003-r1-full-residual-policy.md`](https://github.com/hilather/nytprof-modernization/blob/main/docs/adrs/0003-r1-full-residual-policy.md) + inventory disposition column in [`REPORT_HTML_RESIDUAL_INVENTORY_v0.md`](https://github.com/hilather/nytprof-modernization/blob/main/docs/contracts/REPORT_HTML_RESIDUAL_INVENTORY_v0.md).
+- **Still open:** finer comparison class per closed artifact (byte vs normalized DOM vs semantic-only) when each CLOSE PR lands; waived classes need no native comparison class until a superseding ADR re-opens them.
 
 ### ADR-Q021 - Default report worker count and memory budgeting
 
@@ -231,30 +237,39 @@ Record decisions that affect stable semantics, wire bytes, platform support, pac
 
 ### ADR-Q024 - Native report default promotion criteria/field window
 
-- **Status:** deferred until opt-in release
-- **Blocks:** BUILD-014, BUILD-015, BENCH-013, TEST-020
-- **Question:** What release duration/usage/issue/performance evidence is sufficient for `auto` to prefer native reports?
-- **Evidence required:** R1 field data, platform success, fallback frequency, downstream reports, certifications.
-- **Recommended direction:** at least one stable opt-in cycle plus full required gates and rollback mechanism.
-- **Decision must specify:** eligible tiers and fallback policy.
+- **Status:** **criteria answered** by [ADR-0005](https://github.com/hilather/nytprof-modernization/blob/main/docs/adrs/0005-r3-engine-auto-default-promotion.md) (**PR-D02**); **product flip still gated** (not executed) until accepted field report recommends promote
+- **Blocks:** BUILD-014, BUILD-015, BENCH-013, TEST-020 (flip execution still blocked without field promote)
+- **Question:** What release duration/usage/issue/performance evidence is sufficient for `auto` to prefer native reports (and for product default to become `auto`)?
+- **Evidence required:** R1 field data, platform success, fallback frequency, downstream reports, certifications — pack via [R3_FIELD_WINDOW.md](https://github.com/hilather/nytprof-modernization/blob/main/docs/R3_FIELD_WINDOW.md); flip checklist [R3_DEFAULT_FLIP.md](https://github.com/hilather/nytprof-modernization/blob/main/docs/R3_DEFAULT_FLIP.md)
+- **Recommended direction:** at least one stable opt-in cycle plus full required gates and rollback mechanism — **accepted in ADR-0005**.
+- **Decision must specify:** eligible tiers and fallback policy — **specified in ADR-0005**; flip procedure + one-step force-legacy rollback in `docs/R3_DEFAULT_FLIP.md`.
 
 ### ADR-Q025 - v6 output default promotion criteria/field window
 
-- **Status:** deferred until opt-in release
-- **Blocks:** BUILD-014, BUILD-015, BENCH-013, TEST-020
-- **Question:** What evidence is sufficient to change default profile format from v5 to v6?
-- **Evidence required:** R2 field data, old-tool conversion usage, corruption/fork/long-run results, format stability, P1/P2.
-- **Recommended direction:** multiple opt-in releases/stability window and separate tier policy; retain `format=v5`.
-- **Decision must specify:** eligible tiers, compatibility window, rollback.
+- **Status:** **criteria answered** by [ADR-0008](https://github.com/hilather/nytprof-modernization/blob/main/docs/adrs/0008-r4-v6-output-default-promotion.md) (**PR-E02**); **product flip still gated** (not executed) until accepted field report recommends promote
+- **Blocks:** BUILD-014, BUILD-015, BENCH-013, TEST-020 (flip execution still blocked without field promote)
+- **Question:** What evidence is sufficient to change default profile format from v5 to v6 on eligible tiers?
+- **Evidence required:** R2 field data, old-tool conversion usage, corruption/fork/long-run results, format stability, P1/P2 — pack via [R4_FIELD_WINDOW.md](https://github.com/hilather/nytprof-modernization/blob/main/docs/R4_FIELD_WINDOW.md); flip checklist [R4_DEFAULT_FLIP.md](https://github.com/hilather/nytprof-modernization/blob/main/docs/R4_DEFAULT_FLIP.md)
+- **Recommended direction:** multiple opt-in releases/stability window and separate tier policy; retain `format=v5` — **accepted in ADR-0008**.
+- **Decision must specify:** eligible tiers, compatibility window, rollback — **specified in ADR-0008**; flip procedure + force-v5 rollback in `docs/R4_DEFAULT_FLIP.md`.
 
 ### ADR-Q026 - Legacy code retirement policy
 
-- **Status:** deferred
+- **Status:** **governance answered** by [ADR-0009](https://github.com/hilather/nytprof-modernization/blob/main/docs/adrs/0009-r5-legacy-retirement-governance.md) (**PR-F01**); **no component retired**; component-specific deprecation/removal ADRs remain optional / deferred on evidence
 - **Blocks:** none for modernization
 - **Question:** Whether/when to retire legacy reader/report/writer or raise minimum Perl versions?
-- **Evidence required:** long-term native field use, platform/ecosystem usage, maintenance/security cost, migration coverage.
-- **Recommended direction:** no automatic retirement; separate decisions per component after deprecation.
-- **Decision must specify:** warning period, alternatives, support end, file-format longevity.
+- **Evidence required:** long-term native field use, platform/ecosystem usage, maintenance/security cost, migration coverage — pack via [R5_RETIREMENT_REVIEW.md](https://github.com/hilather/nytprof-modernization/blob/main/docs/R5_RETIREMENT_REVIEW.md)
+- **Recommended direction:** no automatic retirement; separate decisions per component after deprecation — **accepted in ADR-0009**; absence of retirement is valid success.
+- **Decision must specify:** warning period, alternatives, support end, file-format longevity — **process specified in ADR-0009** + per-component ADRs when (if ever) executed.
+
+### BUILD-LAYOUT - Collector packaging / source-tree overlay (design-program OQ-8)
+
+- **Status:** accepted
+- **Blocks:** COL-001 / PR-B02 (was blocking until accepted)
+- **Question:** Where do modernization collector C/XS sources live relative to the BASE-001 oracle pin (`B0-A` overlay vs `B0-B` patch-in-pin)?
+- **Decision:** **B0-A overlay** under repository-root `collector/`; oracle pin under `baseline/6.15/` remains archives + isolated install. See [`docs/adrs/0004-collector-packaging-source-tree.md`](https://github.com/hilather/nytprof-modernization/blob/main/docs/adrs/0004-collector-packaging-source-tree.md).
+- **Not ADR-Q008:** plan **ADR-Q008** is chunk size/boundary policy (format/collector flush) — unrelated; do not close ADR-Q008 from this layout decision.
+- **Design-program OQ-8:** external completion-architecture label for the same layout question; in-repo SoT is this entry + ADR-0004.
 
 ## ADR document template
 

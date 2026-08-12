@@ -2,7 +2,9 @@
 
 **Status:** R1 packaging wave — operator control for native vs legacy  
 **Perl facade:** true `auto` prefer-native / fall-back-legacy (ENGINE-AUTO-FALLBACK).  
-**Not:** charter R3 product default flip, or pure-Rust `nytprof-cli` dual-path legacy.
+**Product default (omit flag/env):** still **`native`** on the facade until an executed R3 flip.  
+**R3 policy:** [ADR-0005](https://github.com/hilather/nytprof-modernization/blob/main/docs/adrs/0005-r3-engine-auto-default-promotion.md) accepted; runtime flip **not executed** — procedure [R3_DEFAULT_FLIP.md](https://github.com/hilather/nytprof-modernization/blob/main/docs/R3_DEFAULT_FLIP.md).  
+**Not:** claiming charter R3 complete, or pure-Rust `nytprof-cli` dual-path legacy.
 
 ## Names (frozen for this wave)
 
@@ -10,7 +12,7 @@
 |-----------|--------|-------|
 | CLI flag | `--engine=<name>` | Preferred for `nytprof-cli` |
 | Environment | `NYTPROF_ENGINE=<name>` | Used when flag omitted |
-| Precedence | CLI flag **overrides** env | Unset flag + unset env → **`native`** for this pure-Rust CLI |
+| Precedence | CLI flag **overrides** env | Unset flag + unset env → **`native`** (facade product default today; pure-Rust CLI same). Post-R3 flip (gated): facade product default becomes **`auto`** per ADR-0005 — **not** live until flip checklist completes |
 
 ### Engine names
 

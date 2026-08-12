@@ -8,7 +8,7 @@
 //! `decode_chunk_payload`. Default `parse_chunk_frame` stays non-inflating.
 //! Not mid-record span, not COL-007 C writer.
 
-use crate::chunk::{codec, encode_chunk_frame, kind, parse_chunk_frame, ChunkError};
+use crate::chunk::{codec, encode_chunk_frame, kind};
 use crate::compressed_profile::{
     encode_event_chunk, is_supported_event_codec, CompressedProfileError, OwnedEventRecord,
 };
@@ -16,10 +16,8 @@ use crate::crc::compute_payload_crc;
 use crate::event_body::{decode_event_body, encode_event_body, EventBodyError, EventRecordSpec};
 use crate::file_prefix::encode_file_prefix;
 use crate::multi_chunk_event::partition_event_records;
-use crate::payload_codec::{
-    compress_zstd, decode_chunk_payload, deflate_zlib, PayloadCodecError,
-};
-use crate::stream::{decode_prefix_chunk_stream, StreamError};
+use crate::payload_codec::decode_chunk_payload;
+use crate::stream::decode_prefix_chunk_stream;
 use crate::FixedHeader;
 
 /// Fail-closed multi-chunk compressed profile errors (aliases composition errors).

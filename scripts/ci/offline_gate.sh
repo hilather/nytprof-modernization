@@ -45,6 +45,16 @@
 #   9. scripts/packaging/capability_selftest_smoke.sh when cargo or prefix/target
 #      native CLI exists (honest skip when native unavailable; same pattern as
 #      packaging_gate). dual_path with cargo usually installs prefix/bin first.
+#  10. scripts/packaging/collector_sink_smoke.sh (COL-001..007 scaffold:
+#      isolation asserts always; make -C collector test when CC present;
+#      honest skip without C toolchain). Real v5 wire + absolute/packing v6.
+#  11. tools/oracle/e3_c_writer_parity.sh when cargo present (COL-007 product
+#      E3-EVENT with C fixtures under fixtures/v6/from-c/**; honest skip if no
+#      cargo). E3-mixed residual.
+#  12. scripts/packaging/e4_v5_v6_semantic_smoke.sh --full when native CLI
+#      available (E4 product CLI smoke on C dual-sink pairs under
+#      fixtures/e4/dual-sink/**; honest skip when native unavailable). Full
+#      oracle dual residual (TEST-003/TEST-008).
 #
 # Primary packaging choice: dual_path_smoke.sh (BUILD dual-path policy entry).
 # Alternatives not re-run here (document only):
@@ -52,12 +62,13 @@
 #   ./scripts/packaging/makemaker_dual_path_smoke.sh  # MakeMaker facade
 #
 # Non-goals: multi-OS CI matrix (BUILD-006), full packaging_gate breadth.
-# Isolation: never puts crates/ on oracle PERL5LIB (parent does not source
-# oracle env; child smokes own isolation).
+# Isolation: never puts crates/ or collector/ install on oracle PERL5LIB
+# (parent does not source oracle env; child smokes own isolation).
 #
 # Policy: docs/BUILD_SUPPORT_POLICY.md
 # Board:  CI-OFFLINE-GATE / CI-OFFLINE-GATE-EXPAND / CI-CAPABILITY-GATE /
-#         CI-QUERY-JSON-GATE / NATIVE-QUERY-JSON-CROSS (docs/FIRST_SLICE_BOARD.md)
+#         CI-QUERY-JSON-GATE / NATIVE-QUERY-JSON-CROSS / COL-001-SINK-MVP
+#         (docs/FIRST_SLICE_BOARD.md)
 #
 # Usage (from repo root or any cwd):
 #   ./scripts/ci/offline_gate.sh
@@ -82,6 +93,9 @@ JSON_FILE_BASENAME_SMOKE="$ROOT/scripts/packaging/json_file_basename_smoke.sh"
 JSON_EVENT_COUNTS_SMOKE="$ROOT/scripts/packaging/json_event_counts_smoke.sh"
 JSON_TOTAL_BASETIME_SMOKE="$ROOT/scripts/packaging/json_total_basetime_smoke.sh"
 CAPABILITY_SMOKE="$ROOT/scripts/packaging/capability_selftest_smoke.sh"
+COLLECTOR_SINK_SMOKE="$ROOT/scripts/packaging/collector_sink_smoke.sh"
+E3_C_WRITER_PARITY="$ROOT/tools/oracle/e3_c_writer_parity.sh"
+E4_V5_V6_SMOKE="$ROOT/scripts/packaging/e4_v5_v6_semantic_smoke.sh"
 
 banner() {
   echo
@@ -291,7 +305,73 @@ else
   echo "  To exercise: install rustc/cargo and re-run, or ./scripts/packaging/install_native.sh"
 fi
 
+# ---------------------------------------------------------------------------
+# 10. COL-001..007 collector scaffold (honest skip without CC)
+# ---------------------------------------------------------------------------
+banner "collector_sink_smoke (COL-001..007 scaffold + fake-clock)"
+if [[ ! -f "$COLLECTOR_SINK_SMOKE" ]]; then
+  fail "required script missing: $COLLECTOR_SINK_SMOKE"
+fi
+bash "$COLLECTOR_SINK_SMOKE"
+ok "step: collector_sink_smoke"
+
+# ---------------------------------------------------------------------------
+# 11. COL-007 product E3-EVENT with C fixtures (when cargo present)
+# ---------------------------------------------------------------------------
+banner "e3_c_writer_parity (COL-007 product E3-EVENT)"
+if [[ ! -f "$E3_C_WRITER_PARITY" ]]; then
+  fail "required script missing: $E3_C_WRITER_PARITY"
+fi
+if command -v cargo >/dev/null 2>&1; then
+  bash "$E3_C_WRITER_PARITY"
+  ok "step: e3_c_writer_parity"
+else
+  echo "SKIP: cargo not on PATH — product E3 e3_c_* equality not run"
+  echo "  (honest skip; committed fixtures under fixtures/v6/from-c/ still required present)"
+  # Soft presence check without cargo decode.
+  for f in absolute packing packing_lz4 dict packing_dict mid_stream mid_stream_dict; do
+    [[ -f "$ROOT/fixtures/v6/from-c/${f}.nytprof" ]] \
+      || fail "missing C fixture fixtures/v6/from-c/${f}.nytprof"
+  done
+  ok "step: e3_c fixture presence (cargo skipped)"
+fi
+
+# ---------------------------------------------------------------------------
+# 12. E4 product CLI smoke: real CLIs on v5+v6 dual-sink pairs (when native)
+#     C dual-sink fixtures are committed under fixtures/e4/dual-sink/**.
+# ---------------------------------------------------------------------------
+banner "e4_v5_v6_semantic_smoke --full (E4 product CLI; PR-B12b)"
+if [[ ! -f "$E4_V5_V6_SMOKE" ]]; then
+  fail "required script missing: $E4_V5_V6_SMOKE"
+fi
+if native_cli_available; then
+  # Require committed C dual-sink pairs (native+C product path).
+  for stem in m4 default_calls1 blocks_calls1 calls2_default; do
+    [[ -f "$ROOT/fixtures/e4/dual-sink/${stem}_v5.nytprof" ]] \
+      || fail "missing E4 dual v5 fixtures/e4/dual-sink/${stem}_v5.nytprof"
+    [[ -f "$ROOT/fixtures/e4/dual-sink/${stem}_v6.nytprof" ]] \
+      || fail "missing E4 dual v6 fixtures/e4/dual-sink/${stem}_v6.nytprof"
+  done
+  bash "$E4_V5_V6_SMOKE" --full
+  ok "step: e4_v5_v6_semantic_smoke --full"
+else
+  echo "SKIP: no cargo/prefix/target native CLI — E4 product CLI smoke not run"
+  echo "  (honest skip; same condition as capability / packaging-native steps)"
+  echo "  Dual-sink fixtures still required present:"
+  for stem in m4 default_calls1 blocks_calls1 calls2_default; do
+    [[ -f "$ROOT/fixtures/e4/dual-sink/${stem}_v5.nytprof" ]] \
+      || fail "missing E4 dual v5 fixtures/e4/dual-sink/${stem}_v5.nytprof"
+    [[ -f "$ROOT/fixtures/e4/dual-sink/${stem}_v6.nytprof" ]] \
+      || fail "missing E4 dual v6 fixtures/e4/dual-sink/${stem}_v6.nytprof"
+  done
+  ok "step: e4 dual-sink fixture presence (native CLI skipped)"
+  echo "  To exercise full E4 product smoke: install rustc/cargo and re-run,"
+  echo "  or: ./scripts/packaging/e4_v5_v6_semantic_smoke.sh --full"
+fi
+
 banner "ALL PASSED"
 ok "offline_gate completed successfully"
 echo "NOTE: broader packaging_gate / makemaker_dual_path_smoke are not part of this gate"
+echo "NOTE: COL-007 E3-EVENT done with C; E4 product CLI smoke done when native (step 12); residuals: E3-mixed / full oracle dual (TEST-008) / CLI v6 collection default / COL-008"
+echo "NOTE: E4 model-only: ./scripts/packaging/e4_v5_v6_semantic_smoke.sh --model-only"
 exit 0

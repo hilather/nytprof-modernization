@@ -1,24 +1,26 @@
 # Format v6 length-prefixed string / byte blob (provisional) — v0
 
-**Status:** provisional — **not** a v6 wire freeze (not FMT-002..010 ratification; not COL-007 C writer)  
+**Status:** numeric IDs / core frame **frozen** for major=6 by [ADR-0006](https://github.com/hilather/nytprof-modernization/blob/main/docs/adrs/0006-v6-wire-freeze.md) + catalog [`v6-wire-ids-frozen-v1.md`](https://github.com/hilather/nytprof-modernization/blob/main/docs/schemas/v6-wire-ids-frozen-v1.md); filename retains `provisional-v0` for link stability; **not** CLI v6 default / E3-mixed / COL-008  
 **Board IDs:** `FMT-V6-STRING-PROVISIONAL` (contract), `FMT-V6-STRING-MVP` (shipped encode/decode + tests)  
 **Depends on:** plan draft [`docs/plan/04_FILE_FORMAT_V6_TASKS.md`](https://github.com/hilather/nytprof-modernization/blob/main/docs/plan/04_FILE_FORMAT_V6_TASKS.md) §5.4; ULEB128 [`v6-varint-uleb128-provisional-v0.md`](https://github.com/hilather/nytprof-modernization/blob/main/docs/schemas/v6-varint-uleb128-provisional-v0.md)  
-**Gate:** COL-007 runway preflight only — **before** string dictionaries / event codecs / C v6 writer
+**Gate:** IDs frozen after E3-EVENT(C)+E4-v0 (ADR-0006). Residual: CLI v6 default; default-parse non-inflate; E3-mixed; COL-008; full OI-002 vocabulary  
 
 ---
 
 ## Scope and non-claims
 
-This document freezes a **provisional** on-wire form for **length-prefixed strings or opaque byte blobs** (definitions that may later be interned in a dictionary).
+This document is the detailed layout home for **length-prefixed string/blob frame + FLAG_UTF8**. Numeric IDs and the core frame described here are **frozen for major=6** by ADR-0006 (see frozen catalog). Filename retains `provisional-v0` for stable links.
 
 It is **not**:
 
-- a permanent wire freeze or ADR-ratified string table;
-- permission to mark **COL-007** done;
-- interned dictionary resolution / global string pools;
-- a claim that every `string_id` is globally unique across files yet.
+- permission to flip CLI v6 / collection default (still v5 until R4 ADR);
+- E3-mixed multi-kind product C fixture claim;
+- COL-008 batched Rust writer;
+- default-parse always-inflate / CRC default flip;
+- complete OI-002 ATTRIBUTE/OPTION key vocabulary;
+- a new major without ADR supersession (renumbering requires major bump).
 
----
+Independent C/Rust implementations must match the frozen IDs and this layout. Golden vectors: [`fixtures/v6/vectors/`](https://github.com/hilather/nytprof-modernization/blob/main/fixtures/v6/vectors/).
 
 ## On-wire layout
 
@@ -101,7 +103,8 @@ Evidence: `cargo test -p nytprof-format-v6`.
 | Header / chunk / ULEB128 / ZigZag signed preflight | done |
 | Length-prefixed string/blob contract + API | **done** (`FMT-V6-STRING-*`) |
 | C v6 writer (COL-007) | **still deferred** |
-| Interned dictionaries / event opcodes | residual |
+| Local string-dictionary intern preflight | **done** (`FMT-V6-STRING-DICTIONARY-*`; not permanent global pool) |
+| Permanent global pool / event-opcode catalog freezes | residual |
 | COL-008 / FFI / multi-OS CI / perf claims | residual |
 
 ---
@@ -110,5 +113,5 @@ Evidence: `cargo test -p nytprof-format-v6`.
 
 1. ADR freeze of flag bits and max length.
 2. UTF-8 validation policy when `FLAG_UTF8` is set.
-3. Dictionary tables that map `string_id` → blob (not this MVP).
+3. Permanent global / cross-file string-pool ADR freeze (local dictionary intern preflight is shipped separately as `FMT-V6-STRING-DICTIONARY-*`).
 4. Immutable golden vectors (FMT-012).

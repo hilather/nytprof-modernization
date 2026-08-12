@@ -1,0 +1,172 @@
+# BUILD-006 MVP — multi-OS CI matrix (≥1 additional OS/arch beyond single-host).
+#
+# Runs scripts/ci/matrix_gate.sh on each matrix row. That entry rebuilds a
+# host-local oracle pin when needed, then invokes the existing offline R1 gate
+# (scripts/ci/offline_gate.sh). Honest skips inside offline_gate / dual_path
+# (cargo/native absent, etc.) are preserved unchanged.
+#
+# Hardening (release / post-merge):
+#   - Install zlib/zstd/lz4 headers for collector C tests when CC is present
+#   - Cargo registry/target cache keyed by lockfile
+#   - Fast rustc/clippy smoke on Linux before the full offline gate
+#   - Fail the job if matrix_gate / offline_gate exits non-zero (no soft-fail)
+#
+# Honesty boundary (not full BUILD-006):
+#   - not multi-Perl / multi-rustc version matrix
+#   - not Windows / full platform tier freeze
+#   - not TEST-020 release compatibility matrix or coverage dashboard
+#   - not multi-OS prebuilt binary distribution
+#   - green matrix rows ≠ product multi-OS certification claim
+#
+# Policy: docs/BUILD_SUPPORT_POLICY.md
+# Board:  BUILD-006-MVP
+# Residual: docs/contracts/R1_RESIDUAL_READINESS_MATRIX_v0.md
+name: CI matrix (BUILD-006 MVP)
+
+on:
+  push:
+    branches:
+      - main
+      - 'execute-plan/**'
+      - 'release/**'
+    tags:
+      - 'v*'
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ci-matrix-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  # Cheap, always-on compile+test smoke (Linux only). Catches capability /
+  # crate wiring breaks before the longer oracle offline_gate matrix.
+  rust-smoke:
+    name: rust-smoke (linux)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy
+
+      - name: Cache Cargo
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: ${{ runner.os }}-smoke-cargo-${{ hashFiles('Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-smoke-cargo-
+
+      - name: cargo test (workspace packages used by offline gate)
+        env:
+          CARGO_TERM_COLOR: always
+        run: |
+          set -euo pipefail
+          cargo test \
+            -p nytprof-format-v5 \
+            -p nytprof-format-v6 \
+            -p nytprof-model \
+            -p nytprof-report \
+            -p nytprof-cli \
+            -p nytprof-ffi \
+            --locked
+
+      - name: cargo clippy (deny warnings on product crates)
+        env:
+          CARGO_TERM_COLOR: always
+        run: |
+          set -euo pipefail
+          # --no-deps: format-v6 still carries preflight-style lints; do not -D those here.
+          # nytprof-ffi intentionally uses raw pointers in extern "C" (clippy::not_unsafe_ptr_arg_deref);
+          # cover it with `cargo test -p nytprof-ffi` above rather than -D warnings on the C ABI surface.
+          cargo clippy \
+            -p nytprof-cli \
+            -p nytprof-model \
+            -p nytprof-report \
+            --locked \
+            --no-deps \
+            -- -D warnings
+
+  offline-gate-matrix:
+    name: offline_gate (${{ matrix.label }})
+    needs: [rust-smoke]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 90
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # Primary single-host class (historical offline_gate developer path).
+          - os: ubuntu-latest
+            label: linux-x86_64
+          # ≥1 additional OS/arch (BUILD-006 MVP requirement).
+          # GitHub macos-latest is currently Apple Silicon (arm64).
+          - os: macos-latest
+            label: macos-arm64
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Install Linux build dependencies
+        if: runner.os == 'Linux'
+        run: |
+          set -euo pipefail
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            build-essential \
+            zlib1g-dev \
+            libzstd-dev \
+            liblz4-dev \
+            pkg-config \
+            python3 \
+            perl
+
+      - name: Install macOS library deps for collector
+        if: runner.os == 'macOS'
+        run: |
+          set -euo pipefail
+          # Homebrew is preinstalled; zstd/lz4 needed when collector links codecs.
+          brew list zstd >/dev/null 2>&1 || brew install zstd
+          brew list lz4 >/dev/null 2>&1 || brew install lz4
+          command -v clang
+          command -v perl
+          command -v python3
+          clang --version | head -1
+          perl -e 'print $^V, "\n"'
+          python3 --version
+
+      - name: Cache Cargo registry and target
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: ${{ runner.os }}-${{ matrix.label }}-cargo-${{ hashFiles('Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-${{ matrix.label }}-cargo-
+
+      - name: Multi-OS matrix gate (BUILD-006 MVP)
+        env:
+          NYTPROF_MATRIX_LABEL: ${{ matrix.label }}
+          CARGO_TERM_COLOR: always
+        run: |
+          set -euo pipefail
+          chmod +x scripts/ci/matrix_gate.sh scripts/ci/offline_gate.sh
+          # Fail closed: do not swallow gate exit codes.
+          ./scripts/ci/matrix_gate.sh

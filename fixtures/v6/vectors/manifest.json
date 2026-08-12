@@ -1,0 +1,114 @@
+{
+  "schema": "v6-wire-vectors-v1",
+  "adr": "docs/adrs/0006-v6-wire-freeze.md",
+  "catalog": "docs/schemas/v6-wire-ids-frozen-v1.md",
+  "supported_major": 6,
+  "generator": "cargo run -p nytprof-format-v6 --example gen_wire_vectors",
+  "files": [
+    {
+      "path": "event/discount.bin",
+      "bytes": 2,
+      "sha256": "bf60e4349cace6bce0d552e8d783428db66d0d649bd9e430a3627e2ee14ac839"
+    },
+    {
+      "path": "event/dual_output_seq_oq5.bin",
+      "bytes": 17,
+      "sha256": "9e53ecbc2c2e88bd2bb214e216cdaa99a11cda002c9a359354f37c719d0d3cab"
+    },
+    {
+      "path": "event/dual_output_sequence.bin",
+      "bytes": 26,
+      "sha256": "54668f83d46b9181d65a290df56b7d43bfef22bf451ab33d6ad8786b135eb5a9"
+    },
+    {
+      "path": "event/site_delta_seq_tl_tl_se.bin",
+      "bytes": 17,
+      "sha256": "cdc2363463184f9c374cb4f0b05d6b83d8c40bd7ff7af9e4e6ecbb9c3fc0e05e"
+    },
+    {
+      "path": "event/time_line_1_2_3.bin",
+      "bytes": 5,
+      "sha256": "020604241f274fcc87d46805a50e6edf428f41112007af1eb9ec22e4e3ea6509"
+    },
+    {
+      "path": "event/time_line_run_n2.bin",
+      "bytes": 7,
+      "sha256": "0a613f517282e2018ba56fb07cfe4a8ff1f6d88e400632e42b9445c29b4b4b48"
+    },
+    {
+      "path": "primitives/chunk_event_none_empty.bin",
+      "bytes": 40,
+      "sha256": "e5893d0595816d24762520f607db49531bf8f9d23e242c56e0b4b7bf7a421ce5"
+    },
+    {
+      "path": "primitives/fixed_header_full.bin",
+      "bytes": 36,
+      "sha256": "f118ffdf525223c4b3ec418018519b811caa5b5a865773a985a6dc7da3a5d54c"
+    },
+    {
+      "path": "primitives/string_dict_one_entry.bin",
+      "bytes": 9,
+      "sha256": "166db85f1761782655f6b66e588c76a5b56c7f52bbc293e4caf61faba8b37c11"
+    },
+    {
+      "path": "primitives/tlv_region_producer_tps.bin",
+      "bytes": 29,
+      "sha256": "e48939861a5d8ba9d2318bef1d8b01164234c3da72e48e4be93f09a52d625ff7"
+    },
+    {
+      "path": "primitives/uleb_0.bin",
+      "bytes": 1,
+      "sha256": "6e340b9cffb37a989ca544e6bb780a2c78901d3fb33738768511a30617afa01d"
+    },
+    {
+      "path": "primitives/uleb_1.bin",
+      "bytes": 1,
+      "sha256": "4bf5122f344554c53bde2ebb8cd2b7e3d1600ad631c385a5d7cce23c7785459a"
+    },
+    {
+      "path": "primitives/uleb_127.bin",
+      "bytes": 1,
+      "sha256": "620bfdaa346b088fb49998d92f19a7eaf6bfc2fb0aee015753966da1028cb731"
+    },
+    {
+      "path": "primitives/uleb_128.bin",
+      "bytes": 2,
+      "sha256": "4f2e968b543c835e6648ddcc49faeb6987b4c293d8cd50a2db5d109741007579"
+    },
+    {
+      "path": "primitives/uleb_300.bin",
+      "bytes": 2,
+      "sha256": "6ab5d0d823d6c395820281f3293fd1b68db260f3a861997cb2d3a42a2c9bc16a"
+    },
+    {
+      "path": "primitives/uleb_max_u64.bin",
+      "bytes": 10,
+      "sha256": "51672ea45f3539654bf9193f4ff763d90022eee7df5f5b76353d6f11a9eaccec"
+    },
+    {
+      "path": "primitives/zigzag_0.bin",
+      "bytes": 1,
+      "sha256": "6e340b9cffb37a989ca544e6bb780a2c78901d3fb33738768511a30617afa01d"
+    },
+    {
+      "path": "primitives/zigzag_1.bin",
+      "bytes": 1,
+      "sha256": "dbc1b4c900ffe48d575b5da5c638040125f65db0fe3e24494b76ea986457d986"
+    },
+    {
+      "path": "primitives/zigzag_neg1.bin",
+      "bytes": 1,
+      "sha256": "4bf5122f344554c53bde2ebb8cd2b7e3d1600ad631c385a5d7cce23c7785459a"
+    },
+    {
+      "path": "primitives/zigzag_neg2.bin",
+      "bytes": 1,
+      "sha256": "084fed08b978af4d7d196a7446a86b58009e636b611db16211b65a9aadff29c5"
+    },
+    {
+      "path": "profiles/mini_absolute_none.bin",
+      "bytes": 86,
+      "sha256": "78e0d9728b38f34380ed2d67394267ec4f8af8b80ea90350673f4e291a0e7a89"
+    }
+  ]
+}

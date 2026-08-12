@@ -8,6 +8,7 @@ members = [
     "crates/nytprof-aggregate",
     "crates/nytprof-report",
     "crates/nytprof-cli",
+    "crates/nytprof-ffi",
 ]
 
 [workspace.package]
@@ -22,6 +23,7 @@ nytprof-format-v6 = { path = "crates/nytprof-format-v6" }
 nytprof-model = { path = "crates/nytprof-model" }
 nytprof-aggregate = { path = "crates/nytprof-aggregate" }
 nytprof-report = { path = "crates/nytprof-report" }
+nytprof-ffi = { path = "crates/nytprof-ffi" }
 flate2 = "1"
 lz4_flex = "0.11"
 serde = { version = "1", features = ["derive"] }

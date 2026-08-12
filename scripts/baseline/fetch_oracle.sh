@@ -16,9 +16,24 @@ if [[ ! -f "$TARBALL" ]]; then
   fi
 fi
 
-SHA256="$(sha256sum "$TARBALL" | awk '{print $1}')"
+# Portable hash (sha256sum on Linux; shasum/openssl/python3 on macOS GHA).
+SHA256="$(sha256_file "$TARBALL")"
 echo "$SHA256  $TARBALL" | tee "$ARCHIVE_DIR/SHA256SUMS"
 echo "Archive SHA-256: $SHA256"
+
+# Prefer checked-in pin when present (BASE-001 integrity); fail closed on mismatch.
+PIN_FILE="$BASELINE_DIR/oracle-archive.sha256"
+if [[ -f "$PIN_FILE" ]]; then
+  PIN_SHA="$(tr -d '[:space:]' <"$PIN_FILE")"
+  if [[ -n "$PIN_SHA" && "$SHA256" != "$PIN_SHA" ]]; then
+    echo "ERROR: archive SHA-256 mismatch vs $PIN_FILE" >&2
+    echo "  expected: $PIN_SHA" >&2
+    echo "  actual:   $SHA256" >&2
+    echo "  tarball:  $ARCHIVE_DIR/$TARBALL" >&2
+    exit 1
+  fi
+  echo "Archive SHA-256 matches pin $PIN_FILE"
+fi
 
 # Extract into a clean src tree
 rm -rf "$SRC_DIR"

@@ -9,6 +9,12 @@ Hybrid modernization of [Devel::NYTProf](https://metacpan.org/dist/Devel-NYTProf
 | [`AGENTS.md`](https://github.com/hilather/nytprof-modernization/blob/main/AGENTS.md) | **Agent hints** — regression tests, docs, release notes, perf/size, benchmarks vs Perl & prior versions |
 | [`docs/PROGRAM_CHARTER.md`](https://github.com/hilather/nytprof-modernization/blob/main/docs/PROGRAM_CHARTER.md) | Mission, release levels, non-goals |
 | [`docs/FIRST_SLICE_BOARD.md`](https://github.com/hilather/nytprof-modernization/blob/main/docs/FIRST_SLICE_BOARD.md) | Ordered first-slice work board |
+| [`docs/RELEASE_NOTES_R2_PREVIEW.md`](https://github.com/hilather/nytprof-modernization/blob/main/docs/RELEASE_NOTES_R2_PREVIEW.md) | **R2-preview** packaging notes (v6 **opt-in only**; not R3 / R4) |
+| [`docs/RELEASE_NOTES_R2_STABLE.md`](https://github.com/hilather/nytprof-modernization/blob/main/docs/RELEASE_NOTES_R2_STABLE.md) | **R2-stable** packaging notes (Phase C tools + residual honesty; not R3/R4; public perf waived) |
+| [`docs/R4_FIELD_WINDOW.md`](https://github.com/hilather/nytprof-modernization/blob/main/docs/R4_FIELD_WINDOW.md) | R4 `format=v6` field-window evidence pack (no runtime flip; PR-E01) |
+| [`docs/adrs/0008-r4-v6-output-default-promotion.md`](https://github.com/hilather/nytprof-modernization/blob/main/docs/adrs/0008-r4-v6-output-default-promotion.md) | **ADR-0008** R4 product format default promotion policy (gated; flip not executed; PR-E02) |
+| [`docs/R4_DEFAULT_FLIP.md`](https://github.com/hilather/nytprof-modernization/blob/main/docs/R4_DEFAULT_FLIP.md) | R4 flip execution + rollback checklist |
+| [`docs/contracts/DUAL_EQUALITY_READINESS_v0.md`](https://github.com/hilather/nytprof-modernization/blob/main/docs/contracts/DUAL_EQUALITY_READINESS_v0.md) | Dual-equality E1–E5 readiness checklist |
 | [`docs/PHASE0_EXIT_CRITERIA.md`](https://github.com/hilather/nytprof-modernization/blob/main/docs/PHASE0_EXIT_CRITERIA.md) | Phase-0 “good enough” gates |
 | [`docs/plan/README.md`](https://github.com/hilather/nytprof-modernization/blob/main/docs/plan/README.md) | Full architecture + 206-task plan package |
 | [`docs/governance/COMPAT-000_RATIFICATION.md`](https://github.com/hilather/nytprof-modernization/blob/main/docs/governance/COMPAT-000_RATIFICATION.md) | Binding compatibility contract sign-off |
@@ -23,10 +29,11 @@ baseline/       immutable oracle pin, inventories, manifests
 fixtures/       golden profiles and expected dumps
 tools/oracle/   scripts to build oracle, dump fixtures, compare
 tools/bench/    light offline timing harness (not certification)
-scripts/        baseline build/test helpers + packaging smokes + `ci/offline_gate.sh`
+scripts/        baseline build/test helpers + packaging smokes + `ci/offline_gate.sh` + `field/` R4 evidence pack
 Makefile.PL     candidate dual-path packaging entry (not full XS CPAN)
 crates/         Rust workspace (v5 reader, provisional v6 preflight crate, compact model, report MVP) — not required for oracle
 perl/           candidate Perl engine-dispatch facade (nytprof-engine) — not used by oracle builds
+collector/      B0-A overlay COL-001 semantic sink scaffold (opt-in C build; never on oracle PERL5LIB)
 AGENTS.md       binding agent quality bars (tests, docs, release notes, perf/size, benchmarks)
 ```
 
@@ -65,8 +72,10 @@ perl tools/oracle/compare_jsonl.pl /tmp/oracle.norm.jsonl /tmp/rust.norm.jsonl
 # Native dump parity smoke (dump×2 stability + golden full match):
 ./tools/oracle/selftest_native_dump_parity.sh              # default-calls1
 ./tools/oracle/selftest_native_dump_parity_all.sh          # + calls2-default + blocks-calls1
-# Light wall-time samples (not certification; no public claims):
+# Light wall-time + size samples (not certification; no public claims):
 bash tools/bench/light_bench.sh
+# P1/P2-focused proxies only:
+# STEPS=size,collector_micro bash tools/bench/light_bench.sh
 ```
 
 Binary: `nytprof-dump` (package `nytprof-cli`; subcommands: `dump` / `report` / `summary` / `aggregates` / `csv` / `html` / `folded` / `callgrind` / `cg` / `verify` / `inspect` / `capability` / `selftest` / `capabilities`). Schemas:
@@ -82,7 +91,7 @@ Binary: `nytprof-dump` (package `nytprof-cli`; subcommands: `dump` / `report` / 
 [`docs/schemas/verify-cli-mvp-v0.md`](docs/schemas/verify-cli-mvp-v0.md),
 [`docs/schemas/capability-selftest-mvp-v0.md`](docs/schemas/capability-selftest-mvp-v0.md),
 [`docs/schemas/native-dump-parity-mvp-v0.md`](docs/schemas/native-dump-parity-mvp-v0.md).
-Board: [`docs/FIRST_SLICE_BOARD.md`](docs/FIRST_SLICE_BOARD.md). Exploratory timing notes + harness (not certification): [`docs/BENCH_NOTES.md`](docs/BENCH_NOTES.md), [`tools/bench/light_bench.sh`](tools/bench/light_bench.sh).
+Board: [`docs/FIRST_SLICE_BOARD.md`](https://github.com/hilather/nytprof-modernization/blob/main/docs/FIRST_SLICE_BOARD.md). Exploratory timing notes + P1/P2 methodology (not certification; no public claims until R2-stable gates green): [`docs/BENCH_NOTES.md`](https://github.com/hilather/nytprof-modernization/blob/main/docs/BENCH_NOTES.md), [`tools/bench/light_bench.sh`](https://github.com/hilather/nytprof-modernization/blob/main/tools/bench/light_bench.sh).
 
 ## Oracle (BASE-001)
 
@@ -191,7 +200,7 @@ perl -Iperl/lib perl/bin/nytprof-engine --engine=native callgrind fixtures/v5/de
 ./scripts/packaging/perl_engine_export_smoke.sh
 ```
 
-- `scripts/ci/offline_gate.sh` is the **CI-OFFLINE-GATE** / **CI-OFFLINE-GATE-EXPAND** / **CI-QUERY-JSON-GATE** / **CI-CAPABILITY-GATE** single entry: optional focused cargo tests → required oracle harness → primary packaging `dual_path_smoke.sh` → `engine_auto_fallback_smoke.sh` → `perl_jsonl_data_all_smoke.sh` → required `perl_query_json_smoke.sh` (QUERY-JSON-MVP / QUERY-JSON-EXPAND golden `--jsonl`) → required `json_sub_entry_smoke` + `json_blocks_smoke` (JSON-BLOCKS-MVP **780**/**810**) → optional `native_agg_json_smoke` + `native_query_json_cross_smoke` when native available → `capability_selftest_smoke.sh` when cargo or prefix/target CLI present (honest skip otherwise); fails fast.
+- `scripts/ci/offline_gate.sh` is the **CI-OFFLINE-GATE** / **CI-OFFLINE-GATE-EXPAND** / **CI-QUERY-JSON-GATE** / **CI-CAPABILITY-GATE** / **COL-001-SINK-MVP** single entry: optional focused cargo tests → required oracle harness → primary packaging `dual_path_smoke.sh` → `engine_auto_fallback_smoke.sh` → `perl_jsonl_data_all_smoke.sh` → required `perl_query_json_smoke.sh` (QUERY-JSON-MVP / QUERY-JSON-EXPAND golden `--jsonl`) → required `json_sub_entry_smoke` + `json_blocks_smoke` (JSON-BLOCKS-MVP **780**/**810**) → optional `native_agg_json_smoke` + `native_query_json_cross_smoke` when native available → `capability_selftest_smoke.sh` when cargo or prefix/target CLI present (honest skip otherwise) → `collector_sink_smoke.sh` (COL-001 overlay; honest skip without CC); fails fast.
 - `packaging_gate.sh` runs the packaging smokes in order (legacy → engine_select → perl dispatch → native install if present → optional cargo tests) and fails fast.
 - Root `Makefile.PL` is a **candidate packaging facade** (`NYTPROF_NATIVE=0|1|auto`): `make legacy-smoke` / `dual-path-smoke` / `offline-gate` / `native-install` wrap existing scripts; not a full Devel::NYTProf XS CPAN dist (see [`docs/BUILD_SUPPORT_POLICY.md`](docs/BUILD_SUPPORT_POLICY.md)).
 - `legacy_only_smoke.sh` sources oracle env isolation, refuses `/crates/` on `PERL5LIB`, and loads `Devel::NYTProf` from `baseline/6.15/install` only.

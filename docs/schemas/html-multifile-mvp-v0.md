@@ -1,9 +1,9 @@
 # Multi-file HTML report MVP (v0)
 
 **Status:** implemented (MVP)  
-**Complements:** single-file `html` stdout/`-o` (still supported)
+**Complements:** single-file `html` stdout/`-o` (still supported); shared CSS + structure in [html-shared-css-structure-mvp-v0.md](https://github.com/hilather/nytprof-modernization/blob/main/docs/schemas/html-shared-css-structure-mvp-v0.md)
 
-**Library:** `nytprof_report::{HtmlSite, render_html_site, write_html_site}`  
+**Library:** `nytprof_report::{HtmlSite, render_html_site, write_html_site, SHARED_STYLE_CSS, STYLE_CSS_FILENAME}`  
 **CLI:** `nytprof-cli html <profile.out> --out-dir DIR` (alias `--dir`; mutually exclusive with `-o`)
 
 ## CLI
@@ -28,8 +28,9 @@ When `--out-dir DIR` is set:
    - **`DIR/index.html`** — summary index.
    - **`DIR/file-<fid>.html`** for each eligible fid (source and/or line/block totals) — see [html-per-file-mvp-v0.md](https://github.com/hilather/nytprof-modernization/blob/main/docs/schemas/html-per-file-mvp-v0.md).
    - **`DIR/source.html`** as a copy of the primary workload `file-<fid>.html` (back-compat).
+   - **`DIR/style.css`** — shared MVP stylesheet (`SHARED_STYLE_CSS`); all HTML pages use `<link rel="stylesheet" href="style.css">` (no multi-file inline `<style>`). See [html-shared-css-structure-mvp-v0.md](https://github.com/hilather/nytprof-modernization/blob/main/docs/schemas/html-shared-css-structure-mvp-v0.md).
 4. Index links to all `file-*.html` pages (and to `source.html` as primary alias).
-5. Do **not** require writing stdout HTML when `--out-dir` is used (print the DIR path or file list is fine).
+5. Do **not** require writing stdout HTML when `--out-dir` is used (print the DIR path or file list is fine; include `style.css` in the written-path list when listing files).
 
 Mid-write failures must not leave a half-written final `DIR`. Same-filesystem sibling temp is preferred so `std::fs::rename` is atomic on Linux.
 
@@ -57,9 +58,11 @@ pub struct HtmlSite {
   pub source_html: String,           // primary workload page (also source.html)
   pub source_filename: String,       // "source.html"
   pub file_pages: Vec<(String, String)>, // ("file-N.html", html)...
+  pub style_css: String,             // SHARED_STYLE_CSS body
+  pub style_filename: String,        // "style.css"
 }
 pub fn render_html_site(model: &ProfileModel, profile_path: &str) -> HtmlSite
-pub fn write_html_site(...) -> Result<HtmlSite> // temp-then-rename → index + file-*.html + source.html
+pub fn write_html_site(...) -> Result<HtmlSite> // temp-then-rename → index + file-*.html + source.html + style.css
 ```
 
 Reuse `escape_html` and primary-workload-fid selection from single-file HTML.
@@ -73,7 +76,8 @@ Reuse `escape_html` and primary-workload-fid selection from single-file HTML.
 - Real `ProfileModel::from_path` on default-calls1
 - Site render contains leaf/mid 15/3 and source hot loop
 - Index contains `href` to source file
-- Real CLI: `html ... --out-dir tmp` produces both files
+- Shared CSS: disk `style.css` == `SHARED_STYLE_CSS`; pages use `<link rel="stylesheet" href="style.css">` (`html_shared_css_structure_contract_default_calls1`, `write_html_site_default_calls1_tempdir`, atomic publish tests)
+- Real CLI: `html ... --out-dir DIR` produces index + file pages + `style.css`; stderr lists `style.css` (`crates/nytprof-cli/tests/html_shared_css.rs`)
 - blocks-calls1: source page has positive calls on a workload line matching model
-- Atomic publish: `write_html_site_atomic_default_calls1` (disk index leaf 15 / mid 3 / mid→leaf 15); `write_html_site_atomic_overwrite_same_outdir` (second write drops prior files); fail-closed when `out_dir` or its parent is a file
+- Atomic publish: `write_html_site_atomic_default_calls1` (disk index leaf 15 / mid 3 / mid→leaf 15 + `style.css`); `write_html_site_atomic_overwrite_same_outdir` (second write drops prior files, still has `style.css`); fail-closed when `out_dir` or its parent is a file
 - Out-dir safety: `write_html_site_rejects_dotdot_component`, `write_html_site_rejects_null_byte`, `write_html_site_rejects_empty_path`

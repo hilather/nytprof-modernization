@@ -42,7 +42,7 @@ perl -Iperl/lib perl/bin/nytprof-engine query --json --jsonl fixtures/v5/default
 | `resolve_engine($cli, $env)` | `native` \| `legacy` \| `auto` | Does **not** collapse `auto` → `native`. |
 | `select_runtime_engine($repo, $requested)` | `native` \| `legacy` | Used by `dispatch` / `run_cli` for the actual path. `auto` → eval `find_native_cli`; ok → native; else legacy + STDERR. |
 
-**Residual:** pure-Rust `nytprof-cli` still maps `auto` → `native` and has no in-process legacy oracle path. The Perl facade is the required auto-fallback surface for this wave.
+**Residual:** pure-Rust `nytprof-cli` still maps `auto` → `native` and has no in-process legacy oracle path. The Perl facade is the required auto-fallback surface for this wave. **Product default** when flag/env are omitted remains **`native`** until a gated R3 flip ([ADR-0005](https://github.com/hilather/nytprof-modernization/blob/main/docs/adrs/0005-r3-engine-auto-default-promotion.md); procedure [R3_DEFAULT_FLIP.md](https://github.com/hilather/nytprof-modernization/blob/main/docs/R3_DEFAULT_FLIP.md)) — explicit `engine=auto` is **not** charter R3 completion.
 
 ## Finding native binary
 

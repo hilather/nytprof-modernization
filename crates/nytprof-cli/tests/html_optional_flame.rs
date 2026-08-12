@@ -1,0 +1,207 @@
+//! PR-A03 / REPORT-HTML-OPTIONAL-FLAME: real CLI `html --flame` publishes
+//! folded + native SVG flame artifacts under `--out-dir` (opt-in only).
+//!
+//! Schema: `docs/schemas/html-optional-flame-mvp-v0.md`.
+//!
+//! Drives the real `nytprof-dump` binary (`nytprof-cli` package). Asserts
+//! default-calls1: default path has no flame files; `--flame` writes
+//! `all_stacks_by_time.{svg,folded}`, lists them on stderr, index links them,
+//! and leaf/mid **15/3** remain greppable.
+
+use std::fs;
+use std::path::PathBuf;
+use std::process::Command;
+use std::time::{SystemTime, UNIX_EPOCH};
+
+fn cli_bin() -> PathBuf {
+    if let Some(p) = option_env!("CARGO_BIN_EXE_nytprof_dump") {
+        return PathBuf::from(p);
+    }
+    if let Ok(p) = std::env::var("CARGO_BIN_EXE_nytprof_dump") {
+        return PathBuf::from(p);
+    }
+    let manifest = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+    for rel in [
+        "../../target/debug/nytprof-dump",
+        "../../target/release/nytprof-dump",
+        "../../prefix/bin/nytprof-cli",
+    ] {
+        let p = manifest.join(rel);
+        if p.is_file() {
+            return p;
+        }
+    }
+    panic!(
+        "nytprof-dump binary not found (CARGO_BIN_EXE_nytprof_dump unset; no target/prefix binary)"
+    );
+}
+
+fn fixture_default_calls1() -> PathBuf {
+    PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../fixtures/v5/default-calls1/nytprof.out")
+}
+
+fn unique_out_dir(label: &str) -> PathBuf {
+    let nanos = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|d| d.as_nanos())
+        .unwrap_or(0);
+    let dir = std::env::temp_dir().join(format!(
+        "nytprof-cli-html-flame-{label}-{}-{}",
+        std::process::id(),
+        nanos
+    ));
+    let _ = fs::remove_dir_all(&dir);
+    dir
+}
+
+#[test]
+fn html_out_dir_default_has_no_flame_files() {
+    let fixture = fixture_default_calls1();
+    assert!(fixture.is_file(), "missing fixture {}", fixture.display());
+    let out = unique_out_dir("default");
+    let out_str = out.to_string_lossy();
+    let fixture_str = fixture.to_string_lossy();
+
+    let output = Command::new(cli_bin())
+        .args(["html", fixture_str.as_ref(), "--out-dir", out_str.as_ref()])
+        .output()
+        .expect("spawn html --out-dir");
+    let code = output.status.code().unwrap_or(-1);
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert_eq!(
+        code, 0,
+        "html --out-dir must succeed\nstdout:\n{stdout}\nstderr:\n{stderr}"
+    );
+
+    assert!(
+        !out.join("all_stacks_by_time.svg").exists(),
+        "default path must not write flame SVG"
+    );
+    assert!(
+        !out.join("all_stacks_by_time.folded").exists(),
+        "default path must not write flame folded"
+    );
+    assert!(
+        !stderr.contains("all_stacks_by_time"),
+        "stderr must not list flame files by default:\n{stderr}"
+    );
+    let index = fs::read_to_string(out.join("index.html")).expect("index");
+    assert!(
+        !index.contains("all_stacks_by_time"),
+        "default index must not link flame:\n{index}"
+    );
+
+    let _ = fs::remove_dir_all(&out);
+}
+
+#[test]
+fn html_out_dir_flame_writes_svg_and_folded_and_lists_on_stderr() {
+    let fixture = fixture_default_calls1();
+    assert!(fixture.is_file(), "missing fixture {}", fixture.display());
+    let out = unique_out_dir("flame");
+    let out_str = out.to_string_lossy();
+    let fixture_str = fixture.to_string_lossy();
+
+    let output = Command::new(cli_bin())
+        .args([
+            "html",
+            fixture_str.as_ref(),
+            "--out-dir",
+            out_str.as_ref(),
+            "--flame",
+        ])
+        .output()
+        .expect("spawn html --out-dir --flame");
+    let code = output.status.code().unwrap_or(-1);
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert_eq!(
+        code, 0,
+        "html --out-dir --flame must succeed\nstdout:\n{stdout}\nstderr:\n{stderr}"
+    );
+
+    let svg_path = out.join("all_stacks_by_time.svg");
+    let folded_path = out.join("all_stacks_by_time.folded");
+    assert!(
+        svg_path.is_file(),
+        "CLI --flame must write all_stacks_by_time.svg under {}",
+        out.display()
+    );
+    assert!(
+        folded_path.is_file(),
+        "CLI --flame must write all_stacks_by_time.folded under {}",
+        out.display()
+    );
+
+    let svg = fs::read_to_string(&svg_path).expect("svg");
+    assert!(
+        svg.contains("<svg") && svg.contains("main::leaf") && svg.contains("main::mid"),
+        "SVG content:\n{svg}"
+    );
+
+    let folded = fs::read_to_string(&folded_path).expect("folded");
+    assert!(
+        folded.contains("main::mid;main::leaf 15"),
+        "folded mid→leaf 15:\n{folded}"
+    );
+
+    assert!(
+        stderr.contains("all_stacks_by_time.svg"),
+        "stderr must list SVG:\n{stderr}"
+    );
+    assert!(
+        stderr.contains("all_stacks_by_time.folded"),
+        "stderr must list folded:\n{stderr}"
+    );
+
+    let index = fs::read_to_string(out.join("index.html")).expect("index");
+    assert!(
+        index.contains("href=\"all_stacks_by_time.svg\""),
+        "index must link SVG:\n{index}"
+    );
+    assert!(
+        index.contains("href=\"all_stacks_by_time.folded\""),
+        "index must link folded:\n{index}"
+    );
+    assert!(
+        index.contains("main::leaf") && index.contains(">15<"),
+        "CLI index leaf 15:\n{index}"
+    );
+    assert!(
+        index.contains("main::mid") && index.contains(">3<"),
+        "CLI index mid 3:\n{index}"
+    );
+
+    // Shared CSS still published on flame path.
+    assert!(out.join("style.css").is_file());
+
+    let _ = fs::remove_dir_all(&out);
+}
+
+#[test]
+fn html_single_file_flame_embeds_svg_on_stdout() {
+    let fixture = fixture_default_calls1();
+    assert!(fixture.is_file(), "missing fixture {}", fixture.display());
+    let fixture_str = fixture.to_string_lossy();
+
+    let output = Command::new(cli_bin())
+        .args(["html", fixture_str.as_ref(), "--flame"])
+        .output()
+        .expect("spawn html --flame");
+    let code = output.status.code().unwrap_or(-1);
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert_eq!(
+        code, 0,
+        "html --flame must succeed\nstdout:\n{stdout}\nstderr:\n{stderr}"
+    );
+    assert!(
+        stdout.contains("<svg") || stdout.contains("nytprof-flame"),
+        "single-file --flame must embed SVG:\n{stdout}"
+    );
+    assert!(
+        stdout.contains("main::leaf") && stdout.contains(">15<"),
+        "leaf 15 on single-file flame HTML:\n{stdout}"
+    );
+}

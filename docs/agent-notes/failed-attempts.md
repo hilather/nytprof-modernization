@@ -18,3 +18,4 @@ Add a **new row near the top** when an implementation, optimization (including *
 4. If someone might naively retry the same idea, put a “do not retry without …” clause in **Why** or in the detail file.  
 5. Successful pivots still keep the failed row — the win lives in code/docs; the failure stays here so it is not re-proposed blindly.  
 6. Keep cells **short** (context budget). Put benches, stack traces, or multi-step postmortems under `details/<slug>.md` and link from **Detail**.
+| 2026-08-12 | capability-json-stack-merge | Linear stack merge of parallel execute-plan PRs dropped `collection_default` / `v6_decode` from capability JSON | CI red on cli_e5_v6: assert collection_default==v5 got Null; restore keys + smoke/clippy gate | — |

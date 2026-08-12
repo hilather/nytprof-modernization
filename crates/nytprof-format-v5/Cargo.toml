@@ -2,7 +2,7 @@
 name = "nytprof-format-v5"
 version = "0.1.0"
 edition.workspace = true
-description = "Independent streaming decoder for Devel::NYTProf v5 profile files"
+description = "Independent streaming decoder and strict encoder for Devel::NYTProf v5 profile files"
 license.workspace = true
 
 [dependencies]

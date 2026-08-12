@@ -1,0 +1,18 @@
+[package]
+name = "nytprof-ffi"
+version = "0.1.0"
+edition.workspace = true
+description = "Stable C ABI (cdylib) for NYTProf profile open/query/close — RUST-010 MVP"
+license.workspace = true
+# Ship a C header next to the crate for embedders (not auto-installed).
+include = ["src/**", "include/**", "Cargo.toml"]
+
+[lib]
+name = "nytprof_ffi"
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+nytprof-model = { workspace = true }
+
+[dev-dependencies]
+# Integration tests exercise the real C ABI entry points via rlib linkage.

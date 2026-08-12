@@ -56,7 +56,7 @@ Evidence: `cargo test -p nytprof-format-v6` (`dual_output_sequence_*`, `mixed_du
 
 ## Open residual
 
-1. Full dual-output **sequence-number** freeze (OI-001-03 / COL-003) via ADR + golden vectors.
+1. Full dual-output **sequence-number** freeze (OI-001-03 / COL-003) via ADR + golden vectors (provisional seq-number preflight is a sibling — see [`v6-event-body-seq-number-provisional-v0.md`](https://github.com/hilather/nytprof-modernization/blob/main/docs/schemas/v6-event-body-seq-number-provisional-v0.md)).
 2. Broader dual-equality policy for header vs body VERSION beyond auto-emit preflight.
 3. v5-style mid-payload stream deflate (if required) beyond chunk-framed mid-stream codec-switch preflight.
 4. Default-parse inflate/CRC mutate; full COL-007 / COL-008; dual-equality; key vocabularies.

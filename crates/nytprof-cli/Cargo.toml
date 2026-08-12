@@ -2,7 +2,7 @@
 name = "nytprof-cli"
 version = "0.1.0"
 edition.workspace = true
-description = "CLI tools for NYTProf modernisation (dump, report, aggregates JSON, csv, html, folded, callgrind, verify, capability)"
+description = "CLI tools for NYTProf modernisation (dump, report, aggregates JSON, csv, html, folded, callgrind, verify, convert, merge, repack, salvage, capability)"
 license.workspace = true
 
 [[bin]]

@@ -1,24 +1,26 @@
 # Format v6 header TLV frame (provisional) — v0
 
-**Status:** provisional — **not** a v6 wire freeze (not FMT-002..010 ratification; not COL-007 C writer)  
+**Status:** numeric IDs / core frame **frozen** for major=6 by [ADR-0006](https://github.com/hilather/nytprof-modernization/blob/main/docs/adrs/0006-v6-wire-freeze.md) + catalog [`v6-wire-ids-frozen-v1.md`](https://github.com/hilather/nytprof-modernization/blob/main/docs/schemas/v6-wire-ids-frozen-v1.md); filename retains `provisional-v0` for link stability; **not** CLI v6 default / E3-mixed / COL-008  
 **Board IDs:** `FMT-V6-TLV-PROVISIONAL` (contract), `FMT-V6-TLV-MVP` (shipped encode/decode + tests)  
 **Depends on:** plan draft [`docs/plan/04_FILE_FORMAT_V6_TASKS.md`](https://github.com/hilather/nytprof-modernization/blob/main/docs/plan/04_FILE_FORMAT_V6_TASKS.md) §3.2; fixed header [`v6-fixed-header-provisional-v0.md`](https://github.com/hilather/nytprof-modernization/blob/main/docs/schemas/v6-fixed-header-provisional-v0.md); ULEB128 [`v6-varint-uleb128-provisional-v0.md`](https://github.com/hilather/nytprof-modernization/blob/main/docs/schemas/v6-varint-uleb128-provisional-v0.md)  
-**Gate:** COL-007 runway preflight only — **before** full TLV catalog / C v6 writer
+**Gate:** IDs frozen after E3-EVENT(C)+E4-v0 (ADR-0006). Residual: CLI v6 default; default-parse non-inflate; E3-mixed; COL-008; full OI-002 vocabulary  
 
 ---
 
 ## Scope and non-claims
 
-This document freezes a **provisional** Type-Length-Value (TLV) frame for the region **after** the v6 fixed header (header TLVs / metadata acceleration).
+This document is the detailed layout home for **header TLV frame + known type_ids PRODUCER/TICKS_PER_SEC**. Numeric IDs and the core frame described here are **frozen for major=6** by ADR-0006 (see frozen catalog). Filename retains `provisional-v0` for stable links.
 
 It is **not**:
 
-- a permanent wire freeze or ADR-ratified TLV catalog;
-- permission to mark **COL-007** done;
-- an exhaustive list of every candidate TLV (producer, clock, UUID, …) — a small provisional registry with ≥1 known type is enough;
-- event-stream codecs or dictionaries.
+- permission to flip CLI v6 / collection default (still v5 until R4 ADR);
+- E3-mixed multi-kind product C fixture claim;
+- COL-008 batched Rust writer;
+- default-parse always-inflate / CRC default flip;
+- complete OI-002 ATTRIBUTE/OPTION key vocabulary;
+- a new major without ADR supersession (renumbering requires major bump).
 
----
+Independent C/Rust implementations must match the frozen IDs and this layout. Golden vectors: [`fixtures/v6/vectors/`](https://github.com/hilather/nytprof-modernization/blob/main/fixtures/v6/vectors/).
 
 ## On-wire layout (one TLV)
 

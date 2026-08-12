@@ -15,13 +15,13 @@
 
 ## Scope and non-claims
 
-This document freezes a **provisional fail-closed policy** for **corrupt or unreadable v5 profile input** on the **shipped native paths** of the first slice:
+This document freezes a **provisional fail-closed policy** for **corrupt or unreadable v5 or product v6 EVENT profile input** on the **shipped native paths** of the first slice (dual-dispatch `ProfileModel::from_path` / `decode_events_from_path`):
 
 | Path | Entry point | Model load / decode |
 |------|-------------|---------------------|
-| `nytprof-cli verify` / `inspect` | `nytprof_report::verify_profile` | `ProfileModel::from_path` → v5 decode |
-| `nytprof-cli dump` | `decode_path` (format-v5) | event stream only |
-| `nytprof-cli report` / `summary` | `ProfileModel::from_path` | same as verify |
+| `nytprof-cli verify` / `inspect` | `nytprof_report::verify_profile` | `ProfileModel::from_path` → dual v5/v6 decode |
+| `nytprof-cli dump` | `nytprof_model::decode_events_from_path` | dual-dispatch event stream (v5 or v6 EVENT) |
+| `nytprof-cli report` / `summary` | `ProfileModel::from_path` | same as verify (v5 or v6 EVENT) |
 
 It does **not**:
 

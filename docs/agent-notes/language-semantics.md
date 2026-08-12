@@ -13,6 +13,7 @@ Record **language- or runtime-specific rules** that an agent got wrong (or nearl
 | 2026-08-07 | rust | v6 chunk payload | Default `parse_chunk_frame` should inflate ZLIB and verify CRC | Default parse is **non-inflating / non-CRC-verify**; inflate and CRC are **explicit** helpers (`FMT-V6-PAYLOAD-ZLIB/ZSTD/LZ4-*`, `FMT-V6-CRC-*`) | no | — |
 | 2026-08-07 | rust | v6 LZ4 wire | LZ4 frame with embedded size is the MVP wire | MVP is **raw LZ4 block**; size is chunk `uncompressed_len` only (`FMT-V6-PAYLOAD-LZ4-*`) | no | — |
 | 2026-08-07 | perl | SUB_ENTRY multiplicity | Every profile has SUB_ENTRY events | `calls=1` default-calls1 → **0**; `calls=2` calls2-default → **27** (multiplicity only; not full call-stack freeze) | no | — |
+| 2026-08-11 | both | v5 NV vs v6 u64 SUB_RETURN times | Dual-sink fractional wall NV (0.01/0.005) stays E4-equal across formats | v5 stores **NV doubles** on wire; v6 `nv_to_u64` **truncates** toward 0 → fractional times become 0. E4-v0 dual fixtures use **integer tick** doubles (e.g. 100.0/40.0) so aggregates match (`e4_v0_*`, E4 policy) | no | — |
 
 ## Scope examples (what belongs here)
 

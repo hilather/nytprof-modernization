@@ -309,7 +309,7 @@ The package also contains **30 tracked risk items** (`RSK-*`) and **26 blocking 
 | `REL-009` | Add post-release field validation and incident process | proposed | L | REL-005 or REL-007 | maintenance/release lead | [`19_ROLLOUT_RELEASE_AND_MIGRATION_TASKS.md`](19_ROLLOUT_RELEASE_AND_MIGRATION_TASKS.md) |
 | `REL-010` | Define telemetry/privacy policy | proposed | M | COL-016, REL-003 | privacy/release agent | [`19_ROLLOUT_RELEASE_AND_MIGRATION_TASKS.md`](19_ROLLOUT_RELEASE_AND_MIGRATION_TASKS.md) |
 | `REL-011` | Maintain cross-release compatibility tests | proposed | L | COMPAT-012, BUILD-006, BUILD-012, TEST-020 | release QA agent | [`19_ROLLOUT_RELEASE_AND_MIGRATION_TASKS.md`](19_ROLLOUT_RELEASE_AND_MIGRATION_TASKS.md) |
-| `REL-012` | Run legacy retirement/deprecation review | deferred | XL | sustained R4 field use, ADR-Q026 | ecosystem/release review group | [`19_ROLLOUT_RELEASE_AND_MIGRATION_TASKS.md`](19_ROLLOUT_RELEASE_AND_MIGRATION_TASKS.md) |
+| `REL-012` | Run legacy retirement/deprecation review | deferred (execution); governance ready (ADR-0009 / PR-F01) | XL | sustained R4 field use, ADR-Q026 | ecosystem/release review group | [`19_ROLLOUT_RELEASE_AND_MIGRATION_TASKS.md`](19_ROLLOUT_RELEASE_AND_MIGRATION_TASKS.md) |
 | `REL-013` | Final modernization program review | proposed | L | advertised target release level achieved, COMPAT-014, REL-004, REL-009, all relevant sign-offs | independent program review board | [`19_ROLLOUT_RELEASE_AND_MIGRATION_TASKS.md`](19_ROLLOUT_RELEASE_AND_MIGRATION_TASKS.md) |
 
 ## Validation status

@@ -1,26 +1,26 @@
 # Format v6 fixed file header (provisional) — v0
 
-**Status:** provisional — **not** a v6 wire freeze (not FMT-002..010 ratification; not COL-007 C writer)  
+**Status:** numeric IDs / core frame **frozen** for major=6 by [ADR-0006](https://github.com/hilather/nytprof-modernization/blob/main/docs/adrs/0006-v6-wire-freeze.md) + catalog [`v6-wire-ids-frozen-v1.md`](https://github.com/hilather/nytprof-modernization/blob/main/docs/schemas/v6-wire-ids-frozen-v1.md); filename retains `provisional-v0` for link stability; **not** CLI v6 default / E3-mixed / COL-008  
 **Board IDs:** `FMT-V6-HEADER-PROVISIONAL` (contract), `FMT-V6-HEADER-PARSE-MVP` (shipped parse + tests)  
 **Depends on:** plan draft [`docs/plan/04_FILE_FORMAT_V6_TASKS.md`](https://github.com/hilather/nytprof-modernization/blob/main/docs/plan/04_FILE_FORMAT_V6_TASKS.md) §3.1  
-**Gate:** COL-007 runway preflight only — **before** full C v6 encoder / ADR freeze
+**Gate:** IDs frozen after E3-EVENT(C)+E4-v0 (ADR-0006). Residual: CLI v6 default; default-parse non-inflate; E3-mixed; COL-008; full OI-002 vocabulary  
 
 ---
 
 ## Scope and non-claims
 
-This document freezes a **provisional** fixed-header layout so Rust (and later C) can share fail-closed identification of a future v6 file.
+This document is the detailed layout home for **fixed-header layout (36-byte full header)**. Numeric IDs and the core frame described here are **frozen for major=6** by ADR-0006 (see frozen catalog). Filename retains `provisional-v0` for stable links.
 
 It is **not**:
 
-- a permanent wire freeze or ADR-ratified FMT-002;
-- permission to mark **COL-007** (C v6 writer) done;
-- a complete chunk/TLV/event codec specification;
-- a claim that shipped CLI report/dump defaults read v6 profiles.
+- permission to flip CLI v6 / collection default (still v5 until R4 ADR);
+- E3-mixed multi-kind product C fixture claim;
+- COL-008 batched Rust writer;
+- default-parse always-inflate / CRC default flip;
+- complete OI-002 ATTRIBUTE/OPTION key vocabulary;
+- a new major without ADR supersession (renumbering requires major bump).
 
-Exact magic/layout may change under future ADR + immutable vectors. Readers must treat this schema as **provisional**.
-
----
+Independent C/Rust implementations must match the frozen IDs and this layout. Golden vectors: [`fixtures/v6/vectors/`](https://github.com/hilather/nytprof-modernization/blob/main/fixtures/v6/vectors/).
 
 ## Fixed header layout (little-endian)
 

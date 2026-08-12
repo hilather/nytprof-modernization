@@ -5,6 +5,7 @@
 //! `docs/schemas/html-multifile-mvp-v0.md`,
 //! `docs/schemas/html-per-file-mvp-v0.md` (A4b block_line_totals),
 //! `docs/schemas/html-outdir-safety-mvp-v0.md`,
+//! `docs/schemas/html-shared-css-structure-mvp-v0.md` (shared CSS + structure),
 //! `docs/schemas/export-formats-mvp-v0.md`,
 //! `docs/schemas/export-semantic-parity-mvp-v0.md`,
 //! `docs/schemas/verify-cli-mvp-v0.md`,
@@ -119,7 +120,7 @@ pub fn render_summary_text(model: &ProfileModel, profile_path: &str) -> String {
     } else {
         // Deterministic order by subname (model stores a HashMap).
         let mut subs: Vec<_> = model.sub_return_totals.iter().collect();
-        subs.sort_by(|(a, _), (b, _)| a.cmp(b));
+        subs.sort_by_key(|(a, _)| *a);
         for (name, t) in subs {
             out.push_str(&format!(
                 "  {name}  returns={}  excl={}  incl={}\n",
@@ -162,7 +163,7 @@ pub fn render_subs_csv(model: &ProfileModel) -> String {
     let mut out = String::with_capacity(1024);
     out.push_str("name,returns,incl,excl\n");
     let mut rows: Vec<_> = model.sub_return_totals.iter().collect();
-    rows.sort_by(|(a, _), (b, _)| a.cmp(b));
+    rows.sort_by_key(|(a, _)| *a);
     for (name, t) in rows {
         out.push_str(&csv_escape(name));
         out.push(',');
@@ -238,10 +239,11 @@ pub fn escape_html(s: &str) -> String {
     out
 }
 
-/// Multi-file HTML report site (index + per-fid source pages).
+/// Multi-file HTML report site (index + per-fid source pages + shared CSS).
 ///
-/// See `docs/schemas/html-multifile-mvp-v0.md` and
-/// `docs/schemas/html-per-file-mvp-v0.md`.
+/// See `docs/schemas/html-multifile-mvp-v0.md`,
+/// `docs/schemas/html-per-file-mvp-v0.md`, and
+/// `docs/schemas/html-shared-css-structure-mvp-v0.md`.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct HtmlSite {
     /// Contents of `index.html` (summary with relative links to file pages).
@@ -252,28 +254,71 @@ pub struct HtmlSite {
     pub source_filename: String,
     /// Per-fid pages: `(filename, html)` e.g. `("file-1.html", "...")`, sorted by fid.
     pub file_pages: Vec<(String, String)>,
+    /// Shared stylesheet body written as [`HtmlSite::style_filename`] (`style.css`).
+    ///
+    /// Same text as [`SHARED_STYLE_CSS`]. Multi-file pages link to
+    /// [`HtmlSite::style_filename`] via `<link rel="stylesheet" href="…">`
+    /// (no inline `<style>`).
+    pub style_css: String,
+    /// Relative filename of the shared stylesheet (must match page `<link href>`;
+    /// always [`STYLE_CSS_FILENAME`] / `"style.css"` from [`render_html_site`]).
+    pub style_filename: String,
 }
 
-const HTML_STYLE: &str = "\
-body{font-family:system-ui,sans-serif;margin:1.5rem;line-height:1.4}\n\
-table{border-collapse:collapse;margin:0.75rem 0}\n\
+/// How a document loads the shared MVP stylesheet.
+///
+/// See `docs/schemas/html-shared-css-structure-mvp-v0.md`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum HtmlCssMode<'a> {
+    /// Single-file / stdout summary: embed [`SHARED_STYLE_CSS`] in a `<style>` tag
+    /// so the document is self-contained (no external asset).
+    Inline,
+    /// Multi-file site: link to sibling stylesheet written by [`write_html_site`].
+    ///
+    /// The filename must match [`HtmlSite::style_filename`] / the file published
+    /// as `style.css` (normally [`STYLE_CSS_FILENAME`]).
+    LinkedStyleSheet(&'a str),
+}
+
+/// Shared MVP stylesheet for native HTML reports.
+///
+/// **Policy:** multi-file sites write this as `style.css` and link to it;
+/// single-file `render_html_summary` embeds the **same** text inline. This is
+/// **not** oracle `get_css()` / tablesorter CSS parity — residual honesty for
+/// full DOM/JS remains in
+/// [`REPORT_HTML_RESIDUAL_INVENTORY_v0.md`](https://github.com/hilather/nytprof-modernization/blob/main/docs/contracts/REPORT_HTML_RESIDUAL_INVENTORY_v0.md).
+pub const SHARED_STYLE_CSS: &str = "\
+/* nytprof-report shared MVP CSS (not oracle style.css / tablesorter) */\n\
+body{font-family:system-ui,sans-serif;margin:1.5rem;line-height:1.4;color:#111}\n\
+table{border-collapse:collapse;margin:0.75rem 0;width:auto;max-width:100%}\n\
 th,td{border:1px solid #ccc;padding:0.25rem 0.5rem;text-align:left}\n\
 th{background:#f0f0f0}\n\
+tbody tr:nth-child(even){background:#fafafa}\n\
+tbody tr:hover{background:#f5f8ff}\n\
 td.num{text-align:right;font-variant-numeric:tabular-nums}\n\
 pre,code{font-family:ui-monospace,monospace}\n\
 .src-line{white-space:pre}\n\
 h1,h2{margin-top:1.25rem}\n\
+p.profile-path code{word-break:break-all}\n\
+ul.source-files{list-style:disc;margin-left:1.25rem}\n\
+a{color:#0645ad}\n\
 ";
+
+/// Canonical multi-file stylesheet filename (`style.css`).
+pub const STYLE_CSS_FILENAME: &str = "style.css";
 
 /// Self-contained HTML summary report (MVP; see `docs/schemas/html-report-mvp-v0.md`).
 ///
 /// Includes profile path, event counts, subroutine table from `sub_return_totals`,
 /// call edges, exclusive-time ranking, and a source section for the primary workload fid.
+///
+/// **CSS policy:** embeds [`SHARED_STYLE_CSS`] inline so the single document needs
+/// no external assets (see `docs/schemas/html-shared-css-structure-mvp-v0.md`).
 pub fn render_html_summary(model: &ProfileModel, profile_path: &str) -> String {
     let title = html_report_title(profile_path);
     let primary_fid = primary_workload_fid(model);
     let mut out = String::with_capacity(8192);
-    push_html_doc_start(&mut out, &title);
+    push_html_doc_start(&mut out, &title, HtmlCssMode::Inline);
     out.push_str(&format!("<h1>{}</h1>\n", escape_html(&title)));
     push_profile_path(&mut out, profile_path);
     push_event_counts(&mut out, model);
@@ -289,7 +334,7 @@ pub fn render_html_summary(model: &ProfileModel, profile_path: &str) -> String {
     out
 }
 
-/// Multi-file HTML site: summary index + one page per eligible fid.
+/// Multi-file HTML site: summary index + one page per eligible fid + shared CSS.
 ///
 /// Eligible fids are those in [`ProfileModel::files`] that have at least one
 /// `source_lines`, `line_totals`, or `block_line_totals` entry.
@@ -299,8 +344,13 @@ pub fn render_html_summary(model: &ProfileModel, profile_path: &str) -> String {
 ///   [`HtmlSite::source_filename`] (`source.html`) as a primary alias
 /// - `file-<fid>.html` — source + A4 (and A4b when present) for that fid
 /// - `source.html` — copy of the primary workload file page (back-compat)
+/// - `style.css` — shared MVP stylesheet ([`SHARED_STYLE_CSS`]); pages link via
+///   `<link rel="stylesheet" href="style.css">`
 pub fn render_html_site(model: &ProfileModel, profile_path: &str) -> HtmlSite {
     let source_filename = "source.html".to_owned();
+    // Single source for both `<link href>` and the on-disk stylesheet name.
+    let style_filename = STYLE_CSS_FILENAME.to_owned();
+    let style_css = SHARED_STYLE_CSS.to_owned();
     let title = html_report_title(profile_path);
     let primary_fid = primary_workload_fid(model);
     let eligible = eligible_source_fids(model);
@@ -308,12 +358,13 @@ pub fn render_html_site(model: &ProfileModel, profile_path: &str) -> HtmlSite {
         .file_name()
         .and_then(|s| s.to_str())
         .unwrap_or(profile_path);
+    let css = HtmlCssMode::LinkedStyleSheet(style_filename.as_str());
 
     // --- per-fid file pages ---
     let mut file_pages: Vec<(String, String)> = Vec::with_capacity(eligible.len());
     for fid in &eligible {
         let filename = file_page_filename(*fid);
-        let page = render_file_page(model, *fid, profile_base);
+        let page = render_file_page(model, *fid, profile_base, style_filename.as_str());
         file_pages.push((filename, page));
     }
     // Primary alias (`source.html`): copy of the primary workload file page.
@@ -323,11 +374,13 @@ pub fn render_html_site(model: &ProfileModel, profile_path: &str) -> HtmlSite {
         .iter()
         .find(|(name, _)| name == &primary_name)
         .map(|(_, html)| html.clone())
-        .unwrap_or_else(|| render_file_page(model, primary_fid, profile_base));
+        .unwrap_or_else(|| {
+            render_file_page(model, primary_fid, profile_base, style_filename.as_str())
+        });
 
     // --- index.html ---
     let mut index = String::with_capacity(4096);
-    push_html_doc_start(&mut index, &title);
+    push_html_doc_start(&mut index, &title, css);
     index.push_str(&format!("<h1>{}</h1>\n", escape_html(&title)));
     push_profile_path(&mut index, profile_path);
     push_event_counts(&mut index, model);
@@ -335,13 +388,7 @@ pub fn render_html_site(model: &ProfileModel, profile_path: &str) -> HtmlSite {
     push_sub_defs_table(&mut index, model);
     push_call_edges_table(&mut index, model);
     push_top_exclusive_table(&mut index, model);
-    push_source_file_links(
-        &mut index,
-        model,
-        &eligible,
-        primary_fid,
-        &source_filename,
-    );
+    push_source_file_links(&mut index, model, &eligible, primary_fid, &source_filename);
     index.push_str("</body>\n</html>\n");
 
     HtmlSite {
@@ -349,6 +396,8 @@ pub fn render_html_site(model: &ProfileModel, profile_path: &str) -> HtmlSite {
         source_html,
         source_filename,
         file_pages,
+        style_css,
+        style_filename,
     }
 }
 
@@ -424,7 +473,8 @@ fn path_os_contains_nul(path: &Path) -> bool {
 /// Path safety ([`validate_html_out_dir`]) runs before any create/write.
 ///
 /// Writes `index.html`, every `file-<fid>.html` from [`HtmlSite::file_pages`],
-/// and `source.html` (primary alias).
+/// `source.html` (primary alias), and shared [`HtmlSite::style_filename`]
+/// (`style.css`).
 ///
 /// Returns the rendered [`HtmlSite`] so callers can list filenames written.
 pub fn write_html_site(
@@ -465,6 +515,11 @@ fn publish_html_site_files(site: &HtmlSite, out_dir: &Path) -> io::Result<()> {
         fs::write(
             temp_dir.join(&site.source_filename),
             site.source_html.as_bytes(),
+        )?;
+        // Shared CSS (structure contract / residual close for MVP style asset).
+        fs::write(
+            temp_dir.join(&site.style_filename),
+            site.style_css.as_bytes(),
         )?;
         atomic_replace_dir(&temp_dir, out_dir)
     })();
@@ -580,15 +635,27 @@ fn eligible_source_fids(model: &ProfileModel) -> Vec<u32> {
     fids
 }
 
-/// Render one per-fid HTML page body (full document).
-fn render_file_page(model: &ProfileModel, fid: u32, profile_base: &str) -> String {
+/// Render one per-fid HTML page body (full document; links shared stylesheet).
+///
+/// `style_filename` is the same relative name written as
+/// [`HtmlSite::style_filename`] (normally [`STYLE_CSS_FILENAME`]).
+fn render_file_page(
+    model: &ProfileModel,
+    fid: u32,
+    profile_base: &str,
+    style_filename: &str,
+) -> String {
     let basename = model
         .fid_basename(fid)
         .map(|s| s.to_owned())
         .unwrap_or_else(|| source_file_label(model, fid));
     let src_title = format!("Source — {basename} (fid {fid}) — {profile_base}");
     let mut page = String::with_capacity(4096);
-    push_html_doc_start(&mut page, &src_title);
+    push_html_doc_start(
+        &mut page,
+        &src_title,
+        HtmlCssMode::LinkedStyleSheet(style_filename),
+    );
     page.push_str(&format!("<h1>{}</h1>\n", escape_html(&src_title)));
     page.push_str("<p><a href=\"index.html\">← Back to index</a></p>\n");
     push_source_heading(&mut page, model, fid);
@@ -647,14 +714,25 @@ fn source_file_label(model: &ProfileModel, primary_fid: u32) -> String {
         .unwrap_or_else(|| format!("fid {primary_fid}"))
 }
 
-fn push_html_doc_start(out: &mut String, title: &str) {
+fn push_html_doc_start(out: &mut String, title: &str, css: HtmlCssMode<'_>) {
     out.push_str("<!DOCTYPE html>\n");
     out.push_str("<html lang=\"en\">\n<head>\n");
     out.push_str("<meta charset=\"utf-8\">\n");
     out.push_str(&format!("<title>{}</title>\n", escape_html(title)));
-    out.push_str("<style>\n");
-    out.push_str(HTML_STYLE);
-    out.push_str("</style>\n");
+    match css {
+        HtmlCssMode::Inline => {
+            out.push_str("<style>\n");
+            out.push_str(SHARED_STYLE_CSS);
+            out.push_str("</style>\n");
+        }
+        HtmlCssMode::LinkedStyleSheet(style_filename) => {
+            // Relative sibling asset: same name as HtmlSite::style_filename / disk write.
+            out.push_str(&format!(
+                "<link rel=\"stylesheet\" href=\"{}\">\n",
+                escape_html(style_filename)
+            ));
+        }
+    }
     out.push_str("</head>\n<body>\n");
 }
 
@@ -690,7 +768,7 @@ fn push_subs_table(out: &mut String, model: &ProfileModel) {
          </tr></thead>\n<tbody>\n",
     );
     let mut subs: Vec<_> = model.sub_return_totals.iter().collect();
-    subs.sort_by(|(a, _), (b, _)| a.cmp(b));
+    subs.sort_by_key(|(a, _)| *a);
     for (name, t) in subs {
         out.push_str(&format!(
             "<tr><td>{}</td><td class=\"num\">{}</td>\
@@ -716,7 +794,7 @@ fn push_sub_defs_table(out: &mut String, model: &ProfileModel) {
          </tr></thead>\n<tbody>\n",
     );
     let mut defs: Vec<_> = model.sub_defs.iter().collect();
-    defs.sort_by(|(a, _), (b, _)| a.cmp(b));
+    defs.sort_by_key(|(a, _)| *a);
     for (name, d) in defs {
         out.push_str(&format!(
             "<tr><td>{}</td><td class=\"num\">{}</td>\
@@ -769,11 +847,7 @@ fn push_top_exclusive_table(out: &mut String, model: &ProfileModel) {
          </tr></thead>\n<tbody>\n",
     );
     let mut by_excl: Vec<_> = model.sub_return_totals.iter().collect();
-    by_excl.sort_by(|(n1, t1), (n2, t2)| {
-        t2.excl
-            .total_cmp(&t1.excl)
-            .then_with(|| n1.cmp(n2))
-    });
+    by_excl.sort_by(|(n1, t1), (n2, t2)| t2.excl.total_cmp(&t1.excl).then_with(|| n1.cmp(n2)));
     for (name, t) in by_excl {
         out.push_str(&format!(
             "<tr><td>{}</td>\
@@ -833,11 +907,7 @@ fn push_source_table(out: &mut String, model: &ProfileModel, primary_fid: u32) {
 ///
 /// Skipped when empty (or when `only_fid` filters out every entry). Rows sorted
 /// by `(fid, block_line)`. Columns: fid, block_line, calls, ticks.
-fn push_block_line_totals_table(
-    out: &mut String,
-    model: &ProfileModel,
-    only_fid: Option<u32>,
-) {
+fn push_block_line_totals_table(out: &mut String, model: &ProfileModel, only_fid: Option<u32>) {
     let mut rows: Vec<_> = model
         .block_line_totals
         .iter()
@@ -935,7 +1005,8 @@ pub fn render_callgrind(model: &ProfileModel) -> String {
         .collect();
     edges.sort_by(|((c1, d1), _), ((c2, d2), _)| c1.cmp(c2).then_with(|| d1.cmp(d2)));
 
-    let mut out = String::with_capacity(names.len().saturating_mul(64) + edges.len().saturating_mul(48));
+    let mut out =
+        String::with_capacity(names.len().saturating_mul(64) + edges.len().saturating_mul(48));
     out.push_str("# callgrind format\n");
     out.push_str("positions: line\n");
     out.push_str("events: Ticks\n");
@@ -1013,11 +1084,7 @@ fn primary_workload_fid(model: &ProfileModel) -> u32 {
         return workload_fids[0];
     }
 
-    let mut source_fids: Vec<u32> = model
-        .source_lines
-        .keys()
-        .map(|(fid, _)| *fid)
-        .collect();
+    let mut source_fids: Vec<u32> = model.source_lines.keys().map(|(fid, _)| *fid).collect();
     source_fids.sort_unstable();
     source_fids.dedup();
     source_fids.first().copied().unwrap_or(1)
@@ -1271,7 +1338,10 @@ mod tests {
         assert_eq!(escape_html(">"), "&gt;");
         assert_eq!(escape_html("&"), "&amp;");
         assert_eq!(escape_html("\""), "&quot;");
-        assert_eq!(escape_html("a < b & c > \"d\""), "a &lt; b &amp; c &gt; &quot;d&quot;");
+        assert_eq!(
+            escape_html("a < b & c > \"d\""),
+            "a &lt; b &amp; c &gt; &quot;d&quot;"
+        );
     }
 
     #[test]
@@ -1290,14 +1360,8 @@ mod tests {
             &html[..html.len().min(200)]
         );
         assert!(html.contains("<title>"), "must have title");
-        assert!(
-            html.contains("main::leaf"),
-            "must list main::leaf:\n{html}"
-        );
-        assert!(
-            html.contains("main::mid"),
-            "must list main::mid:\n{html}"
-        );
+        assert!(html.contains("main::leaf"), "must list main::leaf:\n{html}");
+        assert!(html.contains("main::mid"), "must list main::mid:\n{html}");
 
         // returns 15 and 3 as table cells (or obvious text next to names).
         assert!(
@@ -1316,6 +1380,16 @@ mod tests {
         assert!(
             html.contains("main::mid") && html.contains(">3<"),
             "mid row with returns cell 3"
+        );
+
+        // Single-file CSS policy: inline shared stylesheet (self-contained).
+        assert!(
+            html.contains("<style>") && html.contains(SHARED_STYLE_CSS.trim()),
+            "single-file must inline SHARED_STYLE_CSS"
+        );
+        assert!(
+            !html.contains("href=\"style.css\""),
+            "single-file must not require external style.css"
         );
 
         assert!(
@@ -1408,6 +1482,8 @@ mod tests {
         let site = render_html_site(&model, &path_str);
 
         assert_eq!(site.source_filename, "source.html");
+        assert_eq!(site.style_filename, STYLE_CSS_FILENAME);
+        assert_eq!(site.style_css, SHARED_STYLE_CSS);
         assert!(!site.index_html.is_empty());
         assert!(!site.source_html.is_empty());
         assert!(
@@ -1436,6 +1512,15 @@ mod tests {
             &index[..index.len().min(200)]
         );
         assert!(index.contains("<title>"), "index title");
+        // Shared CSS structure: multi-file pages link style.css (no inline <style>).
+        assert!(
+            index.contains(&format!("href=\"{}\"", STYLE_CSS_FILENAME)),
+            "index must link style.css:\n{index}"
+        );
+        assert!(
+            !index.to_ascii_lowercase().contains("<style"),
+            "multi-file index must not embed inline <style>:\n{index}"
+        );
         assert!(
             index.contains("main::leaf"),
             "index must list main::leaf:\n{index}"
@@ -1500,8 +1585,7 @@ mod tests {
             "source must include hot loop `$x++` / `for 1 .. 50`:\n{source}"
         );
         assert!(
-            source.to_ascii_lowercase().contains("workload")
-                || source.contains("fid "),
+            source.to_ascii_lowercase().contains("workload") || source.contains("fid "),
             "source page should label workload file"
         );
         // Primary alias matches file-1.html body.
@@ -1577,6 +1661,19 @@ mod tests {
             "file-1.html missing under {}",
             out.display()
         );
+        // Complete site set includes shared CSS on the atomic publish path.
+        let style_path = out.join(STYLE_CSS_FILENAME);
+        assert!(
+            style_path.is_file(),
+            "style.css missing under {}",
+            out.display()
+        );
+        let style = fs::read_to_string(&style_path).expect("read style.css");
+        assert_eq!(style, SHARED_STYLE_CSS);
+        assert!(
+            index.contains(&format!("href=\"{}\"", STYLE_CSS_FILENAME)),
+            "index must link style.css:\n{index}"
+        );
         assert!(
             index.contains("main::leaf") && index.contains(&format!(">{}<", leaf.returns)),
             "leaf returns {}:\n{index}",
@@ -1619,7 +1716,11 @@ mod tests {
         let index_path = tmp.join("index.html");
         let source_path = tmp.join("source.html");
         let file1_path = tmp.join("file-1.html");
-        assert!(index_path.is_file(), "index.html missing at {}", index_path.display());
+        assert!(
+            index_path.is_file(),
+            "index.html missing at {}",
+            index_path.display()
+        );
         assert!(
             source_path.is_file(),
             "source.html missing at {}",
@@ -1658,6 +1759,201 @@ mod tests {
         assert!(file1.contains("$x++") && file1.contains("for 1 .. 50"));
         assert_eq!(source, file1, "source.html alias of file-1.html");
 
+        // Shared CSS asset on disk + pages link it.
+        let style_path = tmp.join(STYLE_CSS_FILENAME);
+        assert!(
+            style_path.is_file(),
+            "style.css missing at {}",
+            style_path.display()
+        );
+        let style = fs::read_to_string(&style_path).expect("read style.css");
+        assert_eq!(style, SHARED_STYLE_CSS);
+        assert!(index.contains(&format!("href=\"{}\"", STYLE_CSS_FILENAME)));
+        assert!(file1.contains(&format!("href=\"{}\"", STYLE_CSS_FILENAME)));
+        assert!(source.contains(&format!("href=\"{}\"", STYLE_CSS_FILENAME)));
+
+        let _ = fs::remove_dir_all(&ws);
+    }
+
+    /// PR-A01: shared CSS + structure contract (default-calls1, 15/3/15).
+    ///
+    /// - multi-file: `style.css` on disk; pages use `<link rel="stylesheet">`
+    /// - single-file: same CSS text inlined (self-contained policy)
+    /// - structure: stable table classes + semantic counts from real model
+    ///
+    /// See `docs/schemas/html-shared-css-structure-mvp-v0.md`.
+    #[test]
+    fn html_shared_css_structure_contract_default_calls1() {
+        let path = fixture_out("default-calls1");
+        assert!(path.is_file(), "missing fixture {}", path.display());
+        let path_str = path.to_string_lossy();
+        let model = ProfileModel::from_path(&path).expect("ProfileModel::from_path");
+
+        let leaf = model.sub_total("main::leaf").expect("main::leaf");
+        let mid = model.sub_total("main::mid").expect("main::mid");
+        let edge = model
+            .call_edge("main::mid", "main::leaf")
+            .expect("mid→leaf");
+        assert_eq!(leaf.returns, 15, "semantic leaf returns");
+        assert_eq!(mid.returns, 3, "semantic mid returns");
+        assert_eq!(edge.count, 15, "semantic mid→leaf count");
+
+        // --- multi-file site ---
+        let site = render_html_site(&model, &path_str);
+        assert_eq!(site.style_filename, "style.css");
+        assert_eq!(site.style_css, SHARED_STYLE_CSS);
+        assert!(
+            !site.style_css.is_empty() && site.style_css.contains("body{"),
+            "shared CSS body non-empty"
+        );
+
+        for (label, html) in std::iter::once(("index", site.index_html.as_str()))
+            .chain(std::iter::once(("source", site.source_html.as_str())))
+            .chain(
+                site.file_pages
+                    .iter()
+                    .map(|(n, h)| (n.as_str(), h.as_str())),
+            )
+        {
+            assert!(
+                html.contains(&format!("href=\"{}\"", STYLE_CSS_FILENAME)),
+                "{label} must link style.css:\n{html}"
+            );
+            assert!(
+                !html.to_ascii_lowercase().contains("<style"),
+                "{label} must not use inline <style>:\n{html}"
+            );
+            assert!(
+                html.to_ascii_lowercase().contains("<!doctype html"),
+                "{label} doctype"
+            );
+            assert!(html.contains("<html lang=\"en\">"), "{label} lang");
+            assert!(html.contains("<meta charset=\"utf-8\">"), "{label} charset");
+        }
+
+        // Structure contract on index: required section headings + table classes.
+        let index = &site.index_html;
+        for needle in [
+            "class=\"profile-path\"",
+            "class=\"subs\"",
+            "class=\"call-edges\"",
+            "class=\"top-exclusive\"",
+            "class=\"source-files\"",
+            "<h2>Event counts</h2>",
+            "<h2>Subroutines</h2>",
+            "<h2>Call edges</h2>",
+            "<h2>Top exclusive</h2>",
+            "<h2>Source files</h2>",
+        ] {
+            assert!(
+                index.contains(needle),
+                "index structure missing {needle}:\n{index}"
+            );
+        }
+        // Semantic counts 15/3/15 on index tables.
+        assert!(
+            index.contains(&format!(
+                "<td>main::leaf</td><td class=\"num\">{}</td>",
+                leaf.returns
+            )) || index.contains(&format!(
+                "main::leaf</td><td class=\"num\">{}</td>",
+                leaf.returns
+            )),
+            "leaf returns cell"
+        );
+        assert!(
+            index.contains(&format!(
+                "<td>main::mid</td><td class=\"num\">{}</td>",
+                mid.returns
+            )) || index.contains(&format!(
+                "main::mid</td><td class=\"num\">{}</td>",
+                mid.returns
+            )),
+            "mid returns cell"
+        );
+        let edges_idx = index
+            .to_ascii_lowercase()
+            .find("call edges")
+            .expect("call edges");
+        let edges = &index[edges_idx..];
+        assert!(
+            edges.contains("main::mid")
+                && edges.contains("main::leaf")
+                && edges.contains(&format!(">{}<", edge.count)),
+            "mid→leaf {} on index",
+            edge.count
+        );
+
+        // Source page structure.
+        let source = &site.source_html;
+        assert!(source.contains("class=\"source\""));
+        assert!(source.contains("$x++") && source.contains("for 1 .. 50"));
+
+        // Disk publish includes style.css with exact shared text.
+        let ws = unique_html_workspace("shared-css");
+        let out = ws.join("site");
+        write_html_site(&model, &path_str, &out).expect("write_html_site");
+        let disk_css = fs::read_to_string(out.join(STYLE_CSS_FILENAME)).expect("style.css");
+        assert_eq!(disk_css, SHARED_STYLE_CSS);
+        let disk_index = fs::read_to_string(out.join("index.html")).expect("index");
+        assert!(disk_index.contains("href=\"style.css\""));
+        assert!(
+            disk_index.contains("main::leaf") && disk_index.contains(">15<"),
+            "disk index leaf 15"
+        );
+        assert!(
+            disk_index.contains("main::mid") && disk_index.contains(">3<"),
+            "disk index mid 3"
+        );
+        // Full 15/3/15 on published index (mirror in-memory call-edges check).
+        let disk_lower = disk_index.to_ascii_lowercase();
+        let disk_edges_idx = disk_lower
+            .find("call edges")
+            .or_else(|| disk_lower.find("call-edges"))
+            .expect("disk index call edges");
+        let disk_edges = &disk_index[disk_edges_idx..];
+        assert!(
+            disk_edges.contains("main::mid")
+                && disk_edges.contains("main::leaf")
+                && disk_edges.contains(&format!(">{}<", edge.count)),
+            "disk index mid→leaf {}:\n{disk_edges}",
+            edge.count
+        );
+
+        // --- single-file: inline same CSS, self-contained ---
+        let single = render_html_summary(&model, &path_str);
+        assert!(
+            single.contains("<style>") && single.contains(SHARED_STYLE_CSS.trim()),
+            "single-file must inline SHARED_STYLE_CSS"
+        );
+        assert!(
+            !single.contains("href=\"style.css\""),
+            "single-file must not depend on external style.css:\n{}",
+            &single[..single.len().min(400)]
+        );
+        assert!(
+            single.contains("class=\"subs\"")
+                && single.contains("class=\"call-edges\"")
+                && single.contains("class=\"top-exclusive\"")
+                && single.contains("class=\"source\""),
+            "single-file structure classes"
+        );
+        assert!(
+            single.contains("main::leaf")
+                && single.contains(">15<")
+                && single.contains("main::mid")
+                && single.contains(">3<"),
+            "single-file 15/3"
+        );
+        let s_edges_idx = single
+            .to_ascii_lowercase()
+            .find("call edges")
+            .expect("single call edges");
+        assert!(
+            single[s_edges_idx..].contains(">15<"),
+            "single-file mid→leaf 15"
+        );
+
         let _ = fs::remove_dir_all(&ws);
     }
 
@@ -1685,7 +1981,22 @@ mod tests {
             !out.join("POISON.txt").exists(),
             "atomic replace must not leave files from previous out_dir"
         );
+        // Complete site after overwrite still includes shared CSS.
+        let style_path = out.join(STYLE_CSS_FILENAME);
+        assert!(
+            style_path.is_file(),
+            "style.css missing after overwrite under {}",
+            out.display()
+        );
+        assert_eq!(
+            fs::read_to_string(&style_path).expect("read style.css"),
+            SHARED_STYLE_CSS
+        );
         let index = fs::read_to_string(out.join("index.html")).expect("index");
+        assert!(
+            index.contains(&format!("href=\"{}\"", STYLE_CSS_FILENAME)),
+            "index must link style.css after overwrite:\n{index}"
+        );
         assert!(index.contains("main::leaf") && index.contains(">15<"));
         assert!(index.contains("main::mid") && index.contains(">3<"));
         let lower = index.to_ascii_lowercase();
@@ -1721,7 +2032,8 @@ mod tests {
         fs::write(&out, b"not a directory").expect("create file at out_dir");
         assert!(out.is_file());
 
-        let err = write_html_site(&model, &path_str, &out).expect_err("must fail when out_dir is file");
+        let err =
+            write_html_site(&model, &path_str, &out).expect_err("must fail when out_dir is file");
         assert!(
             err.kind() == io::ErrorKind::AlreadyExists || err.kind() == io::ErrorKind::Other,
             "expected AlreadyExists-ish error, got {err:?}"
@@ -1749,7 +2061,8 @@ mod tests {
         fs::write(&parent_as_file, b"blocks mkdir").expect("parent file");
         let out = parent_as_file.join("site");
 
-        let err = write_html_site(&model, &path_str, &out).expect_err("must fail when parent is file");
+        let err =
+            write_html_site(&model, &path_str, &out).expect_err("must fail when parent is file");
         // Linux typically returns ENOTDIR (20) when mkdir under a file path.
         assert!(
             err.raw_os_error() == Some(20) // ENOTDIR
@@ -1758,7 +2071,10 @@ mod tests {
                 || err.kind() == io::ErrorKind::Other,
             "expected create_dir failure when parent is a file, got {err:?}"
         );
-        assert!(!out.exists(), "must not create final site when parent is unusable");
+        assert!(
+            !out.exists(),
+            "must not create final site when parent is unusable"
+        );
         assert!(parent_as_file.is_file());
 
         let _ = fs::remove_dir_all(&ws);
@@ -1781,8 +2097,7 @@ mod tests {
             out.display()
         );
 
-        let err =
-            write_html_site(&model, &path_str, &out).expect_err("must reject '..' component");
+        let err = write_html_site(&model, &path_str, &out).expect_err("must reject '..' component");
         assert_eq!(err.kind(), io::ErrorKind::InvalidInput, "got {err:?}");
         let msg = err.to_string();
         assert!(
@@ -1949,7 +2264,8 @@ mod tests {
         );
         // Line 5 row: line-number cell then calls from line_totals (A4).
         // Prefer the full row shape so we do not match an earlier calls-cell "5".
-        let line5_row_prefix = format!("<td class=\"num\">5</td><td class=\"num\">{expected_calls}</td>");
+        let line5_row_prefix =
+            format!("<td class=\"num\">5</td><td class=\"num\">{expected_calls}</td>");
         assert!(
             src_slice.contains(&line5_row_prefix)
                 || src_slice.contains(&format!(
@@ -2147,16 +2463,25 @@ mod tests {
             "<td>{}</td><td class=\"num\">{}</td>",
             "main::leaf", leaf.returns
         );
-        let mid_returns_cell =
-            format!("<td>{}</td><td class=\"num\">{}</td>", "main::mid", mid.returns);
+        let mid_returns_cell = format!(
+            "<td>{}</td><td class=\"num\">{}</td>",
+            "main::mid", mid.returns
+        );
         assert!(
-            html.contains(&leaf_returns_cell) || html.contains(&format!("main::leaf</td><td class=\"num\">{}</td>", leaf.returns)),
+            html.contains(&leaf_returns_cell)
+                || html.contains(&format!(
+                    "main::leaf</td><td class=\"num\">{}</td>",
+                    leaf.returns
+                )),
             "subs table must show leaf returns={}:\n{html}",
             leaf.returns
         );
         assert!(
             html.contains(&mid_returns_cell)
-                || html.contains(&format!("main::mid</td><td class=\"num\">{}</td>", mid.returns)),
+                || html.contains(&format!(
+                    "main::mid</td><td class=\"num\">{}</td>",
+                    mid.returns
+                )),
             "subs table must show mid returns={}:\n{html}",
             mid.returns
         );
@@ -2328,8 +2653,10 @@ mod tests {
             src_slice.contains("$x++") || src_slice.contains("for 1 .. 50"),
             "source section must include hot loop text:\n{src_slice}"
         );
-        let line5_row_prefix =
-            format!("<td class=\"num\">5</td><td class=\"num\">{}</td>", lt.calls);
+        let line5_row_prefix = format!(
+            "<td class=\"num\">5</td><td class=\"num\">{}</td>",
+            lt.calls
+        );
         assert!(
             src_slice.contains(&line5_row_prefix)
                 || src_slice.contains(&format!(
@@ -2495,10 +2822,7 @@ mod tests {
         let path = fixture_out("default-calls1");
         assert!(path.is_file(), "missing fixture {}", path.display());
         let bytes = fs::read(&path).expect("read golden");
-        assert!(
-            bytes.len() > 500,
-            "fixture must be larger than 500 bytes"
-        );
+        assert!(bytes.len() > 500, "fixture must be larger than 500 bytes");
         let prefix = &bytes[..500];
 
         let tmp = fail_closed_temp("incomplete-500");
@@ -2617,31 +2941,16 @@ mod tests {
         let cg = render_callgrind(&model);
 
         assert!(!cg.is_empty(), "callgrind export must be non-empty");
-        assert!(
-            cg.contains("# callgrind format"),
-            "header comment:\n{cg}"
-        );
-        assert!(
-            cg.contains("positions: line"),
-            "positions header:\n{cg}"
-        );
+        assert!(cg.contains("# callgrind format"), "header comment:\n{cg}");
+        assert!(cg.contains("positions: line"), "positions header:\n{cg}");
         assert!(
             cg.contains("events: Ticks") || cg.contains("Events: Calls"),
             "events header:\n{cg}"
         );
-        assert!(
-            cg.contains("main::leaf"),
-            "must mention main::leaf:\n{cg}"
-        );
-        assert!(
-            cg.contains("main::mid"),
-            "must mention main::mid:\n{cg}"
-        );
+        assert!(cg.contains("main::leaf"), "must mention main::leaf:\n{cg}");
+        assert!(cg.contains("main::mid"), "must mention main::mid:\n{cg}");
         // mid→leaf call count 15 from call_edges.
-        assert!(
-            cg.contains("15"),
-            "must include mid→leaf count 15:\n{cg}"
-        );
+        assert!(cg.contains("15"), "must include mid→leaf count 15:\n{cg}");
         assert!(
             cg.contains("fn=main::leaf") || cg.contains("cfn=main::leaf"),
             "fn/cfn for leaf:\n{cg}"
@@ -2722,14 +3031,8 @@ mod tests {
         // 3) Callgrind: leaf/mid presence + calls=15 under mid→leaf + mid calls=3.
         let cg = render_callgrind(&model);
         assert!(!cg.is_empty(), "callgrind export must be non-empty");
-        assert!(
-            cg.contains("# callgrind format"),
-            "callgrind header:\n{cg}"
-        );
-        assert!(
-            cg.contains("positions: line"),
-            "callgrind positions:\n{cg}"
-        );
+        assert!(cg.contains("# callgrind format"), "callgrind header:\n{cg}");
+        assert!(cg.contains("positions: line"), "callgrind positions:\n{cg}");
         assert!(
             cg.contains("main::leaf"),
             "callgrind must mention main::leaf:\n{cg}"

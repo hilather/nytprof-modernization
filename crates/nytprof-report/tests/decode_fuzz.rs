@@ -12,8 +12,7 @@ use std::time::{SystemTime, UNIX_EPOCH};
 use nytprof_report::verify_profile;
 
 fn fixture_default_calls1() -> PathBuf {
-    PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-        .join("../../fixtures/v5/default-calls1/nytprof.out")
+    PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../fixtures/v5/default-calls1/nytprof.out")
 }
 
 fn read_golden() -> Vec<u8> {

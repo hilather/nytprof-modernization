@@ -1,7 +1,8 @@
 # HTML report MVP (v0)
 
 **Status:** first-slice minimal native HTML  
-**Not:** full nytprofhtml multi-file site
+**Not:** full nytprofhtml multi-file site  
+**CSS / structure:** [html-shared-css-structure-mvp-v0.md](https://github.com/hilather/nytprof-modernization/blob/main/docs/schemas/html-shared-css-structure-mvp-v0.md)
 
 ## CLI
 
@@ -22,8 +23,9 @@ Library: `nytprof_report::render_html_summary(model: &ProfileModel, profile_path
 6. Escape `<`, `>`, `&`, `"` in all text/source.
 7. **Call edges table** from `call_edges` (at least caller, called, count) sorted deterministically; must include `main::mid` → `main::leaf` with count **15** on default-calls1.
 8. **Exclusive-time ranking** section: top subroutines by `excl` from `sub_return_totals` (name + excl + returns), including workload subs.
+9. **CSS policy (single-file):** embed `SHARED_STYLE_CSS` in an inline `<style>` block so the document is self-contained (no external `style.css` dependency). Multi-file sites use a shared `style.css` instead — see the shared CSS structure schema.
 
 ## Explicit non-requirements
 
-- tablesorter / multi-file index / flame / Callgrind / CSS polish parity
+- tablesorter / oracle CSS / flame / Graphviz / CSS polish parity with legacy nytprofhtml
 - Exact DOM match to legacy nytprofhtml
