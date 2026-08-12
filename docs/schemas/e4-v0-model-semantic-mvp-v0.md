@@ -1,7 +1,7 @@
 # E4-v0 model-level semantic equality MVP (v0)
 
 **Board ID:** `E4-V0-MODEL-SEMANTIC-MVP`  
-**Status:** implemented (PR-B10) — **not** full oracle dual equality; **not** wire freeze; **not** full CLI E5 / E4 product smoke  
+**Status:** implemented (PR-B10) — **not** full oracle dual equality; product CLI path: **E4-PRODUCT-CLI-SMOKE-MVP** (PR-B12b)  
 **Depends on:** COL-014 dual-sink (PR-B10a, test/dev-only OQ-4); product v6→ProfileModel ingest (PR-B11a); E4 policy  
 **Evidence:** `cargo test -p nytprof-model e4_v0_`; `./scripts/packaging/e4_v5_v6_semantic_smoke.sh --model-only`
 
@@ -58,12 +58,12 @@ Produced by COL-014 `test_dual_sink` (integer-tick SUB_RETURN/SUB_CALLERS). **No
 NYTPROF_REGEN_E4_DUAL=1 ./scripts/packaging/e4_v5_v6_semantic_smoke.sh --model-only
 ```
 
-Honest skip when cargo missing (fixture presence still checked). Full CLI path **not** implemented (PR-B12b).
+Honest skip when cargo missing (fixture presence still checked). Full CLI product path: `./scripts/packaging/e4_v5_v6_semantic_smoke.sh --full` (PR-B12b).
 
 ## Non-claims / residuals
 
 - Not full `fixtures/v5/*` oracle dual equality (TEST-003 / TEST-008)
-- Not E4 product smoke in offline_gate (PR-B12b)
+- E4 product smoke: see [`e4-product-cli-smoke-mvp-v0.md`](https://github.com/hilather/nytprof-modernization/blob/main/docs/schemas/e4-product-cli-smoke-mvp-v0.md)
 - Not wire freeze / CLI v6 default / product `format=dual`
 - Dual-sink remains **test/dev-only** (OQ-4)
 - Fractional wall-NV dual pairs are **not** E4-equal under v6 u64 truncation; dual fixtures use integer ticks by design

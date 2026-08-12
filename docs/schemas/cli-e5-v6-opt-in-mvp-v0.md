@@ -1,7 +1,7 @@
 # CLI E5 — v6 opt-in product surfaces (MVP v0)
 
 **Board ID:** `CLI-E5-V6-OPT-IN-MVP`  
-**Status:** implemented (PR-B12) — **not** collection default flip (R4); **not** convert/merge (PR-C01/C02); **not** E4 product offline_gate smoke (PR-B12b)  
+**Status:** implemented (PR-B12) — **not** collection default flip (R4); **not** convert/merge (PR-C01/C02); E4 product offline_gate: **E4-PRODUCT-CLI-SMOKE-MVP** (PR-B12b)  
 **Depends on:** product v6→ProfileModel ingest ([`product-v6-profilemodel-ingest-mvp-v0.md`](https://github.com/hilather/nytprof-modernization/blob/main/docs/schemas/product-v6-profilemodel-ingest-mvp-v0.md)); wire freeze ADR-0006; capability self-test MVP  
 **Evidence:** `cargo test -p nytprof-cli --test cli_e5_v6`; `cargo test -p nytprof-cli --test capability_selftest`; `./scripts/packaging/capability_selftest_smoke.sh`
 
@@ -74,7 +74,7 @@ Fail-closed truncated / CRC-corrupt v6 remains under `fail_closed.rs` (PR-B11a).
 
 - **Not** collection `format=v6` as product default (R4)
 - **Not** convert / merge / salvage tooling (PR-C01+; capability stays `false`)
-- **Not** E4 product CLI smoke in offline_gate (PR-B12b)
+- E4 product CLI smoke: [`e4-product-cli-smoke-mvp-v0.md`](https://github.com/hilather/nytprof-modernization/blob/main/docs/schemas/e4-product-cli-smoke-mvp-v0.md)
 - **Not** full oracle dual pairs (TEST-003/TEST-008)
 - **Not** E3-mixed multi-kind product path
 - **Not** full nytprofhtml DOM / FFI / XS Data

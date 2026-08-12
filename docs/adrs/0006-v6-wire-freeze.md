@@ -97,7 +97,7 @@ Product E3 C streams under `fixtures/v6/from-c/**` remain **cross-language produ
 
 ### 6. Plan FMT-002..010 deviation closed for freeze class
 
-COL-007 product E3-EVENT already shipped against the provisional lockfile. This ADR **promotes** that lockfile to **frozen** status for major=6 and records FMT-002..010 class acceptance for the frozen catalog above. Residual **E3-mixed**, full oracle E4, E4 product CLI smoke, convert/merge, CLI v6 **default**, and COL-008 remain out of scope.
+COL-007 product E3-EVENT already shipped against the provisional lockfile. This ADR **promotes** that lockfile to **frozen** status for major=6 and records FMT-002..010 class acceptance for the frozen catalog above. Residual **E3-mixed**, full oracle E4, full oracle E4, convert/merge, CLI v6 **default**, and COL-008 remain out of scope.
 
 ## Exactness and compatibility consequences
 

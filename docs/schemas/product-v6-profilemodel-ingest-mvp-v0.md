@@ -66,7 +66,7 @@ Auto-VERSION inject when body omits VERSION (header major/minor).
 | Stand-in FOOTER missing `string_id` | `from_bytes` / product decode `Err` |
 | Trunc / trailing / CRC-corrupt v6 | model + CLI dump/verify/report fail closed |
 
-**E4-v0** model-level enforcement on dual-sink scaled pairs is ready (PR-B10; `fixtures/e4/dual-sink/`). Full oracle same-workload pairs + offline_gate product CLI smoke remain residual (PR-B12b / TEST-008).
+**E4-v0** model-level enforcement on dual-sink scaled pairs is ready (PR-B10; `fixtures/e4/dual-sink/`). Full oracle same-workload pairs remain residual (TEST-008). E4 product CLI smoke: **E4-PRODUCT-CLI-SMOKE-MVP** (PR-B12b).
 
 ## Non-claims
 

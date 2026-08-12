@@ -155,5 +155,5 @@ Regen compile smoke: `cargo build -p nytprof-format-v6 --example gen_wire_vector
 - **CLI v6 default** / collection default format remain residual (R4).
 - **Default-parse always-inflate** not flipped.
 - **COL-008** deferred non-baseline.
-- Full oracle E4 pairs + E4 product offline_gate residual (PR-B12b).
+- Full oracle E4 pairs residual (TEST-008); E4 product offline_gate ready (PR-B12b).
 - Complete OI-002 key vocabulary not frozen here.

@@ -167,5 +167,5 @@ Values match `nytprof-format-v6` / `nytprof_v6_ids.h`. All multi-byte integers o
 
 - Not CLI v6 default; not default-parse always-inflate.
 - Not multi-OS CI, full R1 HTML/XS/FFI, or performance certification.
-- Not E3-mixed multi-kind C fixtures; not full oracle E4 product smoke.
+- Not E3-mixed multi-kind C fixtures; not full oracle E4 dual (TEST-008); E4 product CLI smoke ready (PR-B12b).
 - Not COL-008; not global string pool (OQ-6 deferred).

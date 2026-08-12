@@ -51,6 +51,10 @@
 #  11. tools/oracle/e3_c_writer_parity.sh when cargo present (COL-007 product
 #      E3-EVENT with C fixtures under fixtures/v6/from-c/**; honest skip if no
 #      cargo). E3-mixed residual.
+#  12. scripts/packaging/e4_v5_v6_semantic_smoke.sh --full when native CLI
+#      available (E4 product CLI smoke on C dual-sink pairs under
+#      fixtures/e4/dual-sink/**; honest skip when native unavailable). Full
+#      oracle dual residual (TEST-003/TEST-008).
 #
 # Primary packaging choice: dual_path_smoke.sh (BUILD dual-path policy entry).
 # Alternatives not re-run here (document only):
@@ -91,6 +95,7 @@ JSON_TOTAL_BASETIME_SMOKE="$ROOT/scripts/packaging/json_total_basetime_smoke.sh"
 CAPABILITY_SMOKE="$ROOT/scripts/packaging/capability_selftest_smoke.sh"
 COLLECTOR_SINK_SMOKE="$ROOT/scripts/packaging/collector_sink_smoke.sh"
 E3_C_WRITER_PARITY="$ROOT/tools/oracle/e3_c_writer_parity.sh"
+E4_V5_V6_SMOKE="$ROOT/scripts/packaging/e4_v5_v6_semantic_smoke.sh"
 
 banner() {
   echo
@@ -331,9 +336,42 @@ else
   ok "step: e3_c fixture presence (cargo skipped)"
 fi
 
+# ---------------------------------------------------------------------------
+# 12. E4 product CLI smoke: real CLIs on v5+v6 dual-sink pairs (when native)
+#     C dual-sink fixtures are committed under fixtures/e4/dual-sink/**.
+# ---------------------------------------------------------------------------
+banner "e4_v5_v6_semantic_smoke --full (E4 product CLI; PR-B12b)"
+if [[ ! -f "$E4_V5_V6_SMOKE" ]]; then
+  fail "required script missing: $E4_V5_V6_SMOKE"
+fi
+if native_cli_available; then
+  # Require committed C dual-sink pairs (native+C product path).
+  for stem in m4 default_calls1 blocks_calls1 calls2_default; do
+    [[ -f "$ROOT/fixtures/e4/dual-sink/${stem}_v5.nytprof" ]] \
+      || fail "missing E4 dual v5 fixtures/e4/dual-sink/${stem}_v5.nytprof"
+    [[ -f "$ROOT/fixtures/e4/dual-sink/${stem}_v6.nytprof" ]] \
+      || fail "missing E4 dual v6 fixtures/e4/dual-sink/${stem}_v6.nytprof"
+  done
+  bash "$E4_V5_V6_SMOKE" --full
+  ok "step: e4_v5_v6_semantic_smoke --full"
+else
+  echo "SKIP: no cargo/prefix/target native CLI — E4 product CLI smoke not run"
+  echo "  (honest skip; same condition as capability / packaging-native steps)"
+  echo "  Dual-sink fixtures still required present:"
+  for stem in m4 default_calls1 blocks_calls1 calls2_default; do
+    [[ -f "$ROOT/fixtures/e4/dual-sink/${stem}_v5.nytprof" ]] \
+      || fail "missing E4 dual v5 fixtures/e4/dual-sink/${stem}_v5.nytprof"
+    [[ -f "$ROOT/fixtures/e4/dual-sink/${stem}_v6.nytprof" ]] \
+      || fail "missing E4 dual v6 fixtures/e4/dual-sink/${stem}_v6.nytprof"
+  done
+  ok "step: e4 dual-sink fixture presence (native CLI skipped)"
+  echo "  To exercise full E4 product smoke: install rustc/cargo and re-run,"
+  echo "  or: ./scripts/packaging/e4_v5_v6_semantic_smoke.sh --full"
+fi
+
 banner "ALL PASSED"
 ok "offline_gate completed successfully"
 echo "NOTE: broader packaging_gate / makemaker_dual_path_smoke are not part of this gate"
-echo "NOTE: COL-007 E3-EVENT done with C; E3-mixed / wire freeze / E4 product smoke (PR-B12b) / full oracle dual / COL-008 residual"
-echo "NOTE: E4-v0 model-level smoke available: ./scripts/packaging/e4_v5_v6_semantic_smoke.sh --model-only (not a gate step yet)"
+echo "NOTE: COL-007 E3-EVENT done with C; E4 product CLI smoke done when native (step 12); residuals: E3-mixed / full oracle dual (TEST-008) / CLI v6 collection default / COL-008"
+echo "NOTE: E4 model-only: ./scripts/packaging/e4_v5_v6_semantic_smoke.sh --model-only"
 exit 0

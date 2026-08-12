@@ -1,13 +1,17 @@
 //! CLI E5 — product report surfaces on v6 (opt-in path; not collection default).
+//! CLI E4 product — v5↔v6 semantic equality via real CLIs on dual-sink pairs.
 //!
 //! Schema: `docs/schemas/cli-e5-v6-opt-in-mvp-v0.md`
+//!         `docs/schemas/e4-product-cli-smoke-mvp-v0.md`
 //! Design: dual-dispatch `ProfileModel::from_path` (PR-B11a) + full CLI surfaces
-//! (report / html / csv / folded / callgrind) on v6 EVENT profiles.
+//! (report / html / csv / folded / callgrind) on v6 EVENT profiles; E4 product
+//! compares the same CLI surfaces on same-run v5 vs v6 dual-sink pairs.
 //!
 //! Honesty:
 //! - Collection default remains v5 (`capability` → `collection_default: v5`).
 //! - Capability does **not** claim convert/merge.
 //! - Magic auto-detect (no extra `--format=v6` flag required for offline tools).
+//! - Dual-sink pairs are scaled synthetic (not full oracle TEST-008 counts).
 
 use std::path::PathBuf;
 use std::process::Command;
@@ -42,9 +46,35 @@ fn fixture_default_calls1_v6() -> PathBuf {
         .join("../../fixtures/e4/dual-sink/default_calls1_v6.nytprof")
 }
 
+fn fixture_default_calls1_v5() -> PathBuf {
+    PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .join("../../fixtures/e4/dual-sink/default_calls1_v5.nytprof")
+}
+
+fn fixture_e4_dual(stem: &str, fmt: &str) -> PathBuf {
+    PathBuf::from(env!("CARGO_MANIFEST_DIR")).join(format!(
+        "../../fixtures/e4/dual-sink/{stem}_{fmt}.nytprof"
+    ))
+}
+
 fn fixture_v6_absolute() -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR"))
         .join("../../fixtures/v6/from-c/absolute.nytprof")
+}
+
+/// Strip path-only `profile` and return the remaining JSON object for E4 compare.
+fn report_json_semantic(path: &str) -> Value {
+    let (code, stdout, stderr) = run_cli(&["report", "--json", path]);
+    assert_eq!(
+        code, 0,
+        "report --json must exit 0 for {path}\nstdout:\n{stdout}\nstderr:\n{stderr}"
+    );
+    let mut v: Value = serde_json::from_str(stdout.trim()).expect("json");
+    assert_eq!(v["ok"], true, "ok true for {path}\n{stdout}");
+    if let Some(obj) = v.as_object_mut() {
+        obj.remove("profile");
+    }
+    v
 }
 
 fn run_cli(args: &[&str]) -> (i32, String, String) {
@@ -242,6 +272,77 @@ fn e5_no_default_flip_and_no_convert_merge_claims() {
     assert_eq!(v["merge"], false, "must not claim merge\n{stdout}");
     assert_eq!(v["v6_decode"], true);
     assert_eq!(v["v6_report"], true);
+}
+
+/// E4 product: report --json equal on all dual-sink pairs (sans profile path).
+#[test]
+fn e4_product_report_json_equal_all_dual_pairs() {
+    for stem in ["m4", "default_calls1", "blocks_calls1", "calls2_default"] {
+        let v5 = fixture_e4_dual(stem, "v5");
+        let v6 = fixture_e4_dual(stem, "v6");
+        assert!(v5.is_file(), "missing {}", v5.display());
+        assert!(v6.is_file(), "missing {}", v6.display());
+        let a = report_json_semantic(v5.to_str().unwrap());
+        let b = report_json_semantic(v6.to_str().unwrap());
+        assert_eq!(
+            a, b,
+            "E4 product: report --json v5≠v6 for stem={stem}\nv5={a}\nv6={b}"
+        );
+    }
+}
+
+/// E4 product: default_calls1 greppable leaf/mid/edge equal on report text + csv.
+#[test]
+fn e4_product_default_calls1_surfaces_v5_v6() {
+    let v5 = fixture_default_calls1_v5();
+    let v6 = fixture_default_calls1_v6();
+    assert!(v5.is_file(), "missing {}", v5.display());
+    assert!(v6.is_file(), "missing {}", v6.display());
+    let p5 = v5.to_str().unwrap();
+    let p6 = v6.to_str().unwrap();
+
+    for (label, path) in [("v5", p5), ("v6", p6)] {
+        let (code, stdout, stderr) = run_cli(&["report", path]);
+        assert_eq!(code, 0, "report {label}: {stderr}\n{stdout}");
+        assert!(
+            stdout.contains("main::leaf") && stdout.contains("returns=15"),
+            "report {label} leaf 15\n{stdout}"
+        );
+        assert!(
+            stdout.contains("main::mid") && stdout.contains("returns=3"),
+            "report {label} mid 3\n{stdout}"
+        );
+
+        let (code, stdout, stderr) = run_cli(&["csv", path]);
+        assert_eq!(code, 0, "csv {label}: {stderr}\n{stdout}");
+        assert!(
+            stdout.contains("main::leaf,15,"),
+            "csv {label} leaf\n{stdout}"
+        );
+        assert!(
+            stdout.contains("main::mid,main::leaf,15,"),
+            "csv {label} edge\n{stdout}"
+        );
+
+        let (code, stdout, stderr) = run_cli(&["folded", path]);
+        assert_eq!(code, 0, "folded {label}: {stderr}\n{stdout}");
+        assert!(
+            stdout
+                .lines()
+                .any(|l| l.contains("main::mid;main::leaf") && l.ends_with(" 15")),
+            "folded {label} mid;leaf 15\n{stdout}"
+        );
+
+        let (code, stdout, stderr) = run_cli(&["callgrind", path]);
+        assert_eq!(code, 0, "callgrind {label}: {stderr}\n{stdout}");
+        assert!(
+            stdout.contains("fn=main::leaf") && stdout.contains("calls=15"),
+            "callgrind {label} leaf calls=15\n{stdout}"
+        );
+
+        let (code, stdout, stderr) = run_cli(&["verify", path]);
+        assert_eq!(code, 0, "verify {label}: {stderr}\n{stdout}");
+    }
 }
 
 /// html --out-dir multi-file site on v6.

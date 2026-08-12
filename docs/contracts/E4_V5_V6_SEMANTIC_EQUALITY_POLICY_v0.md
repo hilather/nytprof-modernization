@@ -1,9 +1,9 @@
 # E4 v5↔v6 semantic equality policy (provisional) — v0
 
-**Status:** provisional policy for dual-equality class **E4** — **E4-v0 model enforcement ready** (PR-B10); **not** dual-equality freeze; **not** full oracle dual  
-**Board IDs:** `E4-V5-V6-SEMANTIC-EQUALITY-POLICY-PROVISIONAL`, `E4-V5-V6-SEMANTIC-EQUALITY-POLICY-MVP`, `E4-V0-MODEL-SEMANTIC-MVP`  
+**Status:** provisional policy for dual-equality class **E4** — **E4-v0 model enforcement ready** (PR-B10); **E4 product CLI smoke ready** (PR-B12b); **not** dual-equality freeze; **not** full oracle dual  
+**Board IDs:** `E4-V5-V6-SEMANTIC-EQUALITY-POLICY-PROVISIONAL`, `E4-V5-V6-SEMANTIC-EQUALITY-POLICY-MVP`, `E4-V0-MODEL-SEMANTIC-MVP`, `E4-PRODUCT-CLI-SMOKE-MVP`  
 **Depends on:** [`DUAL_EQUALITY_READINESS_v0.md`](https://github.com/hilather/nytprof-modernization/blob/main/docs/contracts/DUAL_EQUALITY_READINESS_v0.md); packing ADR [`0001`](https://github.com/hilather/nytprof-modernization/blob/main/docs/adrs/0001-v6-event-body-packing-candidate.md); offline R1-preview residual matrix  
-**Gate:** policy draft **before** COL-007 product claim; **E4-v0** model enforcement on dual-sink pairs (PR-B10); full oracle + CLI product smoke residual
+**Gate:** policy draft **before** COL-007 product claim; **E4-v0** model + **E4 product CLI** on dual-sink pairs (PR-B10/B12b); full oracle dual residual
 
 ---
 
@@ -19,7 +19,7 @@ Define which **advertised** semantic surfaces must match when the same workload 
 | E2 | v6 encode↔decode (preflight ready) |
 | E3 | C writer bytes ↔ Rust decode (EVENT ready; mixed residual) |
 | **E4** | **v5 workload ↔ v6 workload semantic aggregates** (this doc) |
-| E5 | CLI product path on v6 (partial — model/dump/verify; full residual) |
+| E5 | CLI product path on v6 (ready PR-B12; collection default residual) |
 
 ## Required equal surfaces (default-calls1 / blocks-calls1 / calls2-default fixtures)
 
@@ -51,8 +51,8 @@ When both v5 and v6 profiles of the **same workload script and NYTPROF options**
 
 | Stage | Status | How |
 |-------|--------|-----|
-| **E4-v0 (model-level)** | **ready (PR-B10)** | `ProfileModel::from_path` on same-run dual-sink pairs → `e4_v0_aggregates_equal`; no CLI E5 required. Fixtures [`fixtures/e4/dual-sink/`](https://github.com/hilather/nytprof-modernization/blob/main/fixtures/e4/dual-sink/); schema [`e4-v0-model-semantic-mvp-v0.md`](https://github.com/hilather/nytprof-modernization/blob/main/docs/schemas/e4-v0-model-semantic-mvp-v0.md); smoke `./scripts/packaging/e4_v5_v6_semantic_smoke.sh --model-only` |
-| E4 product (CLI) | **open** (PR-B12b) | Real CLIs on both formats in offline_gate |
+| **E4-v0 (model-level)** | **ready (PR-B10)** | `ProfileModel::from_path` on same-run dual-sink pairs → `e4_v0_aggregates_equal`. Fixtures [`fixtures/e4/dual-sink/`](https://github.com/hilather/nytprof-modernization/blob/main/fixtures/e4/dual-sink/); schema [`e4-v0-model-semantic-mvp-v0.md`](https://github.com/hilather/nytprof-modernization/blob/main/docs/schemas/e4-v0-model-semantic-mvp-v0.md); smoke `./scripts/packaging/e4_v5_v6_semantic_smoke.sh --model-only` |
+| **E4 product (CLI)** | **ready (PR-B12b)** | Real native CLIs on both formats: verify + `report --json` equality + E5 surfaces on `default_calls1`; smoke `./scripts/packaging/e4_v5_v6_semantic_smoke.sh --full`; offline_gate step 12 when native; schema [`e4-product-cli-smoke-mvp-v0.md`](https://github.com/hilather/nytprof-modernization/blob/main/docs/schemas/e4-product-cli-smoke-mvp-v0.md) |
 | Full oracle dual pairs | **open** (TEST-003/TEST-008) | Full `fixtures/v5/*` workloads under dual |
 
 ### E4-v0 fixture honesty
@@ -68,15 +68,15 @@ When both v5 and v6 profiles of the **same workload script and NYTPROF options**
 | COL-007 C emitter producing v6 profiles of **full oracle** fixtures | **open** (product E3-EVENT mini matrix done; full oracle workload residual) |
 | Full oracle same-workload → v5 + v6 pair | **open** (COL-014 dual-sink provides same-run fan-out + E4-v0 on scaled shapes; full oracle residual) |
 | COL-014 dual-sink same-run logical equality (test/dev-only, OQ-4) | **harness ready** — `test_dual_sink` on M4 + primary-fixture-shaped streams; not product UX |
-| Automated E4 **product** smoke in offline_gate | **open** (PR-B12b; E4-v0 model smoke is available as packaging script) |
+| Automated E4 **product** smoke in offline_gate | **ready (PR-B12b)** — step 12 when native CLI available; dual-sink scaled pairs only |
 | Tick / basetime volatile normalize for dual profiles | follow COMPAT-002/003 |
 
 ## Non-claims
 
-- Not full E4 aggregate enforcement on **oracle** fixture pairs; not wire freeze; not CLI v6 default.
+- Not full E4 aggregate enforcement on **oracle** fixture pairs; not CLI v6 **collection** default.
 - COL-014 dual-sink is **test/dev-only** (OQ-4) — not advertised product `format=dual`.
 - Not full REPORT HTML DOM parity or XS Data fidelity.
-- E4-v0 does **not** require full CLI E5 report/html/capability matrix.
+- E4 product smoke uses **scaled** dual-sink shapes, not oracle DISCOUNT 818 / TL 916.
 - First-slice R1-preview remains v5-only advertised product collection path.
 
 ## Evidence paths
@@ -85,7 +85,10 @@ When both v5 and v6 profiles of the **same workload script and NYTPROF options**
 - Dual-equality readiness: [`DUAL_EQUALITY_READINESS_v0.md`](https://github.com/hilather/nytprof-modernization/blob/main/docs/contracts/DUAL_EQUALITY_READINESS_v0.md)
 - COL-014 dual-sink schema: [`docs/schemas/collector-dual-sink-mvp-v0.md`](https://github.com/hilather/nytprof-modernization/blob/main/docs/schemas/collector-dual-sink-mvp-v0.md)
 - E4-v0 schema: [`docs/schemas/e4-v0-model-semantic-mvp-v0.md`](https://github.com/hilather/nytprof-modernization/blob/main/docs/schemas/e4-v0-model-semantic-mvp-v0.md)
-- E4-v0 fixtures: [`fixtures/e4/dual-sink/`](https://github.com/hilather/nytprof-modernization/blob/main/fixtures/e4/dual-sink/)
-- E4-v0 smoke: `./scripts/packaging/e4_v5_v6_semantic_smoke.sh --model-only`
+- E4 product CLI schema: [`docs/schemas/e4-product-cli-smoke-mvp-v0.md`](https://github.com/hilather/nytprof-modernization/blob/main/docs/schemas/e4-product-cli-smoke-mvp-v0.md)
+- E4 fixtures: [`fixtures/e4/dual-sink/`](https://github.com/hilather/nytprof-modernization/blob/main/fixtures/e4/dual-sink/)
+- E4 smoke: `./scripts/packaging/e4_v5_v6_semantic_smoke.sh --full` (or `--model-only`)
+- offline_gate step 12 (when native): E4 product CLI smoke
 - E3 harness (writer-bytes → Rust decode): `crates/nytprof-format-v6` module `dual_equality`
 - Model API: `nytprof_model::e4_v0_aggregates_equal`
+- CLI tests: `cargo test -p nytprof-cli e4_product_`

@@ -102,20 +102,10 @@ cargo run -q -p nytprof-cli -- capability --json
 ./scripts/packaging/capability_selftest_smoke.sh
 ```
 
-Expect (human): `OK: native capability self-test`, `decode: yes`, `report: yes`, `verify: yes`, `convert: yes`.  
-Expect (JSON): `ok` / `decode` / `report` / `verify` / `convert` true; `profile_ok` non-null when the default golden fixture is found.
+Expect (human): `OK: native capability self-test`, `decode: yes`, `report: yes`, `verify: yes`, plus E5 honesty `v6_decode: yes` / `v6_report: yes` / `convert: no` / `merge: no` / `collection_default: v5`; `profile_ok` / `v6_profile_ok` non-skip when the default v5 / dual-sink v6 fixtures resolve.  
+Expect (JSON): `ok` / `decode` / `report` / `verify` / `v6_decode` / `v6_report` true; `convert` / `merge` **false**; `collection_default` `"v5"`; `profile_ok` non-null when the default v5 golden is found; `v6_profile_ok` non-null when `fixtures/e4/dual-sink/default_calls1_v6.nytprof` resolves.
 
-Strict convert (PR-C01; integer-tick dual-sink / representable streams):
-
-```bash
-cargo run -q -p nytprof-cli -- convert --to=v6 fixtures/e4/dual-sink/m4_v5.nytprof -o /tmp/m4.v6
-cargo run -q -p nytprof-cli -- convert --to=v5 fixtures/e4/dual-sink/m4_v6.nytprof -o /tmp/m4.v5
-cargo run -q -p nytprof-cli -- verify /tmp/m4.v5
-```
-
-Schema: [convert-strict-mvp-v0.md](https://github.com/hilather/nytprof-modernization/blob/main/docs/schemas/convert-strict-mvp-v0.md)
-
-Schema: [capability-selftest-mvp-v0.md](https://github.com/hilather/nytprof-modernization/blob/main/docs/schemas/capability-selftest-mvp-v0.md)
+Schema: [capability-selftest-mvp-v0.md](https://github.com/hilather/nytprof-modernization/blob/main/docs/schemas/capability-selftest-mvp-v0.md) (E5 fields); [cli-e5-v6-opt-in-mvp-v0.md](https://github.com/hilather/nytprof-modernization/blob/main/docs/schemas/cli-e5-v6-opt-in-mvp-v0.md)
 
 ### Native aggregates JSON (NATIVE-AGG-JSON)
 
@@ -602,7 +592,9 @@ Also on blocks-calls1 when asserted: leaf returns **15**, mid returns **3** (sam
 | `FMT-V6-EVENT-BODY-UNKNOWN-OPTIONAL-SKIP-MVP` | **done** | Length-framed unknown-optional skip + always-inflate EVENT/mixed tests (order+fields; SOURCE co-kind). **Before full COL-007.** |
 | `COL-001-SINK-MVP` | **done (scaffold)** | Overlay `collector/` semantic sink + counting + v5 wire; smoke offline_gate step 10; **not** live hooks |
 | `COL-014-DUAL-SINK-MVP` | **done (test/dev-only)** | Same-run dual fan-out v5+v6 (OQ-4 not product UX); `test_dual_sink`; schema `collector-dual-sink-mvp-v0.md`; full oracle dual residual; feeds E4-v0 model pairs |
-| `E4-V0-MODEL-SEMANTIC-MVP` | **done** | E4-v0 model-level v5↔v6 aggregates on dual-sink pairs; `e4_v0_*` tests + `e4_v5_v6_semantic_smoke.sh --model-only`; full oracle + product CLI residual (PR-B12b) |
+| `E4-V0-MODEL-SEMANTIC-MVP` | **done** | E4-v0 model-level v5↔v6 aggregates on dual-sink pairs; `e4_v0_*` tests + `e4_v5_v6_semantic_smoke.sh --model-only`; full oracle residual (TEST-008) |
+| `E4-PRODUCT-CLI-SMOKE-MVP` | **done** | E4 product CLI smoke: real CLIs on v5+v6 dual pairs; `e4_v5_v6_semantic_smoke.sh --full`; offline_gate step 12 when native; schema `e4-product-cli-smoke-mvp-v0.md` |
+| `CLI-E5-V6-OPT-IN-MVP` | **done** | CLI E5 report/html/csv/folded/callgrind on v6; capability `v6_decode`/`v6_report`; no convert/merge claim; `collection_default: v5`; schema `cli-e5-v6-opt-in-mvp-v0.md` |
 | `COL-002-LIFECYCLE-MVP` | **done (scaffold)** | Explicit sink lifecycle + emit gates; **not** COL-015 full fork/signal matrix |
 | `COL-003-SEQ-MVP` | **done (scaffold)** | Internal gapless logical seq; not on default v5 wire |
 | `COL-004-FAST-PATH-MVP` | **done (scaffold)** | No-alloc TIME_LINE/TIME_BLOCK batch append + `nytp_fast_emit_*`; light microbench engineering only — **not** BENCH cert |
