@@ -241,7 +241,7 @@ cargo test -p nytprof-ffi
 | Claim level | Meaning |
 |-------------|---------|
 | **Offline R0 / R1-preview ready** | Documented surfaces + gates above pass on this host when cargo/oracle fixtures are present; dual-path legacy still works without Cargo |
-| **Full R1 ready (MVP product scope)** | Per **ADR-0003** + **PR-A10**: required OQ-2 CLOSE **A05/A06 MVP** landed; preferred CLOSE **A07/A08 MVP/depth** landed; HTML **A01/A02** closed with residual honesty for **A03 flame** + WAIVE classes; public perf **WAIVED**. Explicit non-claims: COL-007, wire freeze, CLI v6 default, full oracle DOM, full BUILD-003, full RUST-010 beyond MVP, R3–R4 defaults |
+| **Full R1 ready (MVP product scope)** | Per **ADR-0003** + **PR-A10**: required OQ-2 CLOSE **A05/A06 MVP** landed; preferred CLOSE **A07/A08 MVP/depth** landed; HTML **A01/A02** closed with residual honesty for **Shared JS + A03 flame OPEN CLOSE residual** + WAIVE classes; public perf **WAIVED**. Explicit non-claims: COL-007, wire freeze, CLI v6 default, full oracle DOM, full BUILD-003, full RUST-010 beyond MVP, R3–R4 defaults |
 | **Not claimed** | Full multi-OS product certification; CPAN upload; performance SLOs; v6 collection / COL-007 encoder; full RUST-010 ABI freeze / production dylib install; full PERL-004/005 pure-XS / COMPAT-007; full oracle `nytprofhtml` DOM; Shared JS/tablesorter; native flame site (A03) |
 
 ### Operator re-verify (preview)
