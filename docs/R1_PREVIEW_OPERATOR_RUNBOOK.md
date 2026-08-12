@@ -399,6 +399,23 @@ R2-preview is an **opt-in** horizon on top of the R0/R1-preview stack. Authorita
 
 Frozen semantic counts (counts exact; tick/time strings only under COMPAT-003):
 
+
+### 7c. R2-stable honesty (`R2-STABLE-READINESS-CUT`)
+
+R2-stable is the Phase C certification cut on the **integrated** stack (PR-C01..C04 + R2-preview base). Authoritative release notes: [RELEASE_NOTES_R2_STABLE.md](https://github.com/hilather/nytprof-modernization/blob/main/docs/RELEASE_NOTES_R2_STABLE.md). Dual-equality checklist: [DUAL_EQUALITY_READINESS_v0.md](https://github.com/hilather/nytprof-modernization/blob/main/docs/contracts/DUAL_EQUALITY_READINESS_v0.md).
+
+| Claim under R2-stable | Status |
+|-----------------------|--------|
+| v6 offline CLI (E5) opt-in read/report | **yes** |
+| Strict convert + merge/repack/salvage | **yes** (capability true) |
+| COL-015 fork/PID MVP | **yes** (stress suite; oracle TEST-018 residual) |
+| SEC-FUZZ offline package | **yes** (not full SEC-002 continuous) |
+| P1/P2 public performance SLOs | **waived** (methodology + light harness only) |
+| Collection / engine defaults (R3/R4) | **not claimed** (`collection_default: v5`) |
+| E3-mixed / full oracle E4 | **residual** |
+| CPAN upload | **not claimed** |
+
+
 ### `fixtures/v5/default-calls1` (leaf / mid)
 
 | Check | Expected |

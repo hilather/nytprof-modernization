@@ -1,10 +1,12 @@
 # R1 residual readiness matrix (provisional) — v0
 
-**Status:** provisional readiness snapshot for **offline R0 / R1-preview** vs residual work for **full R1**, plus **R2-preview opt-in honesty** (PR-B13)  
-**Board ID:** `R1-RESIDUAL-MATRIX` (honesty sync: `R1-HONESTY-SYNC`; R2-preview cut: `R2-PREVIEW-READINESS-CUT`; P1/P2 methodology: `R2-P1P2-METHODOLOGY`)  
+**Status:** provisional readiness snapshot for **offline R0 / R1-preview**, **R2-preview opt-in**, and **R2-stable** (PR-C05 honesty cut); residual work for full R1 / R3 / R4
+**Board ID:** `R1-RESIDUAL-MATRIX` (honesty: `R1-HONESTY-SYNC`; R2-preview: `R2-PREVIEW-READINESS-CUT`; R2-stable: `R2-STABLE-READINESS-CUT`; P1/P2: `R2-P1P2-METHODOLOGY`)
+| `SEC-FUZZ-HARDENING-MVP` | **done** (package MVP) | PR-C03 security/fuzz package: contract [`SECURITY_FUZZ_HARDENING_PACKAGE_v0.md`](https://github.com/hilather/nytprof-modernization/blob/main/docs/contracts/SECURITY_FUZZ_HARDENING_PACKAGE_v0.md); schema [`security-fuzz-hardening-mvp-v0.md`](https://github.com/hilather/nytprof-modernization/blob/main/docs/schemas/security-fuzz-hardening-mvp-v0.md); v6 `tests/decode_fuzz.rs`; smoke `tools/oracle/selftest_security_fuzz.sh`; offline_gate step 12 when cargo. **Not** full SEC-002 continuous fuzz; COL-015 residual. |
+| Full continuous fuzz / SEC-012 release sign-off | **SEC-002** full, **SEC-012**; board **SEC-FUZZ-HARDENING-MVP** is package MVP only | Offline deterministic batteries + threat catalogue (PR-C03) do **not** close continuous fuzz jobs, sanitizer matrices, or independent release security review | Package MVP ready; residual honesty in [`SECURITY_FUZZ_HARDENING_PACKAGE_v0.md`](https://github.com/hilather/nytprof-modernization/blob/main/docs/contracts/SECURITY_FUZZ_HARDENING_PACKAGE_v0.md) |
 **Date:** 2026-08-07 (R2-preview amendment 2026-08-12)  
 **Depends on:** REPORT-CONTRACT-FREEZE, CI-OFFLINE-GATE, CAPABILITY-SELFTEST, ENGINE-AUTO-SMOKE, PERL-* JSONL / engine rows (incl. SUB_ENTRY multiplicity), NATIVE-AGG-JSON, **JSON-NATIVE-STREAM-MVP**, **JSON-TIME-BLOCK-MVP**, **JSON-REPORT-INCOMPLETE-FAILCLOSED**, **JSON-SUBDEF-SOURCE-MVP**, **JSON-META-FILES-MVP**, **JSON-EVENT-COUNTS-MVP**, **JSON-FILE-BASENAME-MVP**, **JSON-TOTAL-EVENTS-MVP**, **JSON-ATTR-BASETIME-MVP**, NATIVE-QUERY-JSON-CROSS / **NATIVE-QUERY-JSON-CROSS-EXPAND** / **NATIVE-QUERY-JSON-CROSS-BLOCKS** / **NATIVE-QUERY-JSON-CROSS-META** / **NATIVE-QUERY-JSON-CROSS-TIMEBLOCK** / **NATIVE-QUERY-JSON-CROSS-COUNTS** / **NATIVE-QUERY-JSON-CROSS-TOTAL**, JSON-SUB-ENTRY-MVP, JSON-BLOCKS-MVP, QUERY-JSON-*, BUILD-DUAL-PATH / BUILD-MAKEMAKER-OPT, DUMP-PARITY-EXPAND, DECODE-FUZZ-MVP, INCOMPLETE-STREAM, **FMT-V6-HEADER-PROVISIONAL** / **FMT-V6-HEADER-PARSE-MVP** / **FMT-V6-CHUNK-PROVISIONAL** / **FMT-V6-CHUNK-PARSE-MVP** / **FMT-V6-VARINT-PROVISIONAL** / **FMT-V6-VARINT-MVP** / **FMT-V6-SVARINT-PROVISIONAL** / **FMT-V6-SVARINT-MVP** / **FMT-V6-STRING-PROVISIONAL** / **FMT-V6-STRING-MVP** / **FMT-V6-TLV-PROVISIONAL** / **FMT-V6-TLV-MVP** / **FMT-V6-TLV-REGION-PROVISIONAL** / **FMT-V6-TLV-REGION-MVP** / **FMT-V6-FILE-PREFIX-PROVISIONAL** / **FMT-V6-FILE-PREFIX-MVP** / **FMT-V6-PREFIX-CHUNK-STREAM-PROVISIONAL** / **FMT-V6-PREFIX-CHUNK-STREAM-MVP** / **FMT-V6-EVENT-BODY-PROVISIONAL** / **FMT-V6-EVENT-BODY-MVP** / **FMT-V6-MINI-PROFILE-PROVISIONAL** / **FMT-V6-MINI-PROFILE-MVP** / **FMT-V6-MULTI-CHUNK-EVENT-PROVISIONAL** / **FMT-V6-MULTI-CHUNK-EVENT-MVP** / **FMT-V6-SOURCE-BODY-PROVISIONAL** / **FMT-V6-SOURCE-BODY-MVP** / **FMT-V6-INDEX-BODY-PROVISIONAL** / **FMT-V6-INDEX-BODY-MVP** / **FMT-V6-SUMMARY-BODY-PROVISIONAL** / **FMT-V6-SUMMARY-BODY-MVP** / **FMT-V6-FOOTER-BODY-PROVISIONAL** / **FMT-V6-FOOTER-BODY-MVP** / **FMT-V6-CRC-PROVISIONAL** / **FMT-V6-CRC-MVP** / **FMT-V6-PAYLOAD-ZLIB-PROVISIONAL** / **FMT-V6-PAYLOAD-ZLIB-MVP** / **FMT-V6-PAYLOAD-ZSTD-PROVISIONAL** / **FMT-V6-PAYLOAD-ZSTD-MVP** / **FMT-V6-PAYLOAD-LZ4-PROVISIONAL** / **FMT-V6-PAYLOAD-LZ4-MVP** / **FMT-V6-COMPRESSED-PROFILE-PROVISIONAL** / **FMT-V6-COMPRESSED-PROFILE-MVP** / **FMT-V6-MULTI-CHUNK-COMPRESSED-PROVISIONAL** / **FMT-V6-MULTI-CHUNK-COMPRESSED-MVP** / **FMT-V6-COMPRESSED-MIXED-PROVISIONAL** / **FMT-V6-COMPRESSED-MIXED-MVP** / **FMT-V6-PER-KIND-CODEC-PROVISIONAL** / **FMT-V6-PER-KIND-CODEC-MVP** / **FMT-V6-MULTI-CHUNK-KIND-PROVISIONAL** / **FMT-V6-MULTI-CHUNK-KIND-MVP** / **FMT-V6-MULTI-CHUNK-SOURCE-PROVISIONAL** / **FMT-V6-MULTI-CHUNK-SOURCE-MVP** / **FMT-V6-MULTI-CHUNK-INDEX-PROVISIONAL** / **FMT-V6-MULTI-CHUNK-INDEX-MVP** / **FMT-V6-MULTI-CHUNK-SUMMARY-PROVISIONAL** / **FMT-V6-MULTI-CHUNK-SUMMARY-MVP** / **FMT-V6-MID-RECORD-SPAN-PROVISIONAL** / **FMT-V6-MID-RECORD-SPAN-MVP** / **FMT-V6-MID-RECORD-SOURCE-PROVISIONAL** / **FMT-V6-MID-RECORD-SOURCE-MVP** / **FMT-V6-MID-RECORD-INDEX-PROVISIONAL** / **FMT-V6-MID-RECORD-INDEX-MVP** / **FMT-V6-MID-RECORD-SUMMARY-PROVISIONAL** / **FMT-V6-MID-RECORD-SUMMARY-MVP** / **FMT-V6-DECODED-CHUNK-PROVISIONAL** / **FMT-V6-DECODED-CHUNK-MVP** / **FMT-V6-DECODED-STREAM-PROVISIONAL** / **FMT-V6-DECODED-STREAM-MVP** / **FMT-V6-DECODED-EVENT-PROVISIONAL** / **FMT-V6-DECODED-EVENT-MVP** / **FMT-V6-DECODED-SOURCE-PROVISIONAL** / **FMT-V6-DECODED-SOURCE-MVP** / **FMT-V6-DECODED-INDEX-PROVISIONAL** / **FMT-V6-DECODED-INDEX-MVP** / **FMT-V6-DECODED-SUMMARY-PROVISIONAL** / **FMT-V6-DECODED-SUMMARY-MVP** / **FMT-V6-DECODED-MIXED-PROVISIONAL** / **FMT-V6-DECODED-MIXED-MVP** / **FMT-V6-DECODED-MIXED-MULTI-CHUNK-PROVISIONAL** / **FMT-V6-DECODED-MIXED-MULTI-CHUNK-MVP** / **FMT-V6-DECODED-MIXED-MID-RECORD-PROVISIONAL** / **FMT-V6-DECODED-MIXED-MID-RECORD-MVP** / **FMT-V6-DECODED-MIXED-MID-RECORD-SOURCE-PROVISIONAL** / **FMT-V6-DECODED-MIXED-MID-RECORD-SOURCE-MVP** (COL-007 runway preflight only), and related parity gates below  
-**Gate:** offline R0/R1-preview **before** full R1; COL-007 product E3-EVENT **done** (PR-B09); wire freeze **done** (PR-B11 / ADR-0006); COL-009 C baseline **reaffirmed** (PR-B13 / ADR-0007); R2-preview **opt-in** packaging honesty (PR-B13); E3-mixed / COL-008 / convert-merge residual; **not** R2-stable / R3 / R4
+**Gate:** offline R0/R1-preview **before** full R1; COL-007 product E3-EVENT **done** (PR-B09); wire freeze **done** (PR-B11 / ADR-0006); COL-009 C baseline **reaffirmed** (PR-B13 / ADR-0007); R2-preview **opt-in** packaging honesty (PR-B13); E3-mixed / COL-008 / convert/merge **done** (PR-C01/C02 residual for lossy/packing only); R2-stable cut **PR-C05** (tools/security/perf honesty); **not** R3 / R4
 
 ---
 
@@ -16,7 +18,7 @@ It is **not**:
 
 - a release certification or CPAN readiness statement;
 - a performance certification (see residual row; light bench only);
-- a CLI v6 **collection** default or R2-stable claim (wire **IDs** are frozen by ADR-0006; writer backend is C by ADR-0007; E3-mixed / COL-008 / convert-merge residual);
+- a CLI v6 **collection** default or R2-stable claim (wire **IDs** are frozen by ADR-0006; writer backend is C by ADR-0007; E3-mixed / COL-008 / convert/merge **done** (PR-C01/C02 residual for lossy/packing only));
 - permission to flip defaults (`engine=auto` product policy, format defaults — charter R3/R4).
 
 **Operator runbook (offline R0 / R1-preview stack):**  
@@ -116,6 +118,10 @@ Install aliases: `scripts/packaging/install_native.sh` → `prefix/bin/nytprof-c
 | Dual-path policy | `docs/BUILD_SUPPORT_POLICY.md` | `scripts/packaging/dual_path_smoke.sh` | legacy-only without Cargo; optional-native when cargo present |
 | MakeMaker facade | `Makefile.PL` | `scripts/packaging/makemaker_dual_path_smoke.sh` | candidate entry only — **not** full BUILD-003 XS CPAN dual-build |
 | Offline R1 gate | `scripts/ci/offline_gate.sh` | `make offline-gate` | cargo tests (honest skip) → harness → dual_path → engine_auto_fallback → **perl_jsonl_data_all** (incl. SUB_ENTRY multiplicity) → **perl_query_json** (CI-QUERY-JSON-GATE; required pure-Perl golden `--jsonl`) → **json_sub_entry** / **json_blocks** / **json_subdef_source** / **json_meta_files** / **json_time_block** (JSON-SUBDEF-SOURCE-MVP / **JSON-META-FILES-MVP** / **JSON-TIME-BLOCK-MVP** steps 6b–6i) → **native_agg_json** + **json_native_stream** + **json_report_incomplete** when native (**NATIVE-AGG-JSON** / **JSON-NATIVE-STREAM-MVP** / **JSON-REPORT-INCOMPLETE-FAILCLOSED**) → **native_query_json_cross** when native (**NATIVE-QUERY-JSON-CROSS** / **CROSS-EXPAND** / **CROSS-BLOCKS** / **CROSS-META** / **CROSS-TIMEBLOCK** / **CROSS-TOTAL**, shared fields incl. `sub_entry` on default-calls1 + calls2 **27** + blocks-calls1 **780**/**810** + `time_block_events` **0**/**916** + stream/PID + A9/A8 + meta samples on default-calls1) → capability_selftest when cargo/prefix/target present (CI-CAPABILITY-GATE; honest skip otherwise) → **collector_sink** step 10 (COL-001..007 + COL-014 dual; honest CC skip) → **e3_c_writer_parity** step 11 when cargo (**COL-007 product E3-EVENT**; E3-mixed residual) → **e4_v5_v6_semantic_smoke --full** step 12 when native (**E4 product CLI** on dual-sink pairs; honest skip otherwise; dual-sink fixtures required; full oracle dual residual TEST-008). **Not** multi-OS CI (**BUILD-006**) |
+| `COL-015-FORK-PID-MVP` | **done (scaffold)** | Fork/PID protocol with buffered sinks: `nytp_fork_prepare/resume_*`, batch preflush + child residual discard, addpid path helper, v5/v6 child reinit, dual reinit, stress `test_fork_pid` (incl. POSIX fork). Schema [`docs/schemas/collector-fork-pid-mvp-v0.md`](https://github.com/hilather/nytprof-modernization/blob/main/docs/schemas/collector-fork-pid-mvp-v0.md); smoke step 10 artifacts. **Residuals:** full **TEST-018** oracle forkdepth/addpid/merge; live XS hooks; mid-deflate continue-in-child vs 6.15; product option wiring; OI-003-05 file-switch; multi-OS fork stress. |
+| `COL-014-DUAL-SINK-MVP` | **done** (test/dev-only) | Same-run dual writer fan-out v5+v6 (OQ-4 **not** product UX): `nytp_dual_sink_*`, `test_dual_sink`, schema [`docs/schemas/collector-dual-sink-mvp-v0.md`](https://github.com/hilather/nytprof-modernization/blob/main/docs/schemas/collector-dual-sink-mvp-v0.md); smoke step 10. Logical equality on M4 + primary-fixture-shaped streams. **Residuals:** full fixtures oracle dual (TEST-003/TEST-008); full **TEST-018** fork under dual (unit dual+batch fork covered by **COL-015-FORK-PID-MVP**); E4 aggregate enforcement; product `format=dual` rejected. |
+| `COL-002-LIFECYCLE-MVP` | **done (scaffold)** | Explicit sink lifecycle + emit gates; COL-015 fork/PID **protocol MVP done** (`nytp_fork_*` / `test_fork_pid`); residual full **TEST-018** oracle forkdepth/addpid + signal/file-switch matrix |
+| COL-001..007 + COL-014 dual + COL-015 fork scaffold (not product collector) | **COL-001-SINK-MVP** + **COL-002-LIFECYCLE-MVP** + **COL-003-SEQ-MVP** + **COL-004-FAST-PATH-MVP** + **COL-005-BATCH-MVP** + **COL-006-V5-WIRE-MVP** + **COL-007-ABS-MVP** + **COL-007-CODEC-MVP** + **COL-007-PACK-MVP** + **TEST-003-FAKE-CLOCK-MVP** + **COL-014-DUAL-SINK-MVP** + **COL-015-FORK-PID-MVP** board **done** (scaffold) | Overlay `collector/` semantic sink + lifecycle + gapless seq + **bounded batch + no-alloc stmt fast path** + **real v5 wire writer (zlib)** + **absolute v6 writer (EVENT codecs NONE/ZLIB/ZSTD/LZ4 + multi-chunk + CRC + ADR-0001 packing + ADR-0002 FOOTER dict + mid-stream region)** + fake-clock/M4 **mini** harness + **fork/PID protocol with buffered sinks** (`nytp_fork_*`, batch preflush/discard, v5/v6 child reinit, POSIX fork stress) + unit tests + offline_gate step 10. **Residuals:** no live Perl/XS hooks; full M4 oracle corpus residual; full TEST-018 oracle forkdepth/addpid residual; board **COL-007** **done** (E3-EVENT PR-B09; E3-mixed residual); **COL-014 dual-sink test/dev-only (OQ-4)** ready — **not** product UX; full fixtures dual equality residual (TEST-003/TEST-008). Evidence: [`collector/README.md`](https://github.com/hilather/nytprof-modernization/blob/main/collector/README.md), [`docs/schemas/collector-v5-wire-mvp-v0.md`](https://github.com/hilather/nytprof-modernization/blob/main/docs/schemas/collector-v5-wire-mvp-v0.md), [`docs/schemas/collector-v6-absolute-wire-mvp-v0.md`](https://github.com/hilather/nytprof-modernization/blob/main/docs/schemas/collector-v6-absolute-wire-mvp-v0.md), [`docs/schemas/collector-v6-codecs-multi-chunk-crc-mvp-v0.md`](https://github.com/hilather/nytprof-modernization/blob/main/docs/schemas/collector-v6-codecs-multi-chunk-crc-mvp-v0.md), [`docs/schemas/collector-v6-packing-footer-dict-mvp-v0.md`](https://github.com/hilather/nytprof-modernization/blob/main/docs/schemas/collector-v6-packing-footer-dict-mvp-v0.md), [`docs/schemas/collector-dual-sink-mvp-v0.md`](https://github.com/hilather/nytprof-modernization/blob/main/docs/schemas/collector-dual-sink-mvp-v0.md), [`docs/schemas/collector-fork-pid-mvp-v0.md`](https://github.com/hilather/nytprof-modernization/blob/main/docs/schemas/collector-fork-pid-mvp-v0.md), `scripts/packaging/collector_sink_smoke.sh` | R2 runway scaffolding; **not** a claim that collection is modernized in-process
 | Install prefix | `scripts/packaging/install_native.sh` → `prefix/bin/` | `scripts/packaging/native_install_smoke.sh` | stable CLI install for Perl bridge discovery |
 | Broader packaging suite | `scripts/packaging/packaging_gate.sh` | legacy + engine + Perl dispatch + native when present | Super-set of dual-path; not the offline_gate packaging primary |
 
@@ -172,7 +178,7 @@ These items are **not** advertised as ready under offline R0 / R1-preview. Do no
 | E4-v0 model-level v5↔v6 aggregates | **E4-V0-MODEL-SEMANTIC-MVP** **done** (PR-B10) | Dual-sink same-run pairs [`fixtures/e4/dual-sink/`](https://github.com/hilather/nytprof-modernization/blob/main/fixtures/e4/dual-sink/) → `ProfileModel::from_path` → `e4_v0_aggregates_equal`; `cargo test -p nytprof-model e4_v0_`; smoke `./scripts/packaging/e4_v5_v6_semantic_smoke.sh --model-only`. Schema [`docs/schemas/e4-v0-model-semantic-mvp-v0.md`](https://github.com/hilather/nytprof-modernization/blob/main/docs/schemas/e4-v0-model-semantic-mvp-v0.md). | **Not** full oracle dual (TEST-003/TEST-008); dual-sink test/dev-only; product CLI: **E4-PRODUCT-CLI-SMOKE-MVP** |
 | E4 product CLI smoke | **E4-PRODUCT-CLI-SMOKE-MVP** **done** (PR-B12b) | Real CLIs on dual-sink pairs; offline_gate step 12; schema [`docs/schemas/e4-product-cli-smoke-mvp-v0.md`](https://github.com/hilather/nytprof-modernization/blob/main/docs/schemas/e4-product-cli-smoke-mvp-v0.md). | Full oracle dual residual |
 | COL-009 C baseline reaffirm | **COL-009** / ADR-0007 **done** (PR-B13) | Production v6 writer backend = **C** (COL-007); COL-008 remains deferred non-baseline. ADR [`docs/adrs/0007-production-v6-writer-backend-c-baseline.md`](https://github.com/hilather/nytprof-modernization/blob/main/docs/adrs/0007-production-v6-writer-backend-c-baseline.md). | **Not** COL-008 bake-off; **not** public perf claim |
-| Convert / merge / salvage tooling | plan TOOL convert/merge; PR-C01/C02 class | **R2-preview residual** on this branch — capability `convert`/`merge` **false**. Parallel tracks may implement tools; **do not advertise** until capability + gates green. | Honest residual even if convert lands elsewhere first |
+| Convert / merge / salvage tooling | plan TOOL convert/merge; PR-C01/C02 class | **R2-preview **done** (PR-C01/C02; lossy residual)** on this branch — capability `convert`/`merge` **false**. Parallel tracks may implement tools; **do not advertise** until capability + gates green. | Honest **done** (PR-C01/C02; lossy residual) even if convert lands elsewhere first |
 | No full MakeMaker XS dual-build CPAN | **BUILD-003** (full) | Candidate `Makefile.PL` facade only (**BUILD-MAKEMAKER-OPT** done) | Not a complete XS CPAN tarball dual-build |
 | No multi-OS CI matrix | **BUILD-006** | Single-host offline gate only | `offline_gate.sh` is not multi-OS CI |
 | No performance certification claims | WP-13 / BENCH-001; plan P1/P2 | **Public claims waived** until R2-stable gates green. Methodology + light harness only (PR-C04). | [`docs/BENCH_NOTES.md`](https://github.com/hilather/nytprof-modernization/blob/main/docs/BENCH_NOTES.md) (P1/P2 methodology), `tools/bench/light_bench.sh` (`size`, `collector_micro`, dump/report proxies) — **no public SLOs / “% faster”** |
@@ -195,7 +201,7 @@ Charter **R2-preview** after Track B (PR-B13 packaging honesty). **Not** R2-stab
 | E4-v0 + E4 product CLI | **ready** (scaled dual-sink) | offline_gate step 12; full oracle residual |
 | COL-014 dual-sink | **test/dev only** | OQ-4; not product UX |
 | Dual-path legacy v5 / 6.15 | **unchanged** | dual_path_smoke; no `crates/` on oracle PERL5LIB |
-| Convert / merge / salvage | **residual** | capability false |
+| Convert / merge / salvage | **done** (PR-C01/C02; lossy residual) | capability `convert`/`merge`/`repack`/`salvage` true |
 | E3-mixed / COL-008 / COL-015 / R3 / R4 | **residual / not started** | see residual rows |
 
 ### R2-preview residual (explicit)
@@ -218,8 +224,8 @@ Charter **R2-preview** after Track B (PR-B13 packaging honesty). **Not** R2-stab
 | **Offline R0 / R1-preview ready** | Documented surfaces + gates above pass on this host when cargo/oracle fixtures are present; dual-path legacy still works without Cargo |
 | **R2-preview ready (opt-in)** | v6 offline CLI surfaces + COL-007 E3-EVENT + wire freeze + dual-equality E3-EVENT/E4 product/E5 as listed; collection default still v5; convert/merge **not** claimed |
 | **Full R1 ready** | Residual table closed (or explicitly waived by ADR) with product packaging, API materializers, report completeness, and certification policy as required by the plan DoD |
-| **R2-stable ready** | Phase C exit (convert as advertised, COL-015, security/perf/platform as claimed) — **not** this cut |
-| **Not claimed** | CPAN upload, performance SLOs / **P1–P4 certification**, R3/R4 default flips, convert/merge on this branch, COL-008 baseline |
+| **R2-stable ready** | **done (PR-C05 honesty cut)** — convert/merge/salvage, COL-015 MVP, SEC-FUZZ offline, P1/P2 methodology; residuals: E3-mixed, full oracle E4, public perf, R3/R4 |
+| **Not claimed** | CPAN upload, performance SLOs / **P1–P4 certification**, R3/R4 default flips, lossy convert, COL-008 baseline |
 
 ### Operator re-verify (preview)
 
@@ -478,3 +484,38 @@ bash tools/oracle/report_semantic_parity.sh
 ## Revision rule
 
 Expanding or shrinking advertised readiness, or closing a residual row, requires a **matrix revision** (new vN or explicit amendment), board update, and linked evidence. This v0 is a **provisional readiness snapshot**, not release certification.
+
+
+### Board IDs — R2-stable tooling (PR-C01 / PR-C02)
+
+| Board ID | Status | Notes |
+|----------|--------|-------|
+| `TOOL-CONVERT-STRICT-MVP` | **done** (PR-C01) | Strict v5↔v6 convert; capability `convert: yes` |
+| `TOOL-MERGE-REPACK-SALVAGE-MVP` | **done** (PR-C02) | Merge/repack/salvage; capability markers true |
+
+## R2-stable ready + residual (PR-C05)
+
+**Board ID:** `R2-STABLE-READINESS-CUT`  
+**Release notes:** [`docs/RELEASE_NOTES_R2_STABLE.md`](https://github.com/hilather/nytprof-modernization/blob/main/docs/RELEASE_NOTES_R2_STABLE.md)
+
+| Item | Status under R2-stable |
+|------|------------------------|
+| Wire freeze ADR-0006 + vectors | **done** |
+| Convert / merge / repack / salvage | **done** (PR-C01/C02); capability true; lossy residual |
+| COL-015 fork/PID MVP | **done** (PR-C02b stress); TEST-018 oracle residual |
+| SEC-FUZZ offline package | **done** (PR-C03); SEC-002 continuous residual |
+| P1/P2 methodology | **done** (PR-C04); **public claims waived** |
+| E3-mixed multi-kind C | **residual** |
+| Full oracle E4 dual | **residual** (TEST-008) |
+| COL-008 / R3 / R4 | deferred / not claimed |
+| Dual-path legacy | unchanged |
+
+| Board ID | Status | Notes |
+|----------|--------|-------|
+| `R2-STABLE-READINESS-CUT` | **done** (PR-C05) | Promote R2-preview → R2-stable honesty; integrate Phase C |
+| `TOOL-CONVERT-STRICT-MVP` | **done** (PR-C01) | Strict convert; capability `convert: yes` |
+| `TOOL-MERGE-REPACK-SALVAGE-MVP` | **done** (PR-C02) | Merge/repack/salvage |
+| `COL-015-FORK-PID-MVP` | **done** (PR-C02b) | Fork protocol + stress MVP |
+| `SEC-FUZZ-HARDENING-MVP` | **done** (PR-C03) | Offline security/fuzz package |
+| `R2-P1P2-METHODOLOGY` | **done** (PR-C04) | Methodology only; no public SLOs |
+

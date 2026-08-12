@@ -105,7 +105,7 @@ Do **not** advertise under this cut:
 | Preview operators | Keep using v5 profiles by default. Offline tools accept v6 when present. `./scripts/ci/offline_gate.sh` remains the primary gate. Never put `crates/` on oracle `PERL5LIB`. |
 | Embedders / collectors | Production v6 writer backend is **C** (ADR-0007). Dual-path legacy without C/Cargo still required. |
 | Tooling authors | Do not assume convert/merge until capability reports them true with green tools. Prefer model-level equality over re-encoding guesses. |
-| Release engineers | This is an **opt-in R2-preview** honesty cut. R2-stable is a separate cut (Phase C / PR-C05 class). |
+| Release engineers | This is an **opt-in R2-preview** honesty cut. R2-stable honesty cut: [`docs/RELEASE_NOTES_R2_STABLE.md`](https://github.com/hilather/nytprof-modernization/blob/main/docs/RELEASE_NOTES_R2_STABLE.md) (PR-C05). |
 
 ---
 

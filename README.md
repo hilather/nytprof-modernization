@@ -9,7 +9,8 @@ Hybrid modernization of [Devel::NYTProf](https://metacpan.org/dist/Devel-NYTProf
 | [`AGENTS.md`](https://github.com/hilather/nytprof-modernization/blob/main/AGENTS.md) | **Agent hints** — regression tests, docs, release notes, perf/size, benchmarks vs Perl & prior versions |
 | [`docs/PROGRAM_CHARTER.md`](https://github.com/hilather/nytprof-modernization/blob/main/docs/PROGRAM_CHARTER.md) | Mission, release levels, non-goals |
 | [`docs/FIRST_SLICE_BOARD.md`](https://github.com/hilather/nytprof-modernization/blob/main/docs/FIRST_SLICE_BOARD.md) | Ordered first-slice work board |
-| [`docs/RELEASE_NOTES_R2_PREVIEW.md`](https://github.com/hilather/nytprof-modernization/blob/main/docs/RELEASE_NOTES_R2_PREVIEW.md) | **R2-preview** packaging notes (v6 **opt-in only**; not R2-stable / R3 / R4) |
+| [`docs/RELEASE_NOTES_R2_PREVIEW.md`](https://github.com/hilather/nytprof-modernization/blob/main/docs/RELEASE_NOTES_R2_PREVIEW.md) | **R2-preview** packaging notes (v6 **opt-in only**; not R3 / R4) |
+| [`docs/RELEASE_NOTES_R2_STABLE.md`](https://github.com/hilather/nytprof-modernization/blob/main/docs/RELEASE_NOTES_R2_STABLE.md) | **R2-stable** packaging notes (Phase C tools + residual honesty; not R3/R4; public perf waived) |
 | [`docs/contracts/DUAL_EQUALITY_READINESS_v0.md`](https://github.com/hilather/nytprof-modernization/blob/main/docs/contracts/DUAL_EQUALITY_READINESS_v0.md) | Dual-equality E1–E5 readiness checklist |
 | [`docs/PHASE0_EXIT_CRITERIA.md`](https://github.com/hilather/nytprof-modernization/blob/main/docs/PHASE0_EXIT_CRITERIA.md) | Phase-0 “good enough” gates |
 | [`docs/plan/README.md`](https://github.com/hilather/nytprof-modernization/blob/main/docs/plan/README.md) | Full architecture + 206-task plan package |
