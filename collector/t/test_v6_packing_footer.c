@@ -468,6 +468,31 @@ static void test_time_line_run(void)
     nytp_sink_destroy(s);
 }
 
+static int inflate_zlib(const chunk_view *ch, uint8_t **out, size_t *out_len)
+{
+    uLongf dest_len;
+    uint8_t *buf;
+    int zst;
+    *out = NULL;
+    *out_len = 0;
+    if (ch->codec != NYTPROF_V6_CODEC_ZLIB) {
+        return 0;
+    }
+    dest_len = ch->uncompressed_len ? ch->uncompressed_len : 1;
+    buf = (uint8_t *)malloc(dest_len);
+    if (!buf) {
+        return 0;
+    }
+    zst = uncompress(buf, &dest_len, ch->payload, ch->compressed_len);
+    if (zst != Z_OK || dest_len != ch->uncompressed_len) {
+        free(buf);
+        return 0;
+    }
+    *out = buf;
+    *out_len = (size_t)dest_len;
+    return 1;
+}
+
 static void test_mid_stream_codec_region(void)
 {
     nytp_v6_sink_options opt;
@@ -477,6 +502,10 @@ static void test_mid_stream_codec_region(void)
     chunk_view ch0, ch1;
     uint8_t *p0 = NULL, *p1 = NULL;
     size_t l0 = 0, l1 = 0;
+    uint64_t fids[4], lines[4], ticks[4], seqs[4];
+    size_t n = 0;
+    uint8_t *joined = NULL;
+    size_t jlen = 0;
 
     memset(&opt, 0, sizeof(opt));
     opt.event_codec = (uint8_t)NYTPROF_V6_CODEC_NONE;
@@ -506,14 +535,31 @@ static void test_mid_stream_codec_region(void)
         EXPECT(read_uleb(p0, l0, &p, &op) && op == NYTPROF_V6_OP_TIME_LINE,
                "pre first TIME_LINE");
     }
-    free(p0);
     EXPECT(parse_chunk_at(wire, wlen, &pos, &ch1), "ch1");
     EXPECT(ch1.kind == NYTPROF_V6_KIND_EVENT && ch1.codec == NYTPROF_V6_CODEC_ZLIB,
            "post ZLIB");
     EXPECT(ch1.sequence == 1 && ch1.logical_count == 1, "post one record");
     EXPECT(ch1.checksum == ref_crc32(ch1.payload, ch1.compressed_len), "post crc");
-    (void)p1;
-    (void)l1;
+    EXPECT(inflate_zlib(&ch1, &p1, &l1) && l1 > 0, "post inflate zlib");
+    /* Join pre||post plains and assert continuous packing (seq 0,1,2; site 1:1→1:2). */
+    joined = (uint8_t *)malloc(l0 + l1);
+    EXPECT(joined != NULL, "joined alloc");
+    if (joined) {
+        memcpy(joined, p0, l0);
+        memcpy(joined + l0, p1, l1);
+        jlen = l0 + l1;
+        EXPECT(decode_packed_time_lines(joined, jlen, fids, lines, ticks, seqs, 4,
+                                        &n),
+               "decode mid joined");
+        EXPECT(n == 2, "two TIME_LINE logical (START_DEFLATE skipped)");
+        EXPECT(fids[0] == 1 && lines[0] == 1 && ticks[0] == 10 && seqs[0] == 0,
+               "pre site/seq");
+        EXPECT(fids[1] == 1 && lines[1] == 2 && ticks[1] == 20 && seqs[1] == 2,
+               "post continues after START_DEFLATE seq=1");
+        free(joined);
+    }
+    free(p0);
+    free(p1);
     /* Same codec fail-closed */
     {
         nytp_sink *s2 = nytp_v6_sink_create_opts(NULL, &opt);
@@ -523,6 +569,103 @@ static void test_mid_stream_codec_region(void)
                "same codec rejected");
         nytp_sink_destroy(s2);
     }
+    /* Empty open body: fail-closed before marker. */
+    {
+        nytp_sink *s3 = nytp_v6_sink_create_opts(NULL, &opt);
+        EXPECT(nytp_v6_sink_begin_codec_region(s3, (uint8_t)NYTPROF_V6_CODEC_ZLIB) ==
+                   NYTP_ERR_STATE,
+               "empty body begin rejected");
+        nytp_sink_destroy(s3);
+    }
+    /* Lifecycle: STOPPED rejects begin and run. */
+    {
+        nytp_v6_sink_options o2;
+        nytp_sink *s4;
+        uint64_t rt[1] = {1};
+        memset(&o2, 0, sizeof(o2));
+        o2.enable_packing = 1;
+        s4 = nytp_v6_sink_create_opts(NULL, &o2);
+        EXPECT(nytp_sink_activate(s4) == NYTP_OK, "activate");
+        EXPECT(nytp_emit_time_line(s4, 1, 1, 1) == NYTP_OK, "tl");
+        EXPECT(nytp_sink_stop(s4) == NYTP_OK, "stop");
+        EXPECT(nytp_v6_sink_begin_codec_region(s4, (uint8_t)NYTPROF_V6_CODEC_ZLIB) ==
+                   NYTP_ERR_STATE,
+               "stopped begin rejected");
+        EXPECT(nytp_v6_sink_emit_time_line_run(s4, 1, 1, rt, 1) == NYTP_ERR_STATE,
+               "stopped run rejected");
+        nytp_sink_destroy(s4);
+    }
+    /* Seal fail after START_DEFLATE: marker rolled back (no double-emit residue). */
+    {
+        nytp_sink *s5 = nytp_v6_sink_create_opts(NULL, &opt);
+        size_t blen0 = 0, blen1 = 0;
+        const uint8_t *body;
+        EXPECT(nytp_emit_time_line(s5, 1, 1, 1) == NYTP_OK, "s5 tl");
+        body = nytp_v6_sink_event_body(s5, &blen0);
+        EXPECT(body && blen0 > 0, "body pre");
+        nytp_v6_sink_test_fail_seal_after_chunks(s5, 1);
+        EXPECT(nytp_v6_sink_begin_codec_region(s5, (uint8_t)NYTPROF_V6_CODEC_ZLIB) ==
+                   NYTP_ERR_IO,
+               "injected seal fail");
+        body = nytp_v6_sink_event_body(s5, &blen1);
+        /* Marker rolled back: open body length restored to pre-begin. */
+        EXPECT(blen1 == blen0, "START_DEFLATE rolled back on seal fail");
+        EXPECT(nytp_sink_get_state(s5) == NYTP_SINK_FAILED, "sticky fail on IO");
+        nytp_sink_destroy(s5);
+    }
+    nytp_sink_destroy(s);
+}
+
+/* FOOTER dict intern rolled back when a later field of the same emit fails. */
+static void test_dict_intern_rollback_on_emit_fail(void)
+{
+    nytp_v6_sink_options opt;
+    nytp_sink *s;
+    nytp_string_view huge;
+    uint32_t before;
+
+    memset(&opt, 0, sizeof(opt));
+    opt.enable_string_dict = 1;
+    s = nytp_v6_sink_create_opts(NULL, &opt);
+    EXPECT(s != NULL, "create");
+    EXPECT(nytp_emit_comment(s, nytp_sv_cstr("keep-me")) == NYTP_OK, "keep");
+    before = nytp_v6_sink_dict_entry_count(s);
+    EXPECT(before >= 1, "interned keep-me");
+    /* Force mid-record fail after first string intern: oversize value. */
+    huge.ptr = "x";
+    huge.len = (size_t)NYTPROF_V6_MAX_STRING_BYTES + 1u;
+    huge.is_utf8 = 0;
+    EXPECT(nytp_emit_attribute(s, nytp_sv_cstr("orphan-key"), huge) != NYTP_OK,
+           "oversize attr fails");
+    /* Orphan key must not remain in the FOOTER table. */
+    EXPECT(nytp_v6_sink_dict_entry_count(s) == before, "dict rolled back");
+    EXPECT(nytp_sink_close(s) == NYTP_OK || nytp_sink_get_state(s) == NYTP_SINK_FAILED,
+           "close or sticky");
+    if (nytp_v6_sink_is_sealed(s) && nytp_v6_sink_has_footer_dict(s)) {
+        EXPECT(nytp_v6_sink_dict_entry_count(s) == before, "footer no orphan");
+    }
+    nytp_sink_destroy(s);
+}
+
+/* COL-003: TIME_LINE_RUN advances logical sink seq by n_ticks. */
+static void test_time_line_run_col003_seq(void)
+{
+    nytp_v6_sink_options opt;
+    nytp_sink *s;
+    uint64_t run_ticks[3] = {1, 2, 3};
+    nytp_seq last = 0;
+
+    memset(&opt, 0, sizeof(opt));
+    opt.enable_packing = 1;
+    s = nytp_v6_sink_create_opts(NULL, &opt);
+    EXPECT(nytp_sink_activate(s) == NYTP_OK, "activate");
+    EXPECT(nytp_sink_logical_count(s) == 0, "seq start 0");
+    EXPECT(nytp_v6_sink_emit_time_line_run(s, 1, 1, run_ticks, 3) == NYTP_OK,
+           "run3");
+    EXPECT(nytp_sink_logical_count(s) == 3, "logical +3");
+    EXPECT(nytp_sink_last_seq(s, &last) == NYTP_OK && last == 2, "last seq 2");
+    EXPECT(nytp_emit_time_line(s, 4, 1, 2) == NYTP_OK, "tl");
+    EXPECT(nytp_sink_logical_count(s) == 4, "logical +1");
     nytp_sink_destroy(s);
 }
 
@@ -628,8 +771,10 @@ int main(void)
     test_packing_site_delta_seq_single();
     test_packing_multi_chunk_continuity();
     test_time_line_run();
+    test_time_line_run_col003_seq();
     test_mid_stream_codec_region();
     test_footer_string_dict();
+    test_dict_intern_rollback_on_emit_fail();
     test_packing_plus_dict_multi_chunk();
 
     if (failures) {

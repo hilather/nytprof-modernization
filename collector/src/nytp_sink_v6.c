@@ -79,6 +79,12 @@ typedef struct v6_impl {
     int sealed; /* final profile seal (close) */
     int file_written;
     int header_ok;
+    /* In-flight emit checkpoints for fail-closed rollback (dict + packing). */
+    int emit_snap_active;
+    uint32_t emit_dict_len0;
+    uint64_t emit_dict_next_id0;
+    size_t emit_dict_total0;
+    uint64_t emit_pack_seq0;
     /* Test hook: fail seal after successfully framing this many chunks (0=off). */
     uint32_t test_fail_seal_after_chunks;
 } v6_impl;
@@ -174,10 +180,46 @@ static nytp_status rec_off_push(v6_impl *vi, size_t off)
     return NYTP_OK;
 }
 
+/* Snapshot packing + dict state at the start of an emit (once per record). */
+static void emit_snap_begin(v6_impl *vi)
+{
+    if (vi->emit_snap_active) {
+        return;
+    }
+    vi->emit_snap_active = 1;
+    vi->emit_dict_len0 = vi->dict_len;
+    vi->emit_dict_next_id0 = vi->dict_next_id;
+    vi->emit_dict_total0 = vi->dict_total_bytes;
+    vi->emit_pack_seq0 = vi->pack.next_seq;
+}
+
+static void emit_snap_clear(v6_impl *vi)
+{
+    vi->emit_snap_active = 0;
+}
+
+/* Drop dictionary entries interned during a failed emit. */
+static void dict_rollback_emit(v6_impl *vi)
+{
+    if (!vi->emit_snap_active || !vi->enable_string_dict) {
+        return;
+    }
+    while (vi->dict_len > vi->emit_dict_len0) {
+        uint32_t i = vi->dict_len - 1u;
+        free(vi->dict[i].data);
+        vi->dict[i].data = NULL;
+        vi->dict[i].len = 0;
+        vi->dict_len = i;
+    }
+    vi->dict_next_id = vi->emit_dict_next_id0;
+    vi->dict_total_bytes = vi->emit_dict_total0;
+}
+
 /*
  * On any emit failure after body bytes may have been written: restore mark.
  * Call only for non-OK statuses from mid-record paths.
- * Also drops any record offsets at/after mark (defensive; after_record is last).
+ * Also drops any record offsets at/after mark (defensive; after_record is last),
+ * rolls packing seq and FOOTER dict entries created mid-record.
  */
 static nytp_status emit_fail(v6_impl *vi, size_t mark, nytp_status st)
 {
@@ -194,6 +236,13 @@ static nytp_status emit_fail(v6_impl *vi, size_t mark, nytp_status st)
         } else {
             vi->total_event_records = 0;
         }
+    }
+    if (vi->emit_snap_active) {
+        if (vi->enable_packing) {
+            vi->pack.next_seq = vi->emit_pack_seq0;
+        }
+        dict_rollback_emit(vi);
+        emit_snap_clear(vi);
     }
     return st;
 }
@@ -459,7 +508,9 @@ static nytp_status i64_delta_u64(uint64_t from, uint64_t to, int64_t *out)
 static nytp_status body_begin_op(v6_impl *vi, uint64_t opcode, int use_site_delta)
 {
     uint8_t flags = 0;
-    nytp_status st = body_uleb(vi, opcode);
+    nytp_status st;
+    emit_snap_begin(vi);
+    st = body_uleb(vi, opcode);
     if (st != NYTP_OK) {
         return st;
     }
@@ -488,16 +539,16 @@ static nytp_status body_op(v6_impl *vi, uint64_t opcode)
     return body_begin_op(vi, opcode, 0);
 }
 
-static void packing_advance(v6_impl *vi, uint64_t n)
+static nytp_status packing_advance(v6_impl *vi, uint64_t n)
 {
     if (!vi->enable_packing || n == 0) {
-        return;
+        return NYTP_OK;
     }
     if (vi->pack.next_seq > UINT64_MAX - n) {
-        vi->pack.next_seq = UINT64_MAX;
-    } else {
-        vi->pack.next_seq += n;
+        return NYTP_ERR_OVERFLOW;
     }
+    vi->pack.next_seq += n;
+    return NYTP_OK;
 }
 
 /* Intern string for FOOTER dict; returns string_id (0 if dict off / empty). */
@@ -571,7 +622,9 @@ static nytp_status body_string_blob_maybe_dict(v6_impl *vi, nytp_string_view sv)
 {
     uint64_t id = 0;
     uint8_t flags = 0;
-    nytp_status st = dict_intern(vi, sv, &id, &flags);
+    nytp_status st;
+    emit_snap_begin(vi);
+    st = dict_intern(vi, sv, &id, &flags);
     if (st != NYTP_OK) {
         return st;
     }
@@ -802,7 +855,7 @@ static nytp_status encode_chunk_frame(v6_impl *vi, uint8_t kind, uint8_t codec,
     return NYTP_OK;
 }
 
-/*/*
+/*
  * Seal the open body into EVENT chunk(s) under the current codec.
  * Appends to wire; clears open body for the next region. Does **not** set
  * final sealed flag (mid-stream region seal may continue packing).
@@ -1128,6 +1181,10 @@ static nytp_status after_record(v6_impl *vi, nytp_event_kind kind,
     if (vi->event_count == UINT32_MAX) {
         return NYTP_ERR_OVERFLOW;
     }
+    /* Fail-closed packing-seq overflow before committing the record. */
+    if (vi->enable_packing && vi->pack.next_seq > UINT64_MAX - 1ull) {
+        return NYTP_ERR_OVERFLOW;
+    }
     st = rec_off_push(vi, rec_start);
     if (st != NYTP_OK) {
         return st;
@@ -1136,7 +1193,11 @@ static nytp_status after_record(v6_impl *vi, nytp_event_kind kind,
     vi->total_event_records++;
     note_kind(vi, kind);
     /* Packing seq advanced only after successful commit (matches body_begin_op peek). */
-    packing_advance(vi, 1);
+    st = packing_advance(vi, 1);
+    if (st != NYTP_OK) {
+        return st;
+    }
+    emit_snap_clear(vi);
     return NYTP_OK;
 }
 
@@ -1148,6 +1209,10 @@ static nytp_status after_record_n(v6_impl *vi, nytp_event_kind kind,
     if (vi->event_count == UINT32_MAX) {
         return NYTP_ERR_OVERFLOW;
     }
+    if (vi->enable_packing && pack_n > 0 &&
+        vi->pack.next_seq > UINT64_MAX - pack_n) {
+        return NYTP_ERR_OVERFLOW;
+    }
     st = rec_off_push(vi, rec_start);
     if (st != NYTP_OK) {
         return st;
@@ -1155,7 +1220,11 @@ static nytp_status after_record_n(v6_impl *vi, nytp_event_kind kind,
     vi->event_count++;
     vi->total_event_records++;
     note_kind(vi, kind);
-    packing_advance(vi, pack_n);
+    st = packing_advance(vi, pack_n);
+    if (st != NYTP_OK) {
+        return st;
+    }
+    emit_snap_clear(vi);
     return NYTP_OK;
 }
 
@@ -2214,6 +2283,33 @@ uint32_t nytp_v6_sink_dict_entry_count(const nytp_sink *sink)
     return ((const v6_impl *)sink->impl)->dict_len;
 }
 
+/*
+ * Sticky-fail helper for public v6 packing APIs (mirrors nytp emit_commit).
+ */
+static nytp_status v6_public_fail(nytp_sink *sink, nytp_status st)
+{
+    if (st == NYTP_ERR_IO || st == NYTP_ERR_FAILED || st == NYTP_ERR_OVERFLOW) {
+        sink->state = NYTP_SINK_FAILED;
+        sink->fail_reason = st;
+    }
+    return st;
+}
+
+/* Advance COL-003 logical sink seq by n after a successful multi-logical emit. */
+static void v6_commit_logical_n(nytp_sink *sink, nytp_event_kind kind, uint64_t n)
+{
+    uint64_t i;
+    for (i = 0; i < n; i++) {
+        nytp_seq seq = sink->next_seq;
+        sink->last_seq = seq;
+        sink->next_seq = seq + 1;
+        sink->has_last_seq = 1;
+        if (sink->ops && sink->ops->on_logical_committed) {
+            sink->ops->on_logical_committed(sink, seq, kind);
+        }
+    }
+}
+
 nytp_status nytp_v6_sink_begin_codec_region(nytp_sink *sink, uint8_t next_codec)
 {
     v6_impl *vi;
@@ -2229,26 +2325,42 @@ nytp_status nytp_v6_sink_begin_codec_region(nytp_sink *sink, uint8_t next_codec)
     if (sink->state == NYTP_SINK_FAILED) {
         return NYTP_ERR_STATE;
     }
+    /* Lifecycle: START_DEFLATE only legal in OPEN/ACTIVE (same as nytp_emit_*). */
+    if (!nytp_sink_can_emit(sink, NYTP_EVT_START_DEFLATE)) {
+        return NYTP_ERR_STATE;
+    }
     if (!codec_supported(next_codec)) {
         return NYTP_ERR_UNSUPPORTED;
     }
     if (next_codec == vi->event_codec) {
         return NYTP_ERR_UNSUPPORTED; /* must differ (mid-stream preflight) */
     }
+    /* Fail-closed: region must contain at least one prior record. */
+    if (vi->body_len == 0 || vi->event_count == 0) {
+        return NYTP_ERR_STATE;
+    }
     /* 1. Emit empty START_DEFLATE into current region. */
     mark = vi->body_len;
     st = body_begin_op(vi, NYTPROF_V6_OP_START_DEFLATE, 0);
     if (st != NYTP_OK) {
-        return emit_fail(vi, mark, st);
+        return v6_public_fail(sink, emit_fail(vi, mark, st));
     }
     st = after_record(vi, NYTP_EVT_START_DEFLATE, mark);
     if (st != NYTP_OK) {
-        return emit_fail(vi, mark, st);
+        return v6_public_fail(sink, emit_fail(vi, mark, st));
     }
     /* 2. Seal current region under current codec (packing continues). */
     st = seal_open_event_region(vi, sink);
     if (st != NYTP_OK) {
-        return st;
+        /*
+         * START_DEFLATE was committed (after_record cleared emit snap).
+         * Reverse packing seq for that one record, then roll body so a later
+         * begin_codec_region retry does not double-emit the marker.
+         */
+        if (vi->enable_packing && vi->pack.next_seq > 0) {
+            vi->pack.next_seq--;
+        }
+        return v6_public_fail(sink, emit_fail(vi, mark, st));
     }
     /* 3. Switch codec for subsequent emits. */
     vi->event_codec = next_codec;
@@ -2271,6 +2383,13 @@ nytp_status nytp_v6_sink_emit_time_line_run(nytp_sink *sink, nytp_fid fid,
     if (vi->sealed) {
         return NYTP_ERR_STATE;
     }
+    if (sink->state == NYTP_SINK_FAILED) {
+        return NYTP_ERR_STATE;
+    }
+    /* Lifecycle: TIME_LINE_RUN expands to logical TIME_LINE events. */
+    if (!nytp_sink_can_emit(sink, NYTP_EVT_TIME_LINE)) {
+        return NYTP_ERR_STATE;
+    }
     if (!vi->enable_packing) {
         return NYTP_ERR_UNSUPPORTED;
     }
@@ -2278,36 +2397,36 @@ nytp_status nytp_v6_sink_emit_time_line_run(nytp_sink *sink, nytp_fid fid,
         return NYTP_ERR_OVERFLOW; /* empty run fail-closed */
     }
     if (n_ticks > NYTPROF_V6_MAX_TIME_RUN_LEN) {
-        return NYTP_ERR_OVERFLOW;
+        return v6_public_fail(sink, NYTP_ERR_OVERFLOW);
     }
     mark = vi->body_len;
     /* TIME_LINE_RUN: absolute site + FLAG_HAS_SEQ base only (no SITE_DELTA). */
     st = body_begin_op(vi, NYTPROF_V6_OP_TIME_LINE_RUN, 0);
     if (st != NYTP_OK) {
-        return emit_fail(vi, mark, st);
+        return v6_public_fail(sink, emit_fail(vi, mark, st));
     }
     st = body_uleb(vi, (uint64_t)fid);
     if (st != NYTP_OK) {
-        return emit_fail(vi, mark, st);
+        return v6_public_fail(sink, emit_fail(vi, mark, st));
     }
     st = body_uleb(vi, (uint64_t)line);
     if (st != NYTP_OK) {
-        return emit_fail(vi, mark, st);
+        return v6_public_fail(sink, emit_fail(vi, mark, st));
     }
     st = body_uleb(vi, (uint64_t)n_ticks);
     if (st != NYTP_OK) {
-        return emit_fail(vi, mark, st);
+        return v6_public_fail(sink, emit_fail(vi, mark, st));
     }
     for (i = 0; i < n_ticks; i++) {
         st = body_uleb(vi, ticks[i]);
         if (st != NYTP_OK) {
-            return emit_fail(vi, mark, st);
+            return v6_public_fail(sink, emit_fail(vi, mark, st));
         }
     }
     /* after_record_n advances packing by n_ticks; after_record would only +1. */
     st = after_record_n(vi, NYTP_EVT_TIME_LINE, mark, (uint64_t)n_ticks);
     if (st != NYTP_OK) {
-        return emit_fail(vi, mark, st);
+        return v6_public_fail(sink, emit_fail(vi, mark, st));
     }
     vi->pack.fid = (uint64_t)fid;
     vi->pack.line = (uint64_t)line;
@@ -2316,6 +2435,8 @@ nytp_status nytp_v6_sink_emit_time_line_run(nytp_sink *sink, nytp_fid fid,
     if (n_ticks) {
         vi->stats.last_ticks = (nytp_ticks)ticks[n_ticks - 1u];
     }
+    /* COL-003: expand run to N logical TIME_LINE seq commits. */
+    v6_commit_logical_n(sink, NYTP_EVT_TIME_LINE, (uint64_t)n_ticks);
     return NYTP_OK;
 }
 

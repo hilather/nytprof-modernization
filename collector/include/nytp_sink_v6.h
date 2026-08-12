@@ -160,7 +160,10 @@ uint32_t nytp_v6_sink_dict_entry_count(const nytp_sink *sink);
  *      not final profile seal — packing state continues).
  *   3. Subsequent emits use next_codec for chunk payloads.
  * next_codec must be supported and **must differ** from the current codec.
- * Fail-closed if sealed / sticky FAILED / empty body before marker / bad codec.
+ * Fail-closed if sealed / sticky FAILED / lifecycle not OPEN|ACTIVE /
+ * empty open body before marker / unsupported or same codec.
+ * On seal failure after emitting START_DEFLATE, the marker is rolled back so
+ * a later retry does not double-emit.
  */
 nytp_status nytp_v6_sink_begin_codec_region(nytp_sink *sink, uint8_t next_codec);
 
@@ -169,6 +172,8 @@ nytp_status nytp_v6_sink_begin_codec_region(nytp_sink *sink, uint8_t next_codec)
  * enabled. Emits one wire record expanding to n_ticks logical TIME_LINE events
  * for FLAG_HAS_SEQ base..base+N-1. n_ticks must be 1..MAX_TIME_RUN_LEN.
  * Advances packing SiteCursor to (fid,line).
+ * Gated like nytp_emit_time_line (OPEN/ACTIVE; sticky FAILED rejected).
+ * On success, advances COL-003 logical sink seq by n_ticks.
  */
 nytp_status nytp_v6_sink_emit_time_line_run(nytp_sink *sink, nytp_fid fid,
                                             nytp_line line,

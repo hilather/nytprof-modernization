@@ -32,8 +32,8 @@ Default `create` remains absolute / no packing / no FOOTER dict (B06/B07 behavio
 |--------|------|
 | `nytp_v6_sink_options` | codec, max_records_per_chunk, `enable_packing`, `enable_string_dict` |
 | `nytp_v6_sink_create_opts` | full create with options |
-| `nytp_v6_sink_begin_codec_region` | mid-stream START_DEFLATE + region seal + codec switch |
-| `nytp_v6_sink_emit_time_line_run` | TIME_LINE_RUN when packing enabled |
+| `nytp_v6_sink_begin_codec_region` | mid-stream START_DEFLATE + region seal + codec switch; fail-closed on empty open body / non-OPEN|ACTIVE lifecycle; rolls back marker if seal fails |
+| `nytp_v6_sink_emit_time_line_run` | TIME_LINE_RUN when packing enabled; lifecycle OPEN|ACTIVE; COL-003 seq advances by `n_ticks` |
 | `nytp_v6_sink_packing_enabled` / `string_dict_enabled` / `has_footer_dict` | getters |
 
 ### Packing wire (compose, matches format-v6 preflight)
