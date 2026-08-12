@@ -97,9 +97,8 @@ Capability **exercises** dual-sink `m4_v5` → v6 → verify and `m4_v6` → v5 
 | Lossy / `--allow-lossy` | Not shipped; non-zero `sub_line` / extended `NEW_FID` / fractional wall PID / non-mantissa-exact NV all **refuse** (no silent path) |
 | Dual-sink `blocks_calls1` v5→v6 | Refuses until lossy mode or v6 body carries `sub_line` (v6→v5 still green) |
 | Packing / string-dict / multi-kind v6 output | Absolute EVENT only |
-| Merge / repack / salvage | PR-C02 |
+| Merge / repack / salvage | **done** in PR-C02 — see [`merge-repack-salvage-mvp-v0.md`](https://github.com/hilather/nytprof-modernization/blob/main/docs/schemas/merge-repack-salvage-mvp-v0.md) |
 | Full oracle dual convert matrix | Integer-tick dual-sink + v5 identity; oracle v5→v6 residual on wall NV |
-| Merge capability claim | Not claimed |
 
 ## Related
 

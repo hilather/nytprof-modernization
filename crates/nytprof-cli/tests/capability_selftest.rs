@@ -53,6 +53,9 @@ fn assert_stable_markers(stdout: &str, label: &str) {
         "report: yes",
         "verify: yes",
         "convert: yes",
+        "merge: yes",
+        "repack: yes",
+        "salvage: yes",
     ] {
         assert!(
             stdout.lines().any(|l| l == marker),
@@ -166,6 +169,9 @@ fn capability_twice_consistent_markers() {
                     || l.starts_with("report: ")
                     || l.starts_with("verify: ")
                     || l.starts_with("convert: ")
+                    || l.starts_with("merge: ")
+                    || l.starts_with("repack: ")
+                    || l.starts_with("salvage: ")
                     || l.starts_with("profile_ok: ")
             })
             .collect();
@@ -193,7 +199,16 @@ fn assert_json_capability_ok(stdout: &str, label: &str) -> Value {
     let obj = v
         .as_object()
         .unwrap_or_else(|| panic!("{label}: expected JSON object\nstdout:\n{stdout}"));
-    for key in ["ok", "decode", "report", "verify", "convert"] {
+    for key in [
+        "ok",
+        "decode",
+        "report",
+        "verify",
+        "convert",
+        "merge",
+        "repack",
+        "salvage",
+    ] {
         assert_eq!(
             obj.get(key),
             Some(&Value::Bool(true)),

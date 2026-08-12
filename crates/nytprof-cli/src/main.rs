@@ -12,6 +12,9 @@
 //! - `callgrind <file>` / `cg <file>` — Callgrind-style text export
 //! - `verify <file>` / `inspect <file>` — decode + model load; short OK summary
 //! - `convert --to=v5|v6 <in> -o <out>` — strict v5↔v6 conversion (PR-C01)
+//! - `merge --to=v5|v6 -o <out> IN…` — stream-concat merge + fid remap (PR-C02)
+//! - `repack [--to=v5|v6] <in> -o <out>` — full re-encode (PR-C02)
+//! - `salvage [--to=v5|v6] <in> -o <out>` — longest complete verified prefix (PR-C02)
 //! - `capability` / `selftest` / `capabilities` — native offline capability self-test
 //!
 //! Global options:
@@ -29,6 +32,7 @@
 //! Engine selection: `docs/schemas/engine-selection-mvp-v0.md`
 //! Capability self-test: `docs/schemas/capability-selftest-mvp-v0.md`
 //! Convert strict path: `docs/schemas/convert-strict-mvp-v0.md`
+//! Merge/repack/salvage: `docs/schemas/merge-repack-salvage-mvp-v0.md`
 
 mod engine;
 
@@ -39,7 +43,8 @@ use std::path::{Path, PathBuf};
 use std::process;
 
 use nytprof_model::{
-    convert_path, decode_events_from_path, ConvertTarget, ProfileModel,
+    convert_path, decode_events_from_path, detect_convert_target, merge_paths, repack_path,
+    salvage_path, ConvertTarget, ProfileModel,
 };
 use nytprof_report::{
     render_callgrind, render_csv_report, render_edges_csv, render_folded_stacks,
@@ -105,7 +110,7 @@ fn run(args: &[String]) -> Result<(), Box<dyn std::error::Error>> {
     let mut args = args.iter().cloned();
     let first = args
         .next()
-        .ok_or("Usage: nytprof-cli [--engine=native|legacy|auto] <dump|report|summary|aggregates|csv|html|folded|callgrind|cg|verify|inspect|convert|capability|selftest> ...\n       nytprof-cli <profile.out>   # dump (back-compat)")?;
+        .ok_or("Usage: nytprof-cli [--engine=native|legacy|auto] <dump|report|summary|aggregates|csv|html|folded|callgrind|cg|verify|inspect|convert|merge|repack|salvage|capability|selftest> ...\n       nytprof-cli <profile.out>   # dump (back-compat)")?;
 
     match first.as_str() {
         "dump" => {
@@ -153,6 +158,18 @@ fn run(args: &[String]) -> Result<(), Box<dyn std::error::Error>> {
             let rest: Vec<String> = args.collect();
             cmd_convert(&rest)
         }
+        "merge" => {
+            let rest: Vec<String> = args.collect();
+            cmd_merge(&rest)
+        }
+        "repack" => {
+            let rest: Vec<String> = args.collect();
+            cmd_repack(&rest)
+        }
+        "salvage" => {
+            let rest: Vec<String> = args.collect();
+            cmd_salvage(&rest)
+        }
         "capability" | "selftest" | "capabilities" => {
             let rest: Vec<String> = args.collect();
             cmd_capability(&rest)
@@ -164,7 +181,7 @@ fn run(args: &[String]) -> Result<(), Box<dyn std::error::Error>> {
         // Bare path → dump (back-compat with nytprof-dump / earlier CLI).
         path if looks_like_path(&first) => cmd_dump(path),
         other => Err(format!(
-            "unknown subcommand '{other}'\nUsage: nytprof-cli [--engine=native|legacy|auto] <dump|report|summary|aggregates|csv|html|folded|callgrind|cg|verify|inspect|convert|capability|selftest> ..."
+            "unknown subcommand '{other}'\nUsage: nytprof-cli [--engine=native|legacy|auto] <dump|report|summary|aggregates|csv|html|folded|callgrind|cg|verify|inspect|convert|merge|repack|salvage|capability|selftest> ..."
         )
         .into()),
     }
@@ -199,6 +216,9 @@ fn print_usage() {
          nytprof-cli verify <profile.out>        Decode + model; short OK summary\n  \
          nytprof-cli inspect <profile.out>       Alias for verify\n  \
          nytprof-cli convert --to=v5|v6 IN -o OUT  Strict v5↔v6 conversion\n  \
+         nytprof-cli merge --to=v5|v6 -o OUT IN… Stream-concat merge + fid remap\n  \
+         nytprof-cli repack [--to=v5|v6] IN -o OUT  Full re-encode (default: same family)\n  \
+         nytprof-cli salvage [--to=v5|v6] IN -o OUT Longest complete verified prefix\n  \
          nytprof-cli capability                  Native offline capability self-test\n  \
          nytprof-cli capability --json           Capability self-test as JSON object\n  \
          nytprof-cli selftest                    Alias for capability\n  \
@@ -212,6 +232,12 @@ fn print_usage() {
          Convert options (strict path; no lossy mode):\n  \
          --to=v5|v6 / --to v5|v6       Target wire format (required)\n  \
          -o PATH / --output PATH       Output profile path (required)\n\n\
+         Merge / repack / salvage (PR-C02; recovery semantics unambiguous):\n  \
+         merge: every input fully decodes; stream concat + fid remap; fail closed\n  \
+         repack: full decode required; clean re-encode to --to (default same family)\n  \
+         salvage: longest complete verified prefix only; always labels incomplete\n  \
+         --to=v5|v6                    Target (required for merge; optional repack/salvage)\n  \
+         -o PATH / --output PATH       Output path (required)\n\n\
          Capability options:\n  \
          --json / --format=json        Machine-readable JSON (CAPABILITY-JSON-MVP)\n  \
          --profile PATH / -p PATH      Force golden profile probe\n\n\
@@ -296,6 +322,221 @@ fn cmd_convert(args: &[String]) -> Result<(), Box<dyn std::error::Error>> {
     Ok(())
 }
 
+/// nytprof-cli merge --to=v5|v6 -o OUT IN1 IN2 [IN3...]
+///
+/// Stream-concat merge with deterministic fid remap. Every input must fully
+/// decode (fail closed). See `docs/schemas/merge-repack-salvage-mvp-v0.md`.
+fn cmd_merge(args: &[String]) -> Result<(), Box<dyn std::error::Error>> {
+    if args.iter().any(|a| a == "-h" || a == "--help") {
+        print_usage();
+        return Ok(());
+    }
+    let usage = "Usage: nytprof-cli merge --to=v5|v6 -o <output> <input> [<input>...]";
+    let mut target: Option<ConvertTarget> = None;
+    let mut output: Option<String> = None;
+    let mut inputs: Vec<String> = Vec::new();
+    let mut i = 0;
+    while i < args.len() {
+        match args[i].as_str() {
+            "--to" => {
+                i += 1;
+                let v = args
+                    .get(i)
+                    .ok_or(format!("{usage} (--to requires v5|v6)"))?;
+                target = Some(ConvertTarget::parse(v)?);
+            }
+            flag if flag.starts_with("--to=") => {
+                target = Some(ConvertTarget::parse(&flag["--to=".len()..])?);
+            }
+            "-o" | "--output" => {
+                i += 1;
+                let p = args
+                    .get(i)
+                    .ok_or(format!("{usage} (-o requires PATH)"))?;
+                if output.is_some() {
+                    return Err(format!("{usage} (duplicate -o)").into());
+                }
+                output = Some(p.clone());
+            }
+            flag if flag.starts_with("--output=") => {
+                if output.is_some() {
+                    return Err(format!("{usage} (duplicate --output)").into());
+                }
+                output = Some(flag["--output=".len()..].to_string());
+            }
+            flag if flag.starts_with('-') => {
+                return Err(format!("unknown merge option '{flag}'\n{usage}").into());
+            }
+            p => inputs.push(p.to_string()),
+        }
+        i += 1;
+    }
+    let target = target.ok_or(format!("{usage} (--to required)"))?;
+    let output = output.ok_or(format!("{usage} (-o required)"))?;
+    if inputs.is_empty() {
+        return Err(format!("{usage} (at least one input required)").into());
+    }
+    merge_paths(&inputs, &output, target)?;
+    println!(
+        "OK: merge --to={} inputs={} -> {}",
+        target.as_str(),
+        inputs.len(),
+        output
+    );
+    Ok(())
+}
+
+/// nytprof-cli repack [--to=v5|v6] IN -o OUT
+///
+/// Full decode required (fail closed). Default `--to` = input wire family.
+fn cmd_repack(args: &[String]) -> Result<(), Box<dyn std::error::Error>> {
+    if args.iter().any(|a| a == "-h" || a == "--help") {
+        print_usage();
+        return Ok(());
+    }
+    let usage = "Usage: nytprof-cli repack [--to=v5|v6] <input> -o <output>";
+    let mut target: Option<ConvertTarget> = None;
+    let mut output: Option<String> = None;
+    let mut input: Option<String> = None;
+    let mut i = 0;
+    while i < args.len() {
+        match args[i].as_str() {
+            "--to" => {
+                i += 1;
+                let v = args
+                    .get(i)
+                    .ok_or(format!("{usage} (--to requires v5|v6)"))?;
+                target = Some(ConvertTarget::parse(v)?);
+            }
+            flag if flag.starts_with("--to=") => {
+                target = Some(ConvertTarget::parse(&flag["--to=".len()..])?);
+            }
+            "-o" | "--output" => {
+                i += 1;
+                let p = args
+                    .get(i)
+                    .ok_or(format!("{usage} (-o requires PATH)"))?;
+                if output.is_some() {
+                    return Err(format!("{usage} (duplicate -o)").into());
+                }
+                output = Some(p.clone());
+            }
+            flag if flag.starts_with("--output=") => {
+                if output.is_some() {
+                    return Err(format!("{usage} (duplicate --output)").into());
+                }
+                output = Some(flag["--output=".len()..].to_string());
+            }
+            flag if flag.starts_with('-') => {
+                return Err(format!("unknown repack option '{flag}'\n{usage}").into());
+            }
+            p => {
+                if input.is_some() {
+                    return Err(format!("{usage} (extra argument '{p}')").into());
+                }
+                input = Some(p.to_string());
+            }
+        }
+        i += 1;
+    }
+    let input = input.ok_or(format!("{usage} (input path required)"))?;
+    let output = output.ok_or(format!("{usage} (-o required)"))?;
+    let bytes = fs::read(&input).map_err(|e| format!("read {input}: {e}"))?;
+    let target = match target {
+        Some(t) => t,
+        None => detect_convert_target(&bytes)?,
+    };
+    repack_path(&input, &output, target)?;
+    println!(
+        "OK: repack --to={} {} -> {}",
+        target.as_str(),
+        input,
+        output
+    );
+    Ok(())
+}
+
+/// nytprof-cli salvage [--to=v5|v6] IN -o OUT
+///
+/// Longest complete verified prefix only. Output always labeled salvage/incomplete.
+/// Never pretends a truncated/corrupt tail was valid.
+fn cmd_salvage(args: &[String]) -> Result<(), Box<dyn std::error::Error>> {
+    if args.iter().any(|a| a == "-h" || a == "--help") {
+        print_usage();
+        return Ok(());
+    }
+    let usage = "Usage: nytprof-cli salvage [--to=v5|v6] <input> -o <output>";
+    let mut target: Option<ConvertTarget> = None;
+    let mut output: Option<String> = None;
+    let mut input: Option<String> = None;
+    let mut i = 0;
+    while i < args.len() {
+        match args[i].as_str() {
+            "--to" => {
+                i += 1;
+                let v = args
+                    .get(i)
+                    .ok_or(format!("{usage} (--to requires v5|v6)"))?;
+                target = Some(ConvertTarget::parse(v)?);
+            }
+            flag if flag.starts_with("--to=") => {
+                target = Some(ConvertTarget::parse(&flag["--to=".len()..])?);
+            }
+            "-o" | "--output" => {
+                i += 1;
+                let p = args
+                    .get(i)
+                    .ok_or(format!("{usage} (-o requires PATH)"))?;
+                if output.is_some() {
+                    return Err(format!("{usage} (duplicate -o)").into());
+                }
+                output = Some(p.clone());
+            }
+            flag if flag.starts_with("--output=") => {
+                if output.is_some() {
+                    return Err(format!("{usage} (duplicate --output)").into());
+                }
+                output = Some(flag["--output=".len()..].to_string());
+            }
+            flag if flag.starts_with('-') => {
+                return Err(format!("unknown salvage option '{flag}'\n{usage}").into());
+            }
+            p => {
+                if input.is_some() {
+                    return Err(format!("{usage} (extra argument '{p}')").into());
+                }
+                input = Some(p.to_string());
+            }
+        }
+        i += 1;
+    }
+    let input = input.ok_or(format!("{usage} (input path required)"))?;
+    let output = output.ok_or(format!("{usage} (-o required)"))?;
+    let bytes = fs::read(&input).map_err(|e| format!("read {input}: {e}"))?;
+    let target = match target {
+        Some(t) => t,
+        None => detect_convert_target(&bytes)?,
+    };
+    let report = salvage_path(&input, &output, target)?;
+    // Greppable recovery line — never bare complete OK without salvage fields.
+    println!(
+        "OK: salvage incomplete=yes wire={} events={} bytes={}/{} discarded_tail={} -> {}",
+        report.wire_kind,
+        report.events_recovered,
+        report.bytes_consumed,
+        report.input_len,
+        report.discarded_tail_bytes,
+        output
+    );
+    if !report.incomplete_reasons.is_empty() {
+        println!(
+            "SALVAGE: stream_incomplete={}",
+            report.incomplete_reasons.join(",")
+        );
+    }
+    Ok(())
+}
+
 /// Default golden probe relative to repo root / CWD.
 const DEFAULT_CAPABILITY_FIXTURE: &str = "fixtures/v5/default-calls1/nytprof.out";
 
@@ -308,18 +549,21 @@ const DEFAULT_CAPABILITY_FIXTURE: &str = "fixtures/v5/default-calls1/nytprof.out
 /// report: yes
 /// verify: yes
 /// convert: yes
+/// merge: yes
+/// repack: yes
+/// salvage: yes
 /// profile_ok: <path>   # when a golden fixture is found and verify succeeds
 /// profile_ok: skip     # when no probe path is available
 /// ```
 ///
 /// JSON mode (`--json` / `--format=json` / `--format json`) — single object on stdout:
 /// ```json
-/// {"ok":true,"decode":true,"report":true,"verify":true,"convert":true,"profile_ok":"<path>|null"}
+/// {"ok":true,"decode":true,"report":true,"verify":true,"convert":true,"merge":true,"repack":true,"salvage":true,"profile_ok":"<path>|null"}
 /// ```
 ///
 /// Exit 0 when claimed tools work. Non-zero if a found probe fails verify
-/// or if the convert probe fails (fail closed — never claim present tools that
-/// cannot load / convert a real profile).
+/// or if the convert / merge-tools probe fails (fail closed — never claim present
+/// tools that cannot load / convert / merge / salvage a real profile).
 ///
 /// Optional args: bare path or `--profile <path>` / `-p <path>` to force a probe.
 fn cmd_capability(args: &[String]) -> Result<(), Box<dyn std::error::Error>> {
@@ -329,7 +573,8 @@ fn cmd_capability(args: &[String]) -> Result<(), Box<dyn std::error::Error>> {
     }
     let opts = parse_capability_args(args)?;
 
-    // This binary *is* the native offline CLI: decode / report / verify / convert are linked.
+    // This binary *is* the native offline CLI: decode / report / verify / convert
+    // / merge / repack / salvage are linked.
     let profile_ok: Option<String> = match resolve_capability_probe(opts.profile.as_deref()) {
         Some(path) => {
             // Real exercise of decode+model+verify when a fixture is present.
@@ -359,6 +604,8 @@ fn cmd_capability(args: &[String]) -> Result<(), Box<dyn std::error::Error>> {
     // Convert probe: dual-sink m4 (integer ticks) round-trip when present.
     // Fail closed if the probe exists but convert/verify fails.
     exercise_convert_probe()?;
+    // Merge/repack/salvage probe on the same dual-sink fixture when present.
+    exercise_merge_tools_probe()?;
 
     if opts.json {
         let obj = json!({
@@ -367,6 +614,9 @@ fn cmd_capability(args: &[String]) -> Result<(), Box<dyn std::error::Error>> {
             "report": true,
             "verify": true,
             "convert": true,
+            "merge": true,
+            "repack": true,
+            "salvage": true,
             "profile_ok": profile_ok,
         });
         write_stdout_text(&serde_json::to_string(&obj)?)
@@ -377,6 +627,9 @@ fn cmd_capability(args: &[String]) -> Result<(), Box<dyn std::error::Error>> {
             "report: yes".to_string(),
             "verify: yes".to_string(),
             "convert: yes".to_string(),
+            "merge: yes".to_string(),
+            "repack: yes".to_string(),
+            "salvage: yes".to_string(),
         ];
         match profile_ok {
             Some(p) => lines.push(format!("profile_ok: {p}")),
@@ -439,6 +692,85 @@ fn exercise_convert_probe() -> Result<(), Box<dyn std::error::Error>> {
                 "capability self-test: verify after convert --to=v5 failed: {e}"
             )
         })?;
+    }
+
+    let _ = fs::remove_dir_all(&tmp);
+    Ok(())
+}
+
+/// Exercise merge / repack / salvage on dual-sink m4 when present.
+///
+/// Fail closed when fixtures exist but tools break. Skips when absent.
+fn exercise_merge_tools_probe() -> Result<(), Box<dyn std::error::Error>> {
+    let candidates = [
+        PathBuf::from("fixtures/e4/dual-sink/m4_v5.nytprof"),
+        PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .join("../..")
+            .join("fixtures/e4/dual-sink/m4_v5.nytprof"),
+    ];
+    let v5_in = candidates.into_iter().find(|p| p.is_file());
+    let Some(v5_in) = v5_in else {
+        return Ok(());
+    };
+    let v6_in = v5_in.with_file_name("m4_v6.nytprof");
+    let tmp = env::temp_dir().join(format!(
+        "nytprof-cap-merge-{}-{}",
+        std::process::id(),
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|d| d.as_nanos())
+            .unwrap_or(0)
+    ));
+    let _ = fs::create_dir_all(&tmp);
+    let out_repack = tmp.join("repack.v6");
+    let out_merge = tmp.join("merge.v6");
+    let out_salvage = tmp.join("salvage.v5");
+
+    repack_path(&v5_in, &out_repack, ConvertTarget::V6).map_err(|e| {
+        format!(
+            "capability self-test: repack failed for {}: {e}",
+            v5_in.display()
+        )
+    })?;
+    verify_profile(&out_repack).map_err(|e| {
+        format!("capability self-test: verify after repack failed: {e}")
+    })?;
+
+    if v6_in.is_file() {
+        merge_paths(
+            &[v5_in.as_path(), v6_in.as_path()],
+            &out_merge,
+            ConvertTarget::V6,
+        )
+        .map_err(|e| format!("capability self-test: merge failed: {e}"))?;
+        // Merged stream has two process sequences — still stream-complete if both ends present.
+        verify_profile(&out_merge).map_err(|e| {
+            format!("capability self-test: verify after merge failed: {e}")
+        })?;
+    }
+
+    // Salvage of a mid-zlib cut must recover + label (not verify-as-clean-complete).
+    let full = fs::read(&v5_in).map_err(|e| format!("read {}: {e}", v5_in.display()))?;
+    let cut = if full.len() > 40 {
+        &full[..full.len() / 2]
+    } else {
+        full.as_slice()
+    };
+    let cut_path = tmp.join("cut.v5");
+    fs::write(&cut_path, cut).map_err(|e| format!("write cut: {e}"))?;
+    let report = salvage_path(&cut_path, &out_salvage, ConvertTarget::V5).map_err(|e| {
+        format!("capability self-test: salvage failed: {e}")
+    })?;
+    if !report.salvage_labeled {
+        return Err("capability self-test: salvage did not label incomplete".into());
+    }
+    if report.events_recovered == 0 {
+        return Err("capability self-test: salvage recovered zero events".into());
+    }
+    // Output must re-decode (labeled product).
+    let salvaged = fs::read(&out_salvage).map_err(|e| format!("read salvage out: {e}"))?;
+    if !salvaged.starts_with(b"NYTProf 5 0\n") {
+        return Err("capability self-test: salvage output missing v5 header".into());
     }
 
     let _ = fs::remove_dir_all(&tmp);

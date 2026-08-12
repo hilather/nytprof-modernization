@@ -17,6 +17,6 @@ mod varint;
 mod writer;
 
 pub use error::{Error, Result};
-pub use reader::{decode_all, decode_path, EventIter};
+pub use reader::{decode_all, decode_path, decode_salvage_prefix, EventIter};
 pub use varint::{decode_u32, encode_u32, read_i32, read_u32};
 pub use writer::{encode_all, encode_all_as_v5};

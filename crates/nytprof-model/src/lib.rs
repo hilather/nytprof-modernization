@@ -14,11 +14,16 @@ use serde_json::Value;
 use thiserror::Error;
 
 mod convert;
+mod merge_tools;
 mod v6_ingest;
 
 pub use convert::{
     convert_and_models, convert_bytes, convert_path, encode_events, ConvertError, ConvertResult,
     ConvertTarget,
+};
+pub use merge_tools::{
+    detect_convert_target, merge_bytes, merge_paths, repack_bytes, repack_path, salvage_bytes,
+    salvage_path, MergeToolsError, MergeToolsResult, SalvageReport,
 };
 pub use v6_ingest::{decode_events_from_bytes, decode_events_from_path, owned_records_to_events};
 

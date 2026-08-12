@@ -103,7 +103,10 @@ for marker in \
   "decode: yes" \
   "report: yes" \
   "verify: yes" \
-  "convert: yes"
+  "convert: yes" \
+  "merge: yes" \
+  "repack: yes" \
+  "salvage: yes"
 do
   grep -qxF "$marker" "$OUT1" || fail "run #1 missing marker: $marker\n$(cat "$OUT1")"
   grep -qxF "$marker" "$OUT2" || fail "run #2 missing marker: $marker\n$(cat "$OUT2")"
@@ -114,7 +117,7 @@ ok "stable markers present on both runs"
 # profile_ok may be path or skip; both runs must match each other.
 extract_core() {
   # Keep only the contract lines (ignore any trailing noise).
-  grep -E '^(OK: native capability self-test|decode: |report: |verify: |convert: |profile_ok: )' "$1" | sort
+  grep -E '^(OK: native capability self-test|decode: |report: |verify: |convert: |merge: |repack: |salvage: |profile_ok: )' "$1" | sort
 }
 
 CORE1="$(extract_core "$OUT1")"
@@ -203,7 +206,7 @@ with open(path, encoding="utf-8") as fh:
     obj = json.load(fh)
 if not isinstance(obj, dict):
     sys.exit("not an object")
-for k in ("ok", "decode", "report", "verify", "convert"):
+for k in ("ok", "decode", "report", "verify", "convert", "merge", "repack", "salvage"):
     if obj.get(k) is not True:
         sys.exit(f"{k} must be true, got {obj.get(k)!r}")
 if "profile_ok" not in obj:
@@ -224,7 +227,7 @@ $(cat "$f")"
       local $/; my $raw = <$fh>;
       my $obj = JSON::PP->new->decode($raw);
       die "not object\n" unless ref($obj) eq "HASH";
-      for my $k (qw(ok decode report verify convert)) {
+      for my $k (qw(ok decode report verify convert merge repack salvage)) {
         die "$k must be true\n" unless $obj->{$k};
       }
       die "missing profile_ok\n" unless exists $obj->{profile_ok};
@@ -243,6 +246,12 @@ $(cat "$f")"
       || fail "$label: missing verify:true\n$(cat "$f")"
     grep -qE '"convert"[[:space:]]*:[[:space:]]*true' "$f" \
       || fail "$label: missing convert:true\n$(cat "$f")"
+    grep -qE '"merge"[[:space:]]*:[[:space:]]*true' "$f" \
+      || fail "$label: missing merge:true\n$(cat "$f")"
+    grep -qE '"repack"[[:space:]]*:[[:space:]]*true' "$f" \
+      || fail "$label: missing repack:true\n$(cat "$f")"
+    grep -qE '"salvage"[[:space:]]*:[[:space:]]*true' "$f" \
+      || fail "$label: missing salvage:true\n$(cat "$f")"
     grep -qE '"profile_ok"' "$f" \
       || fail "$label: missing profile_ok\n$(cat "$f")"
     log "NOTE: no python3/perl JSON::PP; used key greps for $label"
@@ -251,7 +260,7 @@ $(cat "$f")"
 
 json_validate_file "$JOUT1" "json run #1"
 json_validate_file "$JOUT2" "json run #2"
-ok "capability --json fields ok/decode/report/verify/convert true on both runs"
+ok "capability --json fields ok/decode/report/verify/convert/merge/repack/salvage true on both runs"
 
 # Consistency of profile_ok across two JSON runs (and vs fixture presence).
 json_profile_ok() {

@@ -43,6 +43,206 @@ pub fn decode_all(data: &[u8]) -> Result<Vec<Event>> {
     EventIter::new(data)?.collect()
 }
 
+/// Salvage the longest **complete verified tag prefix** from a v5 profile.
+///
+/// Recovery rules (unambiguous):
+/// - Emits only tags whose full payload was read successfully.
+/// - On the first incomplete/corrupt **text-phase** tag, stops and returns events
+///   collected so far (`bytes_consumed` = end of last good tag).
+/// - On `START_DEFLATE` (`z`):
+///   - inflate **and** fully decode the inflated body without error → accept the
+///     whole deflate unit (`START_DEFLATE` + body events); `bytes_consumed` =
+///     `data.len()` (oracle may leave trailing post-stream raw bytes).
+///   - inflate fails **or** any inflated body tag is incomplete/corrupt → the
+///     entire deflate unit is discarded; return pre-`z` events only;
+///     `bytes_consumed` = file offset of the `z` tag.
+/// - Empty input / bad header still return `Err` (nothing recoverable).
+///
+/// This is the v5 primitive for PR-C02 `salvage` (TOOL-007). Default `decode_all`
+/// remains fail-closed on truncated streams.
+pub fn decode_salvage_prefix(data: &[u8]) -> Result<(Vec<Event>, usize)> {
+    if data.is_empty() {
+        return Err(Error::UnexpectedEof {
+            what: "profile header",
+            offset: 0,
+        });
+    }
+
+    let mut events = Vec::new();
+    let mut seq: u64 = 0;
+
+    let header_end = match find_newline(data, 0) {
+        Some(n) => n,
+        None => {
+            return Err(Error::format(
+                "NYTProf data format error while reading header",
+            ));
+        }
+    };
+    let header = std::str::from_utf8(&data[0..header_end])
+        .map_err(|_| Error::format("header is not valid UTF-8"))?;
+    let (major, minor) = parse_header(header)?;
+    events.push(Event::new(
+        seq,
+        tags::VERSION,
+        vec![json_u64(major as u64), json_u64(minor as u64)],
+    ));
+    seq += 1;
+
+    let mut pos: usize = header_end + 1;
+    // Last file-absolute offset of a fully accepted text-phase tag boundary.
+    let mut last_good_file_pos: usize = header_end + 1;
+
+    while pos < data.len() {
+        let tag = data[pos];
+        let tag_file_offset = pos;
+        pos += 1;
+
+        match tag {
+            wire::COMMENT => match read_line_including_nl(data, pos) {
+                Ok((line, new_pos)) => {
+                    pos = new_pos;
+                    let text = String::from_utf8_lossy(&line).into_owned();
+                    events.push(Event::new(seq, tags::COMMENT, vec![Value::String(text)]));
+                    seq += 1;
+                    last_good_file_pos = pos;
+                }
+                Err(_) => return Ok((events, last_good_file_pos)),
+            },
+            wire::ATTRIBUTE => match read_line_including_nl(data, pos) {
+                Ok((line, new_pos)) => match parse_key_value(&line, "attribute") {
+                    Ok((k, v)) => {
+                        pos = new_pos;
+                        events.push(Event::new(
+                            seq,
+                            tags::ATTRIBUTE,
+                            vec![Value::String(k), Value::String(v)],
+                        ));
+                        seq += 1;
+                        last_good_file_pos = pos;
+                    }
+                    Err(_) => return Ok((events, last_good_file_pos)),
+                },
+                Err(_) => return Ok((events, last_good_file_pos)),
+            },
+            wire::OPTION => match read_line_including_nl(data, pos) {
+                Ok((line, new_pos)) => match parse_key_value(&line, "option") {
+                    Ok((k, v)) => {
+                        pos = new_pos;
+                        events.push(Event::new(
+                            seq,
+                            tags::OPTION,
+                            vec![Value::String(k), Value::String(v)],
+                        ));
+                        seq += 1;
+                        last_good_file_pos = pos;
+                    }
+                    Err(_) => return Ok((events, last_good_file_pos)),
+                },
+                Err(_) => return Ok((events, last_good_file_pos)),
+            },
+            wire::START_DEFLATE => {
+                let z_file_pos = tag_file_offset;
+                // Deflate unit is all-or-nothing: inflate + full body decode.
+                match decode_deflate_unit_complete(&data[z_file_pos + 1..], seq + 1) {
+                    Ok(body_events) => {
+                        events.push(Event::new(seq, tags::START_DEFLATE, vec![]));
+                        // body_events already numbered from seq+1
+                        let mut next_seq = seq + 1;
+                        for mut ev in body_events {
+                            ev.seq = next_seq;
+                            next_seq += 1;
+                            events.push(ev);
+                        }
+                        // Complete deflate unit — remainder of file is the unit
+                        // (oracle may append post-stream raw comments; ignored).
+                        return Ok((events, data.len()));
+                    }
+                    Err(_) => {
+                        // Incomplete/corrupt deflate unit — discard from `z`.
+                        return Ok((events, z_file_pos));
+                    }
+                }
+            }
+            _ => {
+                let mut try_pos = pos;
+                match decode_payload_tag(tag, tag_file_offset as u64, data, &mut try_pos, seq) {
+                    Ok(event) => {
+                        pos = try_pos;
+                        events.push(event);
+                        seq += 1;
+                        last_good_file_pos = pos;
+                    }
+                    Err(_) => return Ok((events, last_good_file_pos)),
+                }
+            }
+        }
+    }
+
+    Ok((events, last_good_file_pos))
+}
+
+/// Inflate zlib bytes and decode every tag in the inflated body. Any error →
+/// the whole deflate unit is incomplete (caller discards `START_DEFLATE`).
+fn decode_deflate_unit_complete(zlib_bytes: &[u8], mut seq: u64) -> Result<Vec<Event>> {
+    let mut decoder = ZlibDecoder::new(zlib_bytes);
+    let mut buf = Vec::new();
+    decoder
+        .read_to_end(&mut buf)
+        .map_err(|e| Error::Zlib(format!("inflate failed after START_DEFLATE: {e}")))?;
+
+    let mut events = Vec::new();
+    let mut pos: usize = 0;
+    let cursor = buf.as_slice();
+    while pos < cursor.len() {
+        let tag = cursor[pos];
+        let tag_offset = pos as u64;
+        pos += 1;
+        match tag {
+            wire::COMMENT => {
+                let (line, new_pos) = read_line_including_nl(cursor, pos)?;
+                pos = new_pos;
+                let text = String::from_utf8_lossy(&line).into_owned();
+                events.push(Event::new(seq, tags::COMMENT, vec![Value::String(text)]));
+                seq += 1;
+            }
+            wire::ATTRIBUTE => {
+                let (line, new_pos) = read_line_including_nl(cursor, pos)?;
+                pos = new_pos;
+                let (k, v) = parse_key_value(&line, "attribute")?;
+                events.push(Event::new(
+                    seq,
+                    tags::ATTRIBUTE,
+                    vec![Value::String(k), Value::String(v)],
+                ));
+                seq += 1;
+            }
+            wire::OPTION => {
+                let (line, new_pos) = read_line_including_nl(cursor, pos)?;
+                pos = new_pos;
+                let (k, v) = parse_key_value(&line, "option")?;
+                events.push(Event::new(
+                    seq,
+                    tags::OPTION,
+                    vec![Value::String(k), Value::String(v)],
+                ));
+                seq += 1;
+            }
+            wire::START_DEFLATE => {
+                return Err(Error::format(
+                    "duplicate START_DEFLATE inside deflate body",
+                ));
+            }
+            _ => {
+                let event = decode_payload_tag(tag, tag_offset, cursor, &mut pos, seq)?;
+                events.push(event);
+                seq += 1;
+            }
+        }
+    }
+    Ok(events)
+}
+
 /// Iterator over profile events (excludes synthetic `_END`).
 ///
 /// Construction parses the whole stream up front (profiles are modest). The
@@ -730,6 +930,34 @@ mod integration_tests {
             ),
             "truncated-after-header → Err kind, got {err:?}"
         );
+    }
+
+    #[test]
+    fn decode_salvage_prefix_mid_zlib_keeps_pre_deflate_only() {
+        let path = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .join("../../fixtures/e4/dual-sink/m4_v5.nytprof");
+        if !path.is_file() {
+            return;
+        }
+        let bytes = std::fs::read(&path).expect("read m4");
+        let half = &bytes[..bytes.len() / 2];
+        decode_all(half).expect_err("half m4 must fail strict decode");
+        let (events, n) = decode_salvage_prefix(half).expect("salvage half");
+        assert!(!events.is_empty(), "expected pre-z events");
+        assert!(
+            n < half.len(),
+            "bytes_consumed {n} must stop before incomplete deflate (half={})",
+            half.len()
+        );
+        assert!(
+            events.iter().all(|e| e.tag != tags::START_DEFLATE),
+            "incomplete deflate unit must not emit START_DEFLATE"
+        );
+        // Full file salvage equals full decode event count (labels not applied here).
+        let (full_ev, full_n) = decode_salvage_prefix(&bytes).expect("salvage full");
+        assert_eq!(full_n, bytes.len());
+        let strict = decode_all(&bytes).expect("strict full");
+        assert_eq!(full_ev.len(), strict.len());
     }
 
     #[test]

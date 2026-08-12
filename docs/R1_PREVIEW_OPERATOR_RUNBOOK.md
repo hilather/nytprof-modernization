@@ -60,7 +60,6 @@ Policy: [BUILD_SUPPORT_POLICY.md](https://github.com/hilather/nytprof-modernizat
 | 9 | `./scripts/packaging/capability_selftest_smoke.sh` | Run when cargo **or** `prefix`/`target` native CLI (or `$NYTPROF_NATIVE_CLI`); **honest skip** otherwise (**CI-CAPABILITY-GATE**) |
 | 10 | `./scripts/packaging/collector_sink_smoke.sh` | **COL-001..007 + COL-014 dual (test/dev-only OQ-4)** — isolation always; `make -C collector test` when CC; honest skip without C. |
 | 11 | `./tools/oracle/e3_c_writer_parity.sh` | **COL-007 product E3-EVENT** (when cargo): C fixtures `fixtures/v6/from-c/**` + `e3_c_*`; E3-mixed residual; honest skip without cargo (fixture presence still checked). |
-| 12 | `./scripts/packaging/e4_v5_v6_semantic_smoke.sh --full` | When native CLI available (**E4 product CLI** on dual-sink pairs); honest skip otherwise; dual-sink fixture presence still required; full oracle dual residual (TEST-008) |
 
 Not part of this gate (document only): broader `./scripts/packaging/packaging_gate.sh`, `./scripts/packaging/makemaker_dual_path_smoke.sh`. Not multi-OS CI (**BUILD-006**).
 
@@ -103,10 +102,32 @@ cargo run -q -p nytprof-cli -- capability --json
 ./scripts/packaging/capability_selftest_smoke.sh
 ```
 
-Expect (human): `OK: native capability self-test`, `decode: yes`, `report: yes`, `verify: yes`, plus E5 honesty `v6_decode: yes` / `v6_report: yes` / `convert: no` / `merge: no` / `collection_default: v5`; `profile_ok` / `v6_profile_ok` non-skip when the default v5 / dual-sink v6 fixtures resolve.  
-Expect (JSON): `ok` / `decode` / `report` / `verify` / `v6_decode` / `v6_report` true; `convert` / `merge` **false**; `collection_default` `"v5"`; `profile_ok` non-null when the default v5 golden is found; `v6_profile_ok` non-null when `fixtures/e4/dual-sink/default_calls1_v6.nytprof` resolves.
+Expect (human): `OK: native capability self-test`, `decode: yes`, `report: yes`, `verify: yes`, `convert: yes`, `merge: yes`, `repack: yes`, `salvage: yes`.  
+Expect (JSON): `ok` / `decode` / `report` / `verify` / `convert` / `merge` / `repack` / `salvage` true; `profile_ok` non-null when the default golden fixture is found.
 
-Schema: [capability-selftest-mvp-v0.md](https://github.com/hilather/nytprof-modernization/blob/main/docs/schemas/capability-selftest-mvp-v0.md) (E5 fields); [cli-e5-v6-opt-in-mvp-v0.md](https://github.com/hilather/nytprof-modernization/blob/main/docs/schemas/cli-e5-v6-opt-in-mvp-v0.md)
+Strict convert (PR-C01; integer-tick dual-sink / representable streams):
+
+```bash
+cargo run -q -p nytprof-cli -- convert --to=v6 fixtures/e4/dual-sink/m4_v5.nytprof -o /tmp/m4.v6
+cargo run -q -p nytprof-cli -- convert --to=v5 fixtures/e4/dual-sink/m4_v6.nytprof -o /tmp/m4.v5
+cargo run -q -p nytprof-cli -- verify /tmp/m4.v5
+```
+
+Merge / repack / salvage (PR-C02; recovery semantics unambiguous):
+
+```bash
+cargo run -q -p nytprof-cli -- repack fixtures/e4/dual-sink/m4_v6.nytprof -o /tmp/m4.repack.v6
+cargo run -q -p nytprof-cli -- merge --to=v6 -o /tmp/m4.merged.v6 \
+  fixtures/e4/dual-sink/m4_v5.nytprof fixtures/e4/dual-sink/m4_v6.nytprof
+head -c 68 fixtures/e4/dual-sink/m4_v5.nytprof > /tmp/m4.cut.v5
+cargo run -q -p nytprof-cli -- salvage /tmp/m4.cut.v5 -o /tmp/m4.salvaged.v5
+# Expect: OK: salvage incomplete=yes ...
+```
+
+Schema: [convert-strict-mvp-v0.md](https://github.com/hilather/nytprof-modernization/blob/main/docs/schemas/convert-strict-mvp-v0.md)  
+Schema: [merge-repack-salvage-mvp-v0.md](https://github.com/hilather/nytprof-modernization/blob/main/docs/schemas/merge-repack-salvage-mvp-v0.md)
+
+Schema: [capability-selftest-mvp-v0.md](https://github.com/hilather/nytprof-modernization/blob/main/docs/schemas/capability-selftest-mvp-v0.md)
 
 ### Native aggregates JSON (NATIVE-AGG-JSON)
 
@@ -593,9 +614,7 @@ Also on blocks-calls1 when asserted: leaf returns **15**, mid returns **3** (sam
 | `FMT-V6-EVENT-BODY-UNKNOWN-OPTIONAL-SKIP-MVP` | **done** | Length-framed unknown-optional skip + always-inflate EVENT/mixed tests (order+fields; SOURCE co-kind). **Before full COL-007.** |
 | `COL-001-SINK-MVP` | **done (scaffold)** | Overlay `collector/` semantic sink + counting + v5 wire; smoke offline_gate step 10; **not** live hooks |
 | `COL-014-DUAL-SINK-MVP` | **done (test/dev-only)** | Same-run dual fan-out v5+v6 (OQ-4 not product UX); `test_dual_sink`; schema `collector-dual-sink-mvp-v0.md`; full oracle dual residual; feeds E4-v0 model pairs |
-| `E4-V0-MODEL-SEMANTIC-MVP` | **done** | E4-v0 model-level v5↔v6 aggregates on dual-sink pairs; `e4_v0_*` tests + `e4_v5_v6_semantic_smoke.sh --model-only`; full oracle residual (TEST-008) |
-| `E4-PRODUCT-CLI-SMOKE-MVP` | **done** | E4 product CLI smoke: real CLIs on v5+v6 dual pairs; `e4_v5_v6_semantic_smoke.sh --full`; offline_gate step 12 when native; schema `e4-product-cli-smoke-mvp-v0.md` |
-| `CLI-E5-V6-OPT-IN-MVP` | **done** | CLI E5 report/html/csv/folded/callgrind on v6; capability `v6_decode`/`v6_report`; no convert/merge claim; `collection_default: v5`; schema `cli-e5-v6-opt-in-mvp-v0.md` |
+| `E4-V0-MODEL-SEMANTIC-MVP` | **done** | E4-v0 model-level v5↔v6 aggregates on dual-sink pairs; `e4_v0_*` tests + `e4_v5_v6_semantic_smoke.sh --model-only`; full oracle + product CLI residual (PR-B12b) |
 | `COL-002-LIFECYCLE-MVP` | **done (scaffold)** | Explicit sink lifecycle + emit gates; **not** COL-015 full fork/signal matrix |
 | `COL-003-SEQ-MVP` | **done (scaffold)** | Internal gapless logical seq; not on default v5 wire |
 | `COL-004-FAST-PATH-MVP` | **done (scaffold)** | No-alloc TIME_LINE/TIME_BLOCK batch append + `nytp_fast_emit_*`; light microbench engineering only — **not** BENCH cert |
@@ -650,7 +669,7 @@ Also on blocks-calls1 when asserted: leaf returns **15**, mid returns **3** (sam
 | `ADR-0002-V6-STRING-POOL-CANDIDATE` | **done** (proposed) | FOOTER string-pool ADR candidate. Not global pool; not COL-007. **Before full COL-007.** |
 | `E3-DUAL-EQUALITY-HARNESS-MVP` | **done** | E3 harness writer-bytes→decode equality (stand-in absolute/packing/string-dict/mid-stream). Stand-in **not** product dual-equality evidence. Not COL-007 C writer. **Before full COL-007.** |
 | `E4-V5-V6-SEMANTIC-EQUALITY-POLICY-PROVISIONAL` | **done** | E4 v5↔v6 semantic equality policy draft. E4-v0 model enforcement ready (PR-B10). |
-| `E4-V5-V6-SEMANTIC-EQUALITY-POLICY-MVP` | **done** | E4 policy honesty sync. E4-v0 model + E4 product CLI ready (PR-B12b / **E4-PRODUCT-CLI-SMOKE-MVP**); full oracle dual residual (TEST-008). |
+| `E4-V5-V6-SEMANTIC-EQUALITY-POLICY-MVP` | **done** | E4 policy honesty sync. E4-v0 model ready; full oracle + product CLI residual. |
 | `COL-007` | deferred | C v6 writer — unblocked for *start* after report-side evidence; not implemented by this runbook |
 
 ## Revision rule
