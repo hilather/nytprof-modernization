@@ -78,7 +78,7 @@ String views: `ptr == NULL && len > 0` is rejected with `NYTP_ERR_NULL` **before
 | Full `fixtures/v5/*` oracle stream equality under fake-clock | complete TEST-003 (+ corpus harness) |
 | Live Perl/XS opcode hooks | later COL / packaging |
 | C v6 writer | COL-007 |
-| Dual-sink product path | ARCH-007 / COL-014 |
+| Dual-sink product path | **rejected** (OQ-4) — COL-014 is test/dev-only; see [`collector-dual-sink-mvp-v0.md`](https://github.com/hilather/nytprof-modernization/blob/main/docs/schemas/collector-dual-sink-mvp-v0.md) |
 | BENCH certification of writer cost | BENCH-004 |
 | Byte-identical oracle files | optional diagnostic mode (not required) |
 | Multi-OS CI matrix for collector | BUILD-006 residual |

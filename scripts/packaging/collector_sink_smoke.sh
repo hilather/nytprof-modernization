@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
-# COL-001..007-abs / PR-B02..B06 — collector sink + lifecycle/seq + batch/fast +
-# fake-clock + real v5 wire + absolute v6 wire smoke.
+# COL-001..007 + COL-014 / PR-B02..B10a — collector sink + lifecycle/seq +
+# batch/fast + fake-clock + real v5 wire + absolute v6 wire + dual-sink
+# (test/dev-only OQ-4) smoke.
 #
 # When a C toolchain is present: build + unit-test the overlay sink (needs zlib).
 # When absent: honest skip (offline_gate remains green).
@@ -23,7 +24,7 @@ ok() { printf 'OK: %s\n' "$*"; }
 fail() { printf 'ERROR: %s\n' "$*" >&2; exit 1; }
 banner() { printf '\n=== %s ===\n' "$*"; }
 
-banner "collector_sink_smoke (COL-001..007-pack + fake-clock + v5/v6 wire)"
+banner "collector_sink_smoke (COL-001..007-pack + COL-014 dual + fake-clock + v5/v6 wire)"
 
 # ---------------------------------------------------------------------------
 # Tree present (this smoke is only meaningful after PR-B02 lands sources)
@@ -45,7 +46,10 @@ banner "collector_sink_smoke (COL-001..007-pack + fake-clock + v5/v6 wire)"
 [[ -f "$COLLECTOR/t/test_v6_abs_wire.c" ]] || fail "missing test_v6_abs_wire.c (PR-B06)"
 [[ -f "$COLLECTOR/t/test_v6_codec_chunk_crc.c" ]] || fail "missing test_v6_codec_chunk_crc.c (PR-B07)"
 [[ -f "$COLLECTOR/t/test_v6_packing_footer.c" ]] || fail "missing test_v6_packing_footer.c (PR-B08)"
-ok "collector/ overlay tree present (B0-A; COL-001..007-abs)"
+[[ -f "$COLLECTOR/include/nytp_sink_dual.h" ]] || fail "missing nytp_sink_dual.h (PR-B10a COL-014)"
+[[ -f "$COLLECTOR/src/nytp_sink_dual.c" ]] || fail "missing nytp_sink_dual.c (PR-B10a COL-014)"
+[[ -f "$COLLECTOR/t/test_dual_sink.c" ]] || fail "missing test_dual_sink.c (PR-B10a COL-014)"
+ok "collector/ overlay tree present (B0-A; COL-001..007 + COL-014 dual)"
 
 # ---------------------------------------------------------------------------
 # Isolation: never put collector/ (or crates/) on oracle PERL5LIB
@@ -146,6 +150,7 @@ make -C "$COLLECTOR" test CC="$CC_BIN"
 [[ -x "$COLLECTOR/build/test_batch_fast" ]] || fail "test_batch_fast missing (PR-B04)"
 [[ -x "$COLLECTOR/build/test_v5_wire" ]] || fail "test_v5_wire missing (PR-B05)"
 [[ -x "$COLLECTOR/build/test_v6_abs_wire" ]] || fail "test_v6_abs_wire missing (PR-B06)"
+[[ -x "$COLLECTOR/build/test_dual_sink" ]] || fail "test_dual_sink missing (PR-B10a COL-014)"
 # Re-run shipped binaries from collector/ so relative build/*.nytprof paths work.
 (
   cd "$COLLECTOR"
@@ -155,8 +160,9 @@ make -C "$COLLECTOR" test CC="$CC_BIN"
   ./build/test_batch_fast
   ./build/test_v5_wire
   ./build/test_v6_abs_wire
+  ./build/test_dual_sink
 )
-ok "collector unit tests (sink + lifecycle/seq + fake-clock mini M4 + batch/fast + v5 + v6-abs wire)"
+ok "collector unit tests (sink + lifecycle/seq + fake-clock mini M4 + batch/fast + v5 + v6-abs + dual-sink)"
 
 # Mini wire artifact from test_v5_wire
 WIRE="$COLLECTOR/build/m4_mini_wire.nytprof"
@@ -251,12 +257,27 @@ if command -v cargo >/dev/null 2>&1; then
   ok "Rust always-inflate accepted packing/dict C bytes"
 fi
 
+# Dual-sink M4 artifacts (COL-014 test/dev-only)
+DUAL_V5="$COLLECTOR/build/dual_m4_v5.nytprof"
+DUAL_V6="$COLLECTOR/build/dual_m4_v6.nytprof"
+DUAL_META="$COLLECTOR/build/dual_m4_meta.json"
+[[ -f "$DUAL_V5" ]] || fail "expected dual m4 v5 artifact $DUAL_V5 after test_dual_sink"
+[[ -f "$DUAL_V6" ]] || fail "expected dual m4 v6 artifact $DUAL_V6 after test_dual_sink"
+[[ -f "$DUAL_META" ]] || fail "expected dual compare-meta $DUAL_META after test_dual_sink"
+printf 'NYTProf 5 0\n' | cmp -n 12 - "$DUAL_V5" >/dev/null 2>&1 \
+  || fail "dual m4 v5 missing NYTProf 5 0 header"
+printf 'NYTPROF6' | cmp -n 8 - "$DUAL_V6" >/dev/null 2>&1 \
+  || fail "dual m4 v6 missing NYTPROF6 magic"
+grep -q 'test_dev_only' "$DUAL_META" || fail "dual meta missing test_dev_only marker"
+ok "COL-014 dual-sink m4 artifacts + out-of-band meta present (test/dev-only)"
+
 echo "NOTE: COL-007 ABS+CODEC+PACK scaffold; product E3-EVENT = fixtures/v6/from-c + e3_c_* (see e3_c_writer_parity.sh); E3-mixed residual; not live XS hooks"
+echo "NOTE: COL-014 dual-sink is test/dev-only (OQ-4) — not product format=dual UX; full oracle dual equality residual (TEST-003/TEST-008)"
 echo "NOTE: M4 mini sample only — full oracle corpus under fake-clock needs complete TEST-003"
 echo "NOTE: batch light microbench is engineering only — not BENCH-003/006 certification"
 echo "NOTE: flush/compression discount timing vs BASE-003 remains residual"
 echo "NOTE: nytp_ticks outside I32 fails closed (OI-003-01 overflow composition residual)"
 
 banner "collector_sink_smoke PASSED"
-ok "COL-001..007-abs + fake-clock + v5/v6-abs wire scaffold build + isolation"
+ok "COL-001..007 + COL-014 dual (test/dev) + fake-clock + v5/v6-abs wire scaffold build + isolation"
 exit 0

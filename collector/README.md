@@ -1,10 +1,10 @@
 
-# Collector overlay (ADR-0004 B0-A) — COL-001..007-codec + fake-clock scaffold
+# Collector overlay (ADR-0004 B0-A) — COL-001..007 + COL-014 dual (test/dev) + fake-clock scaffold
 
-**Status:** scaffolding + product E3-EVENT (PR-B02..**B05 v5 wire** + **B06 absolute v6** + **B07 codecs/multi-chunk/CRC** + **B08 packing/FOOTER dict/mid-stream** + **B09 E3-C fixtures / board COL-007 done**)  
+**Status:** scaffolding + product E3-EVENT (PR-B02..**B05 v5 wire** + **B06 absolute v6** + **B07 codecs/multi-chunk/CRC** + **B08 packing/FOOTER dict/mid-stream** + **B09 E3-C fixtures / board COL-007 done** + **B10a COL-014 dual-sink test/dev-only OQ-4**)  
 **Layout decision:** [ADR-0004](https://github.com/hilather/nytprof-modernization/blob/main/docs/adrs/0004-collector-packaging-source-tree.md)  
 **Logical events:** [COMPAT-001](https://github.com/hilather/nytprof-modernization/blob/main/docs/contracts/COMPAT-001_LOGICAL_EVENT_CONTRACT.md)  
-**Schemas:** [collector-sink-api-mvp-v0.md](https://github.com/hilather/nytprof-modernization/blob/main/docs/schemas/collector-sink-api-mvp-v0.md), [collector-lifecycle-seq-fake-clock-mvp-v0.md](https://github.com/hilather/nytprof-modernization/blob/main/docs/schemas/collector-lifecycle-seq-fake-clock-mvp-v0.md), [collector-batch-fast-mvp-v0.md](https://github.com/hilather/nytprof-modernization/blob/main/docs/schemas/collector-batch-fast-mvp-v0.md), [collector-v5-wire-mvp-v0.md](https://github.com/hilather/nytprof-modernization/blob/main/docs/schemas/collector-v5-wire-mvp-v0.md), [collector-v6-absolute-wire-mvp-v0.md](https://github.com/hilather/nytprof-modernization/blob/main/docs/schemas/collector-v6-absolute-wire-mvp-v0.md), [collector-v6-codecs-multi-chunk-crc-mvp-v0.md](https://github.com/hilather/nytprof-modernization/blob/main/docs/schemas/collector-v6-codecs-multi-chunk-crc-mvp-v0.md), [collector-v6-packing-footer-dict-mvp-v0.md](https://github.com/hilather/nytprof-modernization/blob/main/docs/schemas/collector-v6-packing-footer-dict-mvp-v0.md), [collector-v6-e3-c-fixtures-mvp-v0.md](https://github.com/hilather/nytprof-modernization/blob/main/docs/schemas/collector-v6-e3-c-fixtures-mvp-v0.md)  
+**Schemas:** [collector-sink-api-mvp-v0.md](https://github.com/hilather/nytprof-modernization/blob/main/docs/schemas/collector-sink-api-mvp-v0.md), [collector-lifecycle-seq-fake-clock-mvp-v0.md](https://github.com/hilather/nytprof-modernization/blob/main/docs/schemas/collector-lifecycle-seq-fake-clock-mvp-v0.md), [collector-batch-fast-mvp-v0.md](https://github.com/hilather/nytprof-modernization/blob/main/docs/schemas/collector-batch-fast-mvp-v0.md), [collector-v5-wire-mvp-v0.md](https://github.com/hilather/nytprof-modernization/blob/main/docs/schemas/collector-v5-wire-mvp-v0.md), [collector-v6-absolute-wire-mvp-v0.md](https://github.com/hilather/nytprof-modernization/blob/main/docs/schemas/collector-v6-absolute-wire-mvp-v0.md), [collector-v6-codecs-multi-chunk-crc-mvp-v0.md](https://github.com/hilather/nytprof-modernization/blob/main/docs/schemas/collector-v6-codecs-multi-chunk-crc-mvp-v0.md), [collector-v6-packing-footer-dict-mvp-v0.md](https://github.com/hilather/nytprof-modernization/blob/main/docs/schemas/collector-v6-packing-footer-dict-mvp-v0.md), [collector-v6-e3-c-fixtures-mvp-v0.md](https://github.com/hilather/nytprof-modernization/blob/main/docs/schemas/collector-v6-e3-c-fixtures-mvp-v0.md), [collector-dual-sink-mvp-v0.md](https://github.com/hilather/nytprof-modernization/blob/main/docs/schemas/collector-dual-sink-mvp-v0.md)  
 **Timing notes:** [BASE-003](https://github.com/hilather/nytprof-modernization/blob/main/baseline/inventories/timing-lifecycle-notes.md)
 
 Modernization C sources for the **semantic event sink** live here — **not** under `baseline/6.15/` (oracle pin remains immutable).
@@ -13,8 +13,8 @@ Modernization C sources for the **semantic event sink** live here — **not** un
 
 ```text
 collector/
-  include/     public C headers (sink API, types, clock, batch/event, counting + v5/v6 wire + v6 IDs)
-  src/         sink wrappers + backends + fake-clock + batch/fast path + v5 + absolute v6 writers
+  include/     public C headers (sink API, types, clock, batch/event, counting + v5/v6 wire + dual + v6 IDs)
+  src/         sink wrappers + backends + fake-clock + batch/fast path + v5 + v6 + dual writers
   t/           unit tests (no Perl; pure C; zlib/zstd/lz4 for wire)
   xs/          reserved for future XS glue (empty)
   Makefile     opt-in C build (links -lz -lzstd -llz4)
@@ -38,8 +38,9 @@ collector/
 | **COL-007-CODEC (PR-B07)** | EVENT codecs NONE/ZLIB/ZSTD/LZ4; multi-chunk seal; header + payload CRC32 |
 | **COL-007-PACK (PR-B08)** | ADR-0001 packing continuity; mid-stream codec region; ADR-0002 FOOTER string dict |
 | **COL-007 product E3-EVENT (PR-B09)** | C-only fixtures under `fixtures/v6/from-c/`; `gen_e3_c_fixtures`; product `e3_c_*` Rust always-inflate equality |
+| **COL-014 dual-sink (PR-B10a, OQ-4)** | **Test/dev-only** fan-out to v5+v6; same-run logical equality; env probe `NYTPROF_DUAL_SINK` / `NYTPROF_FORMAT=dual` (**not** product UX) |
 | **Fake-clock harness** | Scripted ticks + BASE-003 stmt driver + M4 **mini** sample |
-| `make -C collector test` | `test_sink_api` + `test_lifecycle_seq` + `test_fake_clock` + `test_batch_fast` + **`test_v5_wire`** + **`test_v6_abs_wire`** + **`test_v6_codec_chunk_crc`** + **`test_v6_packing_footer`** |
+| `make -C collector test` | `test_sink_api` + `test_lifecycle_seq` + `test_fake_clock` + `test_batch_fast` + **`test_v5_wire`** + **`test_v6_abs_wire`** + **`test_v6_codec_chunk_crc`** + **`test_v6_packing_footer`** + **`test_dual_sink`** |
 | `make -C collector gen-e3-fixtures` | Write product E3-EVENT C matrix to `OUTDIR` (default `../fixtures/v6/from-c`) |
 
 ## Explicit non-claims
@@ -49,6 +50,7 @@ collector/
 - **Not COL-015** — full fork buffer ownership / signal-safe finalization matrix  
 - **Not** hooked into live Perl opcode profiler yet  
 - **Not** a default dependency of `make legacy-smoke` or dual-path legacy half  
+- Dual-sink (COL-014) is **test/dev only** (OQ-4) — not advertised product `format=dual`; full fixtures dual equality residual  
 - Fake-clock is **test/dev only** — must not be production default  
 - Light microbench in `test_batch_fast` is **engineering only** — not BENCH-003/006 certification  
 - Flush/compression **discount timing** vs BASE-003 remains open (timing ADR residual)  
@@ -168,6 +170,7 @@ Hooks will call **emit**, never raw v5 bytes, once integrated. Dual/v6 sinks plu
 |-----------|-----------|
 | Complete TEST-003 | Full corpus fake-clock oracle match |
 | COL-007 | C v6 writer product E3-EVENT **done** (PR-B09); E3-mixed residual |
+| COL-014 | Dual-sink **test/dev harness done** (PR-B10a); full oracle dual residual (TEST-003/TEST-008) |
 | COL-015 | Full fork / signal lifecycle matrix with batch ownership |
 | BENCH-003 / BENCH-004 | Certified statement-path / writer component gates |
 

@@ -51,19 +51,22 @@ When both v5 and v6 profiles of the **same workload script and NYTPROF options**
 
 | Item | Status |
 |------|--------|
-| COL-007 C emitter producing v6 profiles of oracle fixtures | **open** |
-| Fixture generator: same workload → v5 + v6 pair | **open** |
-| Automated E4 smoke in offline_gate | **open** (requires pairs) |
+| COL-007 C emitter producing v6 profiles of oracle fixtures | **open** (product E3-EVENT mini matrix done; full oracle workload residual) |
+| Fixture generator: same workload → v5 + v6 pair | **open** (COL-014 dual-sink provides same-run **logical** fan-out harness; full oracle pairs residual) |
+| COL-014 dual-sink same-run logical equality (test/dev-only, OQ-4) | **harness ready** — `test_dual_sink` on M4 + primary-fixture-shaped streams; not product UX |
+| Automated E4 smoke in offline_gate | **open** (requires aggregate pairs / model path) |
 | Tick / basetime volatile normalize for dual profiles | follow COMPAT-002/003 |
 
 ## Non-claims
 
-- Not COL-007 done; not wire freeze; not CLI v6 default.
+- Not full E4 aggregate enforcement on oracle fixture pairs; not wire freeze; not CLI v6 default.
+- COL-014 dual-sink is **test/dev-only** (OQ-4) — not advertised product `format=dual`.
 - Not full REPORT HTML DOM parity or XS Data fidelity.
-- Policy only; first-slice R1-preview remains v5-only advertised path.
+- Policy + dual harness runway; first-slice R1-preview remains v5-only advertised product path.
 
 ## Evidence paths
 
 - R1 residual matrix advertised ready rows for count samples.
 - Dual-equality readiness: [`DUAL_EQUALITY_READINESS_v0.md`](https://github.com/hilather/nytprof-modernization/blob/main/docs/contracts/DUAL_EQUALITY_READINESS_v0.md)
+- COL-014 dual-sink schema: [`docs/schemas/collector-dual-sink-mvp-v0.md`](https://github.com/hilather/nytprof-modernization/blob/main/docs/schemas/collector-dual-sink-mvp-v0.md)
 - E3 harness (writer-bytes → Rust decode): `crates/nytprof-format-v6` module `dual_equality`

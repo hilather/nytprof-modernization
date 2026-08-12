@@ -1,7 +1,8 @@
-# COL-001..007 collector overlay build (ADR-0004 B0-A).
+# COL-001..007 + COL-014 collector overlay build (ADR-0004 B0-A).
 # Compiles when a C toolchain is present. Not required for legacy-only packaging.
 # COL-006 v5 wire writer links zlib (-lz).
 # COL-007 v6 writer links zlib + zstd + lz4 for EVENT payload codecs (PR-B07).
+# COL-014 dual-sink is test/dev-only (OQ-4) — not product UX.
 #
 # Usage (from repo root or collector/):
 #   make -C collector
@@ -28,7 +29,8 @@ TESTBINS := \
 	$(BUILD)/test_v5_wire \
 	$(BUILD)/test_v6_abs_wire \
 	$(BUILD)/test_v6_codec_chunk_crc \
-	$(BUILD)/test_v6_packing_footer
+	$(BUILD)/test_v6_packing_footer \
+	$(BUILD)/test_dual_sink
 
 # PR-B09 E3-C fixture generator (not part of unit-test suite)
 GEN_E3 := $(BUILD)/gen_e3_c_fixtures
@@ -41,6 +43,7 @@ SRC := \
 	src/nytp_sink_counting.c \
 	src/nytp_sink_v5.c \
 	src/nytp_sink_v6.c \
+	src/nytp_sink_dual.c \
 	src/nytp_clock.c \
 	src/nytp_batch.c
 
@@ -56,7 +59,8 @@ dirs:
 # Order-only | dirs so -j never races mkdir with cc -o build/*.o
 $(BUILD)/%.o: src/%.c include/nytp_sink.h include/nytp_types.h \
 		include/nytp_sink_counting.h include/nytp_sink_v5.h \
-		include/nytp_sink_v6.h include/nytprof_v6_ids.h \
+		include/nytp_sink_v6.h include/nytp_sink_dual.h \
+		include/nytprof_v6_ids.h \
 		include/nytp_clock.h include/nytp_batch.h include/nytp_event.h | dirs
 	$(CC) $(CPPFLAGS) $(CFLAGS) -c -o $@ $<
 
@@ -87,6 +91,9 @@ $(BUILD)/test_v6_codec_chunk_crc: t/test_v6_codec_chunk_crc.c $(LIB) | dirs
 $(BUILD)/test_v6_packing_footer: t/test_v6_packing_footer.c $(LIB) | dirs
 	$(CC) $(CPPFLAGS) $(CFLAGS) -o $@ t/test_v6_packing_footer.c $(LIB) $(LDFLAGS) $(LDLIBS)
 
+$(BUILD)/test_dual_sink: t/test_dual_sink.c $(LIB) | dirs
+	$(CC) $(CPPFLAGS) $(CFLAGS) -o $@ t/test_dual_sink.c $(LIB) $(LDFLAGS) $(LDLIBS)
+
 $(GEN_E3): t/gen_e3_c_fixtures.c $(LIB) | dirs
 	$(CC) $(CPPFLAGS) $(CFLAGS) -o $@ t/gen_e3_c_fixtures.c $(LIB) $(LDFLAGS) $(LDLIBS)
 
@@ -105,6 +112,7 @@ test: all
 	./$(BUILD)/test_v6_abs_wire
 	./$(BUILD)/test_v6_codec_chunk_crc
 	./$(BUILD)/test_v6_packing_footer
+	./$(BUILD)/test_dual_sink
 
 clean:
 	rm -rf $(BUILD)
