@@ -1,5 +1,14 @@
 # Evidence Bundle - TASK/WP/Release ID
 
+For the charter **R3** `engine=auto` **field window** (opt-in evidence only; **no product default flip**), prefer the specialized pack and report:
+
+- Guide: [docs/R3_FIELD_WINDOW.md](https://github.com/hilather/nytprof-modernization/blob/main/docs/R3_FIELD_WINDOW.md)
+- Report template: [docs/templates/R3_FIELD_WINDOW_REPORT.md](https://github.com/hilather/nytprof-modernization/blob/main/docs/templates/R3_FIELD_WINDOW_REPORT.md)
+- Collector: `./scripts/field/r3_field_window_collect.sh`
+- Schema: [docs/schemas/r3-field-window-mvp-v0.md](https://github.com/hilather/nytprof-modernization/blob/main/docs/schemas/r3-field-window-mvp-v0.md)
+
+This generic template remains the release-candidate / multi-gate evidence bundle shape (REL-004 scale).
+
 ## Identity and provenance
 
 - Source repository and commit:

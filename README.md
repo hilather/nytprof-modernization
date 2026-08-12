@@ -10,6 +10,7 @@ Hybrid modernization of [Devel::NYTProf](https://metacpan.org/dist/Devel-NYTProf
 | [`docs/PROGRAM_CHARTER.md`](https://github.com/hilather/nytprof-modernization/blob/main/docs/PROGRAM_CHARTER.md) | Mission, release levels, non-goals |
 | [`docs/FIRST_SLICE_BOARD.md`](https://github.com/hilather/nytprof-modernization/blob/main/docs/FIRST_SLICE_BOARD.md) | Ordered first-slice work board |
 | [`docs/RELEASE_NOTES_R1.md`](https://github.com/hilather/nytprof-modernization/blob/main/docs/RELEASE_NOTES_R1.md) | Full R1 MVP product cut release notes (PR-A10 honesty) |
+| [`docs/R3_FIELD_WINDOW.md`](https://github.com/hilather/nytprof-modernization/blob/main/docs/R3_FIELD_WINDOW.md) | R3 `engine=auto` field-window evidence pack (no default flip; PR-D01) |
 | [`docs/PHASE0_EXIT_CRITERIA.md`](https://github.com/hilather/nytprof-modernization/blob/main/docs/PHASE0_EXIT_CRITERIA.md) | Phase-0 “good enough” gates |
 | [`docs/plan/README.md`](https://github.com/hilather/nytprof-modernization/blob/main/docs/plan/README.md) | Full architecture + 206-task plan package |
 | [`docs/governance/COMPAT-000_RATIFICATION.md`](https://github.com/hilather/nytprof-modernization/blob/main/docs/governance/COMPAT-000_RATIFICATION.md) | Binding compatibility contract sign-off |
@@ -24,7 +25,7 @@ baseline/       immutable oracle pin, inventories, manifests
 fixtures/       golden profiles and expected dumps
 tools/oracle/   scripts to build oracle, dump fixtures, compare
 tools/bench/    light offline timing harness (not certification)
-scripts/        baseline build/test helpers + packaging smokes + `ci/offline_gate.sh`
+scripts/        baseline build/test helpers + packaging smokes + `ci/offline_gate.sh` + `field/` R3 evidence pack
 Makefile.PL     candidate dual-path packaging entry (not full XS CPAN)
 crates/         Rust workspace (v5 reader, provisional v6 preflight crate, compact model, report MVP) — not required for oracle
 perl/           candidate Perl engine-dispatch facade (nytprof-engine) — not used by oracle builds
