@@ -9,10 +9,8 @@ Hybrid modernization of [Devel::NYTProf](https://metacpan.org/dist/Devel-NYTProf
 | [`AGENTS.md`](https://github.com/hilather/nytprof-modernization/blob/main/AGENTS.md) | **Agent hints** — regression tests, docs, release notes, perf/size, benchmarks vs Perl & prior versions |
 | [`docs/PROGRAM_CHARTER.md`](https://github.com/hilather/nytprof-modernization/blob/main/docs/PROGRAM_CHARTER.md) | Mission, release levels, non-goals |
 | [`docs/FIRST_SLICE_BOARD.md`](https://github.com/hilather/nytprof-modernization/blob/main/docs/FIRST_SLICE_BOARD.md) | Ordered first-slice work board |
-| [`docs/RELEASE_NOTES_R1.md`](https://github.com/hilather/nytprof-modernization/blob/main/docs/RELEASE_NOTES_R1.md) | Full R1 MVP product cut release notes (PR-A10 honesty) |
-| [`docs/R3_FIELD_WINDOW.md`](https://github.com/hilather/nytprof-modernization/blob/main/docs/R3_FIELD_WINDOW.md) | R3 `engine=auto` field-window evidence pack (no runtime flip; PR-D01) |
-| [`docs/adrs/0005-r3-engine-auto-default-promotion.md`](https://github.com/hilather/nytprof-modernization/blob/main/docs/adrs/0005-r3-engine-auto-default-promotion.md) | **ADR-0005** R3 product default promotion policy (gated; flip not executed; PR-D02) |
-| [`docs/R3_DEFAULT_FLIP.md`](https://github.com/hilather/nytprof-modernization/blob/main/docs/R3_DEFAULT_FLIP.md) | R3 flip execution + rollback checklist |
+| [`docs/RELEASE_NOTES_R2_PREVIEW.md`](https://github.com/hilather/nytprof-modernization/blob/main/docs/RELEASE_NOTES_R2_PREVIEW.md) | **R2-preview** packaging notes (v6 **opt-in only**; not R2-stable / R3 / R4) |
+| [`docs/contracts/DUAL_EQUALITY_READINESS_v0.md`](https://github.com/hilather/nytprof-modernization/blob/main/docs/contracts/DUAL_EQUALITY_READINESS_v0.md) | Dual-equality E1–E5 readiness checklist |
 | [`docs/PHASE0_EXIT_CRITERIA.md`](https://github.com/hilather/nytprof-modernization/blob/main/docs/PHASE0_EXIT_CRITERIA.md) | Phase-0 “good enough” gates |
 | [`docs/plan/README.md`](https://github.com/hilather/nytprof-modernization/blob/main/docs/plan/README.md) | Full architecture + 206-task plan package |
 | [`docs/governance/COMPAT-000_RATIFICATION.md`](https://github.com/hilather/nytprof-modernization/blob/main/docs/governance/COMPAT-000_RATIFICATION.md) | Binding compatibility contract sign-off |
@@ -27,7 +25,7 @@ baseline/       immutable oracle pin, inventories, manifests
 fixtures/       golden profiles and expected dumps
 tools/oracle/   scripts to build oracle, dump fixtures, compare
 tools/bench/    light offline timing harness (not certification)
-scripts/        baseline build/test helpers + packaging smokes + `ci/offline_gate.sh` + `field/` R3 evidence pack
+scripts/        baseline build/test helpers + packaging smokes + `ci/offline_gate.sh`
 Makefile.PL     candidate dual-path packaging entry (not full XS CPAN)
 crates/         Rust workspace (v5 reader, provisional v6 preflight crate, compact model, report MVP) — not required for oracle
 perl/           candidate Perl engine-dispatch facade (nytprof-engine) — not used by oracle builds
@@ -70,9 +68,8 @@ perl tools/oracle/compare_jsonl.pl /tmp/oracle.norm.jsonl /tmp/rust.norm.jsonl
 # Native dump parity smoke (dump×2 stability + golden full match):
 ./tools/oracle/selftest_native_dump_parity.sh              # default-calls1
 ./tools/oracle/selftest_native_dump_parity_all.sh          # + calls2-default + blocks-calls1
-# Light wall-time samples (R1 P3/P4 methodology only — not certification; no public claims):
+# Light wall-time samples (not certification; no public claims):
 bash tools/bench/light_bench.sh
-# RELEASE=1 RUNS=3 bash tools/bench/light_bench.sh
 ```
 
 Binary: `nytprof-dump` (package `nytprof-cli`; subcommands: `dump` / `report` / `summary` / `aggregates` / `csv` / `html` / `folded` / `callgrind` / `cg` / `verify` / `inspect` / `capability` / `selftest` / `capabilities`). Schemas:
@@ -88,7 +85,7 @@ Binary: `nytprof-dump` (package `nytprof-cli`; subcommands: `dump` / `report` / 
 [`docs/schemas/verify-cli-mvp-v0.md`](docs/schemas/verify-cli-mvp-v0.md),
 [`docs/schemas/capability-selftest-mvp-v0.md`](docs/schemas/capability-selftest-mvp-v0.md),
 [`docs/schemas/native-dump-parity-mvp-v0.md`](docs/schemas/native-dump-parity-mvp-v0.md).
-Board: [`docs/FIRST_SLICE_BOARD.md`](docs/FIRST_SLICE_BOARD.md). R1-scoped P3/P4 methodology + light harness (**public claims waived**): [`docs/BENCH_NOTES.md`](https://github.com/hilather/nytprof-modernization/blob/main/docs/BENCH_NOTES.md), [`tools/bench/light_bench.sh`](https://github.com/hilather/nytprof-modernization/blob/main/tools/bench/light_bench.sh).
+Board: [`docs/FIRST_SLICE_BOARD.md`](docs/FIRST_SLICE_BOARD.md). Exploratory timing notes + harness (not certification): [`docs/BENCH_NOTES.md`](docs/BENCH_NOTES.md), [`tools/bench/light_bench.sh`](tools/bench/light_bench.sh).
 
 ## Oracle (BASE-001)
 
@@ -107,16 +104,12 @@ See `baseline/6.15/manifest.json` after a successful pin.
 
 ## Offline R1 gate (CI-OFFLINE-GATE / CI-OFFLINE-GATE-EXPAND / CI-QUERY-JSON-GATE)
 
-Single documented fail-fast gate for critical offline R1 checks on the current host. Multi-OS expansion is **BUILD-006-MVP** (not full multi-Perl/Windows certification):
+Single documented fail-fast gate for critical offline R1 checks (not multi-OS CI):
 
 ```sh
 ./scripts/ci/offline_gate.sh
 # after perl Makefile.PL:
 make offline-gate
-
-# Multi-OS matrix entry (BUILD-006 MVP): host oracle ensure + offline_gate
-./scripts/ci/matrix_gate.sh
-# GitHub Actions: .github/workflows/ci-matrix.yml (ubuntu-latest + macos-latest)
 ```
 
 | Step | Action | If cargo missing |
@@ -149,14 +142,11 @@ Prove legacy-only isolation (no Cargo), optional native workspace tests, engine 
 # Dual-path support tiers (legacy always; native if cargo present)
 ./scripts/packaging/dual_path_smoke.sh
 
-# Candidate MakeMaker packaging entry (BUILD-MAKEMAKER-OPT + BUILD-003-DEPTH; not full XS CPAN)
+# Candidate MakeMaker packaging entry (BUILD-MAKEMAKER-OPT; not full XS CPAN)
 perl Makefile.PL && make legacy-smoke          # no cargo required
-perl Makefile.PL && make install-facade        # pure-Perl engine → prefix/ (no cargo)
 perl Makefile.PL && make offline-gate          # CI-OFFLINE-GATE wrapper
 ./scripts/packaging/makemaker_dual_path_smoke.sh
-./scripts/packaging/makemaker_build003_depth_smoke.sh  # closer dual-build; legacy unbroken
 # optional native via Make (requires cargo):
-#   make dual-install          # native CLI + facade under prefix/
 #   make native-install
 #   NYTPROF_NATIVE=1 perl Makefile.PL && make
 
@@ -206,7 +196,7 @@ perl -Iperl/lib perl/bin/nytprof-engine --engine=native callgrind fixtures/v5/de
 
 - `scripts/ci/offline_gate.sh` is the **CI-OFFLINE-GATE** / **CI-OFFLINE-GATE-EXPAND** / **CI-QUERY-JSON-GATE** / **CI-CAPABILITY-GATE** / **COL-001-SINK-MVP** single entry: optional focused cargo tests → required oracle harness → primary packaging `dual_path_smoke.sh` → `engine_auto_fallback_smoke.sh` → `perl_jsonl_data_all_smoke.sh` → required `perl_query_json_smoke.sh` (QUERY-JSON-MVP / QUERY-JSON-EXPAND golden `--jsonl`) → required `json_sub_entry_smoke` + `json_blocks_smoke` (JSON-BLOCKS-MVP **780**/**810**) → optional `native_agg_json_smoke` + `native_query_json_cross_smoke` when native available → `capability_selftest_smoke.sh` when cargo or prefix/target CLI present (honest skip otherwise) → `collector_sink_smoke.sh` (COL-001 overlay; honest skip without CC); fails fast.
 - `packaging_gate.sh` runs the packaging smokes in order (legacy → engine_select → perl dispatch → native install if present → optional cargo tests) and fails fast.
-- Root `Makefile.PL` is a **candidate packaging facade** + **BUILD-003-DEPTH** (`NYTPROF_NATIVE=0|1|auto`): `make legacy-smoke` / `dual-path-smoke` / `offline-gate` / `install-facade` / `dual-install` / `native-install` / `build003-depth-smoke` wrap existing scripts; not a full Devel::NYTProf XS CPAN dist (see [`docs/BUILD_SUPPORT_POLICY.md`](https://github.com/hilather/nytprof-modernization/blob/main/docs/BUILD_SUPPORT_POLICY.md)).
+- Root `Makefile.PL` is a **candidate packaging facade** (`NYTPROF_NATIVE=0|1|auto`): `make legacy-smoke` / `dual-path-smoke` / `offline-gate` / `native-install` wrap existing scripts; not a full Devel::NYTProf XS CPAN dist (see [`docs/BUILD_SUPPORT_POLICY.md`](docs/BUILD_SUPPORT_POLICY.md)).
 - `legacy_only_smoke.sh` sources oracle env isolation, refuses `/crates/` on `PERL5LIB`, and loads `Devel::NYTProf` from `baseline/6.15/install` only.
 - `engine_select_smoke.sh` exercises Rust CLI `--engine=native` report/verify, rejects bogus engines, and fails closed on `--engine=legacy` (oracle path message; not a fake Rust legacy backend).
 - `perl_engine_dispatch_smoke.sh` exercises the Perl facade (`perl/bin/nytprof-engine`): native report (`main::leaf` / `returns=15`), invalid engine non-zero, legacy stream-dump when oracle is present; also runs `legacy_only_smoke.sh` and `engine_select_smoke.sh` when present.

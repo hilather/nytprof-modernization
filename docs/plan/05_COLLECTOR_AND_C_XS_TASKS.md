@@ -252,13 +252,13 @@ The state machine must cover:
 
 ### COL-009 - Decide the production v6 writer backend
 
-- **Status:** proposed
+- **Status:** **done** (PR-B13 — reaffirm C baseline; no COL-008 bake-off)
 - **Size:** M
 - **Dependencies:** COL-007, BENCH-006 (COL-008 only if re-opened), BUILD-004
 - **Agent:** architecture review group
 - **Work:** compare runtime, size, memory, binary size, portability, safety, maintenance, and build impact. Default recommendation is the C writer unless COL-008 evidence is re-opened and superior.
-- **Deliverables:** ADR selecting default and fallback policy.
-- **Acceptance:** decision cites raw measurements and support matrix; format remains implementation-independent.
+- **Deliverables:** ADR selecting default and fallback policy — [`docs/adrs/0007-production-v6-writer-backend-c-baseline.md`](https://github.com/hilather/nytprof-modernization/blob/main/docs/adrs/0007-production-v6-writer-backend-c-baseline.md).
+- **Acceptance:** decision cites raw measurements and support matrix; format remains implementation-independent. **This cut:** C baseline reaffirmed because COL-007 E3-EVENT is green and COL-008 was never re-opened; measurement placeholders documented for any future COL-008 re-open (not a public perf claim).
 
 ### COL-010 - Implement dictionary interning for repeated names
 

@@ -12,6 +12,7 @@ Queue: [`docs/plan/18_OPEN_QUESTIONS_AND_ADR_QUEUE.md`](https://github.com/hilat
 | [0002](https://github.com/hilather/nytprof-modernization/blob/main/docs/adrs/0002-v6-string-pool-candidate.md) | Format v6 FOOTER string-pool / dictionary candidate | **accepted** (OQ-1 as-is; FOOTER-local; not global pool) |
 | [0004](https://github.com/hilather/nytprof-modernization/blob/main/docs/adrs/0004-collector-packaging-source-tree.md) | Collector packaging / source-tree layout (B0-A overlay) | **accepted** — required before COL-001 / PR-B02 merge |
 | [0006](https://github.com/hilather/nytprof-modernization/blob/main/docs/adrs/0006-v6-wire-freeze.md) | Format v6 wire freeze (numeric IDs + core layouts) | **accepted** — after E3-EVENT(C) + E4-v0; golden vectors |
+| [0007](https://github.com/hilather/nytprof-modernization/blob/main/docs/adrs/0007-production-v6-writer-backend-c-baseline.md) | Production v6 writer backend: reaffirm C baseline (COL-009) | **accepted** — R2-preview cut PR-B13; COL-008 remains deferred |
 
 **Numbering map (coordinate across parallel PRs):**
 
@@ -23,6 +24,7 @@ Queue: [`docs/plan/18_OPEN_QUESTIONS_AND_ADR_QUEUE.md`](https://github.com/hilat
 | **0004** | Collector packaging / source-tree (B0-A) | Track B — PR-B00 |
 | **0005** | R3 `engine=auto` default promotion | Track D — PR-D02 (when present) |
 | **0006** | Format v6 wire freeze (IDs + golden vectors) | Track B — PR-B11 |
+| **0007** | Production v6 writer backend (C baseline / COL-009) | Track B — PR-B13 |
 
 ### Related (not ADRs)
 
