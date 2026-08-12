@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-# COL-001..006 / PR-B02..B05 — collector sink + lifecycle/seq + batch/fast +
-# fake-clock + real v5 wire smoke.
+# COL-001..007-abs / PR-B02..B06 — collector sink + lifecycle/seq + batch/fast +
+# fake-clock + real v5 wire + absolute v6 wire smoke.
 #
 # When a C toolchain is present: build + unit-test the overlay sink (needs zlib).
 # When absent: honest skip (offline_gate remains green).
@@ -23,7 +23,7 @@ ok() { printf 'OK: %s\n' "$*"; }
 fail() { printf 'ERROR: %s\n' "$*" >&2; exit 1; }
 banner() { printf '\n=== %s ===\n' "$*"; }
 
-banner "collector_sink_smoke (COL-001..006 + fake-clock + v5 wire)"
+banner "collector_sink_smoke (COL-001..007-abs + fake-clock + v5/v6 wire)"
 
 # ---------------------------------------------------------------------------
 # Tree present (this smoke is only meaningful after PR-B02 lands sources)
@@ -36,10 +36,14 @@ banner "collector_sink_smoke (COL-001..006 + fake-clock + v5 wire)"
 [[ -f "$COLLECTOR/include/nytp_event.h" ]] || fail "missing nytp_event.h (PR-B04)"
 [[ -f "$COLLECTOR/include/nytp_sink_v5.h" ]] || fail "missing nytp_sink_v5.h"
 [[ -f "$COLLECTOR/src/nytp_sink_v5.c" ]] || fail "missing v5 wire adapter"
+[[ -f "$COLLECTOR/include/nytp_sink_v6.h" ]] || fail "missing nytp_sink_v6.h (PR-B06)"
+[[ -f "$COLLECTOR/src/nytp_sink_v6.c" ]] || fail "missing v6 absolute wire adapter (PR-B06)"
+[[ -f "$COLLECTOR/include/nytprof_v6_ids.h" ]] || fail "missing nytprof_v6_ids.h lockfile header"
 [[ -f "$COLLECTOR/src/nytp_clock.c" ]] || fail "missing nytp_clock.c"
 [[ -f "$COLLECTOR/src/nytp_batch.c" ]] || fail "missing nytp_batch.c (PR-B04)"
 [[ -f "$COLLECTOR/t/test_v5_wire.c" ]] || fail "missing test_v5_wire.c (PR-B05)"
-ok "collector/ overlay tree present (B0-A; COL-001..006)"
+[[ -f "$COLLECTOR/t/test_v6_abs_wire.c" ]] || fail "missing test_v6_abs_wire.c (PR-B06)"
+ok "collector/ overlay tree present (B0-A; COL-001..007-abs)"
 
 # ---------------------------------------------------------------------------
 # Isolation: never put collector/ (or crates/) on oracle PERL5LIB
@@ -139,6 +143,7 @@ make -C "$COLLECTOR" test CC="$CC_BIN"
 [[ -x "$COLLECTOR/build/test_fake_clock" ]] || fail "test_fake_clock missing"
 [[ -x "$COLLECTOR/build/test_batch_fast" ]] || fail "test_batch_fast missing (PR-B04)"
 [[ -x "$COLLECTOR/build/test_v5_wire" ]] || fail "test_v5_wire missing (PR-B05)"
+[[ -x "$COLLECTOR/build/test_v6_abs_wire" ]] || fail "test_v6_abs_wire missing (PR-B06)"
 # Re-run shipped binaries from collector/ so relative build/*.nytprof paths work.
 (
   cd "$COLLECTOR"
@@ -147,8 +152,9 @@ make -C "$COLLECTOR" test CC="$CC_BIN"
   ./build/test_fake_clock
   ./build/test_batch_fast
   ./build/test_v5_wire
+  ./build/test_v6_abs_wire
 )
-ok "collector unit tests (sink + lifecycle/seq + fake-clock mini M4 + batch/fast + v5 wire)"
+ok "collector unit tests (sink + lifecycle/seq + fake-clock mini M4 + batch/fast + v5 + v6-abs wire)"
 
 # Mini wire artifact from test_v5_wire
 WIRE="$COLLECTOR/build/m4_mini_wire.nytprof"
@@ -157,6 +163,13 @@ WIRE="$COLLECTOR/build/m4_mini_wire.nytprof"
 printf 'NYTProf 5 0\n' | cmp -n 12 - "$WIRE" >/dev/null 2>&1 \
   || fail "mini wire missing NYTProf 5 0 header"
 ok "mini wire artifact present with v5 header ($WIRE)"
+
+# Absolute v6 mini from test_v6_abs_wire
+WIRE6="$COLLECTOR/build/m4_mini_v6.nytprof"
+[[ -f "$WIRE6" ]] || fail "expected absolute v6 mini artifact $WIRE6 after test_v6_abs_wire"
+printf 'NYTPROF6' | cmp -n 8 - "$WIRE6" >/dev/null 2>&1 \
+  || fail "v6 mini missing NYTPROF6 magic"
+ok "absolute v6 mini artifact present with NYTPROF6 magic ($WIRE6)"
 
 # Optional: independent Rust v5 decoder when already built or cargo available.
 resolve_dump() {
@@ -191,12 +204,12 @@ fi
 
 # Residual honesty banner.
 echo "NOTE: COL-006 real v5 wire on mini samples — full fixtures/v5/* oracle corpus is complete TEST-003 residual"
-echo "NOTE: COL-007 not implemented; not live XS hooks"
+echo "NOTE: COL-007-ABS MVP only (codec NONE EVENT); packing/codecs/E3-C residual — board COL-007 not done; not live XS hooks"
 echo "NOTE: M4 mini sample only — full oracle corpus under fake-clock needs complete TEST-003"
 echo "NOTE: batch light microbench is engineering only — not BENCH-003/006 certification"
 echo "NOTE: flush/compression discount timing vs BASE-003 remains residual"
 echo "NOTE: nytp_ticks outside I32 fails closed (OI-003-01 overflow composition residual)"
 
 banner "collector_sink_smoke PASSED"
-ok "COL-001..006 + fake-clock + v5 wire scaffold build + isolation"
+ok "COL-001..007-abs + fake-clock + v5/v6-abs wire scaffold build + isolation"
 exit 0

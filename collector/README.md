@@ -1,9 +1,10 @@
-# Collector overlay (ADR-0004 B0-A) — COL-001..006 + fake-clock scaffold
 
-**Status:** scaffolding (PR-B02..**B05 COL-006 real v5 wire**)  
+# Collector overlay (ADR-0004 B0-A) — COL-001..007-abs + fake-clock scaffold
+
+**Status:** scaffolding (PR-B02..**B05 v5 wire** + **B06 absolute v6**)  
 **Layout decision:** [ADR-0004](https://github.com/hilather/nytprof-modernization/blob/main/docs/adrs/0004-collector-packaging-source-tree.md)  
 **Logical events:** [COMPAT-001](https://github.com/hilather/nytprof-modernization/blob/main/docs/contracts/COMPAT-001_LOGICAL_EVENT_CONTRACT.md)  
-**Schemas:** [collector-sink-api-mvp-v0.md](https://github.com/hilather/nytprof-modernization/blob/main/docs/schemas/collector-sink-api-mvp-v0.md), [collector-lifecycle-seq-fake-clock-mvp-v0.md](https://github.com/hilather/nytprof-modernization/blob/main/docs/schemas/collector-lifecycle-seq-fake-clock-mvp-v0.md), [collector-batch-fast-mvp-v0.md](https://github.com/hilather/nytprof-modernization/blob/main/docs/schemas/collector-batch-fast-mvp-v0.md), [collector-v5-wire-mvp-v0.md](https://github.com/hilather/nytprof-modernization/blob/main/docs/schemas/collector-v5-wire-mvp-v0.md)  
+**Schemas:** [collector-sink-api-mvp-v0.md](https://github.com/hilather/nytprof-modernization/blob/main/docs/schemas/collector-sink-api-mvp-v0.md), [collector-lifecycle-seq-fake-clock-mvp-v0.md](https://github.com/hilather/nytprof-modernization/blob/main/docs/schemas/collector-lifecycle-seq-fake-clock-mvp-v0.md), [collector-batch-fast-mvp-v0.md](https://github.com/hilather/nytprof-modernization/blob/main/docs/schemas/collector-batch-fast-mvp-v0.md), [collector-v5-wire-mvp-v0.md](https://github.com/hilather/nytprof-modernization/blob/main/docs/schemas/collector-v5-wire-mvp-v0.md), [collector-v6-absolute-wire-mvp-v0.md](https://github.com/hilather/nytprof-modernization/blob/main/docs/schemas/collector-v6-absolute-wire-mvp-v0.md)  
 **Timing notes:** [BASE-003](https://github.com/hilather/nytprof-modernization/blob/main/baseline/inventories/timing-lifecycle-notes.md)
 
 Modernization C sources for the **semantic event sink** live here — **not** under `baseline/6.15/` (oracle pin remains immutable).
@@ -12,9 +13,9 @@ Modernization C sources for the **semantic event sink** live here — **not** un
 
 ```text
 collector/
-  include/     public C headers (sink API, types, clock, batch/event, counting + v5 wire)
-  src/         sink wrappers + backends + fake-clock + batch/fast path + v5 wire writer
-  t/           unit tests (no Perl; pure C; zlib for wire)
+  include/     public C headers (sink API, types, clock, batch/event, counting + v5/v6 wire + v6 IDs)
+  src/         sink wrappers + backends + fake-clock + batch/fast path + v5 + absolute v6 writers
+  t/           unit tests (no Perl; pure C; zlib for v5 wire)
   xs/          reserved for future XS glue (empty)
   Makefile     opt-in C build (links -lz for COL-006)
   build/       gitignored objects / test binaries / sample .nytprof
@@ -28,18 +29,19 @@ collector/
 | `nytp_sink` + `nytp_sink_ops` | Canonical vtable sink interface |
 | `nytp_emit_*` | Semantic emit surface (COMPAT-001 + `start_deflate` control) |
 | **COL-002 lifecycle** | `OPEN/ACTIVE/STOPPED/FINALIZING/CLOSED/FAILED/FORK_SPLIT` + legal transitions + emit gates |
-| **COL-003 sequence** | Gapless logical `nytp_seq` on successful emits (not for `START_DEFLATE`); **not** on default v5 wire |
+| **COL-003 sequence** | Gapless logical `nytp_seq` on successful emits (not for `START_DEFLATE`); **not** on default v5/v6 wire |
 | **COL-004 fast path** | `nytp_fast_emit_time_line` / `_time_block` + POD batch append — no malloc after create |
 | **COL-005 batching** | Fixed event buffer + side arena; high-water / full flush; emergency oversized path; batch sink facade |
 | Counting sink | Test dual companion — multiplicities, seq ring, last src/sub fingerprints |
 | **COL-006 v5 wire** | Real FileHandle.xs protocol encode + optional zlib after `START_DEFLATE`; path and/or in-memory buffer |
+| **COL-007-ABS v6 wire** | Absolute provisional v6 (file-prefix + codec NONE EVENT); unit vectors; lockfile IDs |
 | **Fake-clock harness** | Scripted ticks + BASE-003 stmt driver + M4 **mini** sample |
-| `make -C collector test` | `test_sink_api` + `test_lifecycle_seq` + `test_fake_clock` + `test_batch_fast` + **`test_v5_wire`** |
+| `make -C collector test` | `test_sink_api` + `test_lifecycle_seq` + `test_fake_clock` + `test_batch_fast` + **`test_v5_wire`** + **`test_v6_abs_wire`** |
 
 ## Explicit non-claims
 
 - **Not full M4 oracle corpus** — mini sample only; full `fixtures/v5/*` v5-via-sink equality needs complete TEST-003  
-- **Not COL-007** — C v6 writer  
+- **Not board COL-007 done** — absolute MVP only; packing/codecs/E3-C remain (B07–B09); not wire freeze  
 - **Not COL-015** — full fork buffer ownership / signal-safe finalization matrix  
 - **Not** hooked into live Perl opcode profiler yet  
 - **Not** a default dependency of `make legacy-smoke` or dual-path legacy half  
@@ -168,3 +170,13 @@ Hooks will call **emit**, never raw v5 bytes, once integrated. Dual/v6 sinks plu
 | `baseline/6.15/install` | Yes (oracle only) |
 | `collector/`, `collector/install/`, `prefix/collector/` | **Never** |
 | `crates/`, candidate `perl/` | **Never** (oracle context) |
+
+## Provisional v6 ID lockfile (C)
+
+| Path | Role |
+|------|------|
+| [`include/nytprof_v6_ids.h`](https://github.com/hilather/nytprof-modernization/blob/main/collector/include/nytprof_v6_ids.h) | Mirrored provisional MAGIC / kind / codec / opcode / flag constants for COL-007 |
+
+Normative note: [`docs/contracts/V6_PROVISIONAL_ID_LOCKFILE_v0.md`](https://github.com/hilather/nytprof-modernization/blob/main/docs/contracts/V6_PROVISIONAL_ID_LOCKFILE_v0.md).
+
+**Not** a wire freeze; **not** COL-007 product complete.

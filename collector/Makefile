@@ -1,6 +1,6 @@
-# COL-001..006 collector overlay build (ADR-0004 B0-A).
+# COL-001..007 collector overlay build (ADR-0004 B0-A).
 # Compiles when a C toolchain is present. Not required for legacy-only packaging.
-# COL-006 v5 wire writer links zlib (-lz).
+# COL-006 v5 wire writer links zlib (-lz). COL-007 absolute v6 is pure C.
 #
 # Usage (from repo root or collector/):
 #   make -C collector
@@ -24,12 +24,14 @@ TESTBINS := \
 	$(BUILD)/test_lifecycle_seq \
 	$(BUILD)/test_fake_clock \
 	$(BUILD)/test_batch_fast \
-	$(BUILD)/test_v5_wire
+	$(BUILD)/test_v5_wire \
+	$(BUILD)/test_v6_abs_wire
 
 SRC := \
 	src/nytp_sink.c \
 	src/nytp_sink_counting.c \
 	src/nytp_sink_v5.c \
+	src/nytp_sink_v6.c \
 	src/nytp_clock.c \
 	src/nytp_batch.c
 
@@ -45,6 +47,7 @@ dirs:
 # Order-only | dirs so -j never races mkdir with cc -o build/*.o
 $(BUILD)/%.o: src/%.c include/nytp_sink.h include/nytp_types.h \
 		include/nytp_sink_counting.h include/nytp_sink_v5.h \
+		include/nytp_sink_v6.h include/nytprof_v6_ids.h \
 		include/nytp_clock.h include/nytp_batch.h include/nytp_event.h | dirs
 	$(CC) $(CPPFLAGS) $(CFLAGS) -c -o $@ $<
 
@@ -66,12 +69,16 @@ $(BUILD)/test_batch_fast: t/test_batch_fast.c $(LIB) | dirs
 $(BUILD)/test_v5_wire: t/test_v5_wire.c $(LIB) | dirs
 	$(CC) $(CPPFLAGS) $(CFLAGS) -o $@ t/test_v5_wire.c $(LIB) $(LDFLAGS) $(LDLIBS)
 
+$(BUILD)/test_v6_abs_wire: t/test_v6_abs_wire.c $(LIB) | dirs
+	$(CC) $(CPPFLAGS) $(CFLAGS) -o $@ t/test_v6_abs_wire.c $(LIB) $(LDFLAGS) $(LDLIBS)
+
 test: all
 	./$(BUILD)/test_sink_api
 	./$(BUILD)/test_lifecycle_seq
 	./$(BUILD)/test_fake_clock
 	./$(BUILD)/test_batch_fast
 	./$(BUILD)/test_v5_wire
+	./$(BUILD)/test_v6_abs_wire
 
 clean:
 	rm -rf $(BUILD)
