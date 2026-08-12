@@ -47,7 +47,7 @@
 #   9. scripts/packaging/capability_selftest_smoke.sh when cargo or prefix/target
 #      native CLI exists (honest skip when native unavailable; same pattern as
 #      packaging_gate). dual_path with cargo usually installs prefix/bin first.
-#  10. scripts/packaging/collector_sink_smoke.sh (COL-001 sink scaffold:
+#  10. scripts/packaging/collector_sink_smoke.sh (COL-001..003 + fake-clock:
 #      isolation asserts always; make -C collector test when CC present;
 #      honest skip without C toolchain). Not COL-007; stub v5 is not wire encode.
 #
@@ -308,7 +308,7 @@ fi
 # ---------------------------------------------------------------------------
 # 10. COL-001 semantic sink scaffold (honest skip without CC)
 # ---------------------------------------------------------------------------
-banner "collector_sink_smoke (COL-001-SINK-MVP)"
+banner "collector_sink_smoke (COL-001..003 + fake-clock scaffold)"
 if [[ ! -f "$COLLECTOR_SINK_SMOKE" ]]; then
   fail "required script missing: $COLLECTOR_SINK_SMOKE"
 fi

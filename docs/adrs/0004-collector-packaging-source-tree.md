@@ -117,7 +117,7 @@ Stand-in / Rust preflight encoders may continue to produce **non-product** vecto
 | Isolation asserts — no oracle `PERL5LIB` entry under `crates/`, `perl/`, or overlay `collector/` / install paths | **Required** — `scripts/packaging/collector_sink_smoke.sh` (offline_gate step 10) |
 | Honest skip when no C toolchain / overlay not built | **Required** — same smoke; legacy dual-path half independent |
 | Compile + unit-test sink scaffold when CC present | **Required for scaffold** — `make -C collector test` |
-| **v5-via-sink stream neutrality** (oracle-aligned profiles/dumps on corpus; stream order/multiplicity) | **Deferred** to **COL-006** (real v5 writer behind the sink API) with lifecycle/seq support from **COL-002** / **COL-003**; fake-clock corpus gates land with **TEST-003** / PR-B03 |
+| **v5-via-sink stream neutrality** (oracle-aligned profiles/dumps on corpus; stream order/multiplicity) | **Deferred** to **COL-006** (real v5 writer behind the sink API). COL-002/COL-003 lifecycle+seq and TEST-003 **mini** fake-clock sample landed in PR-B03; **full M4 corpus** under fake-clock remains residual with COL-006 + complete TEST-003 |
 
 **Rationale:** COL-001 introduces the semantic sink boundary and B0-A tree; the stub v5 adapter counts events only and does **not** encode wire bytes. Requiring oracle stream equality before COL-006 would force a false product claim. Full “proof of neutrality” for production collection remains merge-blocking for **COL-006** (and dual when applicable), not the interface-only scaffold.
 

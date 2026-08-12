@@ -1,4 +1,4 @@
-# COL-001 collector overlay build (ADR-0004 B0-A).
+# COL-001..003 collector overlay build (ADR-0004 B0-A).
 # Compiles when a C toolchain is present. Not required for legacy-only packaging.
 #
 # Usage (from repo root or collector/):
@@ -17,35 +17,48 @@ AR      ?= ar
 
 BUILD   := build
 LIB     := $(BUILD)/libnytp_sink.a
-TESTBIN := $(BUILD)/test_sink_api
+TESTBINS := \
+	$(BUILD)/test_sink_api \
+	$(BUILD)/test_lifecycle_seq \
+	$(BUILD)/test_fake_clock
 
 SRC := \
 	src/nytp_sink.c \
 	src/nytp_sink_counting.c \
-	src/nytp_sink_v5.c
+	src/nytp_sink_v5.c \
+	src/nytp_clock.c
 
 OBJ := $(patsubst src/%.c,$(BUILD)/%.o,$(SRC))
 
 .PHONY: all test clean dirs
 
-all: $(LIB) $(TESTBIN)
+all: $(LIB) $(TESTBINS)
 
 dirs:
 	@mkdir -p $(BUILD)
 
 # Order-only | dirs so -j never races mkdir with cc -o build/*.o
 $(BUILD)/%.o: src/%.c include/nytp_sink.h include/nytp_types.h \
-		include/nytp_sink_counting.h include/nytp_sink_v5.h | dirs
+		include/nytp_sink_counting.h include/nytp_sink_v5.h \
+		include/nytp_clock.h | dirs
 	$(CC) $(CPPFLAGS) $(CFLAGS) -c -o $@ $<
 
 $(LIB): $(OBJ) | dirs
 	$(AR) rcs $@ $^
 
-$(TESTBIN): t/test_sink_api.c $(LIB) | dirs
+$(BUILD)/test_sink_api: t/test_sink_api.c $(LIB) | dirs
 	$(CC) $(CPPFLAGS) $(CFLAGS) -o $@ t/test_sink_api.c $(LIB) $(LDFLAGS)
 
+$(BUILD)/test_lifecycle_seq: t/test_lifecycle_seq.c $(LIB) | dirs
+	$(CC) $(CPPFLAGS) $(CFLAGS) -o $@ t/test_lifecycle_seq.c $(LIB) $(LDFLAGS)
+
+$(BUILD)/test_fake_clock: t/test_fake_clock.c $(LIB) | dirs
+	$(CC) $(CPPFLAGS) $(CFLAGS) -o $@ t/test_fake_clock.c $(LIB) $(LDFLAGS)
+
 test: all
-	./$(TESTBIN)
+	./$(BUILD)/test_sink_api
+	./$(BUILD)/test_lifecycle_seq
+	./$(BUILD)/test_fake_clock
 
 clean:
 	rm -rf $(BUILD)

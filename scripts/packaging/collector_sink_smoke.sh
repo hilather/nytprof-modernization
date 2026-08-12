@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# COL-001 / PR-B02 — collector semantic sink scaffold smoke.
+# COL-001..003 / PR-B02+B03 — collector sink + lifecycle/seq + fake-clock smoke.
 #
 # When a C toolchain is present: build + unit-test the overlay sink.
 # When absent: honest skip (offline_gate remains green).
@@ -21,7 +21,7 @@ ok() { printf 'OK: %s\n' "$*"; }
 fail() { printf 'ERROR: %s\n' "$*" >&2; exit 1; }
 banner() { printf '\n=== %s ===\n' "$*"; }
 
-banner "collector_sink_smoke (COL-001 semantic sink scaffold)"
+banner "collector_sink_smoke (COL-001..003 + fake-clock scaffold)"
 
 # ---------------------------------------------------------------------------
 # Tree present (this smoke is only meaningful after PR-B02 lands sources)
@@ -29,8 +29,10 @@ banner "collector_sink_smoke (COL-001 semantic sink scaffold)"
 [[ -d "$COLLECTOR" ]] || fail "missing collector/ overlay (ADR-0004 / COL-001)"
 [[ -f "$MAKEFILE" ]] || fail "missing $MAKEFILE"
 [[ -f "$COLLECTOR/include/nytp_sink.h" ]] || fail "missing nytp_sink.h"
+[[ -f "$COLLECTOR/include/nytp_clock.h" ]] || fail "missing nytp_clock.h (PR-B03)"
 [[ -f "$COLLECTOR/src/nytp_sink_v5.c" ]] || fail "missing stub v5 adapter"
-ok "collector/ overlay tree present (B0-A)"
+[[ -f "$COLLECTOR/src/nytp_clock.c" ]] || fail "missing nytp_clock.c"
+ok "collector/ overlay tree present (B0-A; COL-001..003)"
 
 # ---------------------------------------------------------------------------
 # Isolation: never put collector/ (or crates/) on oracle PERL5LIB
@@ -119,14 +121,18 @@ make -C "$COLLECTOR" clean
 make -C "$COLLECTOR" test CC="$CC_BIN"
 
 [[ -x "$COLLECTOR/build/test_sink_api" ]] || fail "test binary missing after make test"
-# Re-run the shipped binary once more (entry point, not a reimplementation).
+[[ -x "$COLLECTOR/build/test_lifecycle_seq" ]] || fail "test_lifecycle_seq missing"
+[[ -x "$COLLECTOR/build/test_fake_clock" ]] || fail "test_fake_clock missing"
+# Re-run shipped binaries once more (entry points, not reimplementations).
 "$COLLECTOR/build/test_sink_api"
-ok "collector unit tests (counting + stub v5 sink)"
+"$COLLECTOR/build/test_lifecycle_seq"
+"$COLLECTOR/build/test_fake_clock"
+ok "collector unit tests (sink + lifecycle/seq + fake-clock mini M4)"
 
-# Residual honesty banner (do not claim wire or COL-007).
+# Residual honesty banner (do not claim wire, full M4, or COL-007).
 echo "NOTE: stub v5 adapter does not encode wire bytes (COL-006); COL-007 not implemented"
-echo "NOTE: fake-clock is PR-B03 / TEST-003 — not this smoke"
+echo "NOTE: M4 mini sample only — full oracle corpus under fake-clock needs COL-006 + complete TEST-003"
 
 banner "collector_sink_smoke PASSED"
-ok "COL-001 sink scaffold build + isolation"
+ok "COL-001..003 + fake-clock scaffold build + isolation"
 exit 0

@@ -18,9 +18,11 @@ Define a **stream-neutral** C API so Perl hooks emit **semantic** events once; b
 |--------|------|
 | `nytp_sink` / `nytp_sink_ops` | Opaque sink + vtable |
 | `nytp_emit_*` | Public emit wrappers (null/state/ops checks) |
-| `nytp_sink_activate` / `flush` / `close` / `destroy` | Minimal lifecycle (COL-002 expands) |
+| `nytp_sink_activate` / `stop` / `begin_finalize` / `flush` / `close` / `destroy` | Lifecycle (COL-002; see lifecycle schema) |
+| Sequence fields + `nytp_sink_peek_seq` / `last_seq` | COL-003 internal logical seq |
 | `nytp_counting_sink_create` | Test sink |
 | `nytp_v5_sink_create` | Stub v5 adapter (counts only — **not** wire encode) |
+| `nytp_fake_clock` / `nytp_m4_mini_sample_run` | TEST-003 scaffold (PR-B03) |
 
 ### Tick / string domains
 
@@ -49,9 +51,9 @@ See mapping table in [`collector/README.md`](https://github.com/hilather/nytprof
 |----------|-------|
 | Real v5 wire bytes | COL-006 |
 | C v6 writer | COL-007 |
-| Full lifecycle freeze | COL-002 |
-| Sequence numbers | COL-003 |
-| Fake-clock | TEST-003 / PR-B03 |
+| Full lifecycle freeze | **COL-002 landed (PR-B03 scaffold)** — see [`collector-lifecycle-seq-fake-clock-mvp-v0.md`](https://github.com/hilather/nytprof-modernization/blob/main/docs/schemas/collector-lifecycle-seq-fake-clock-mvp-v0.md); COL-015 residual for full fork/signal matrix |
+| Sequence numbers | **COL-003 landed (PR-B03)** — internal gapless seq; not on default v5 wire |
+| Fake-clock full M4 corpus | TEST-003 complete / COL-006 — **mini sample only** in PR-B03 |
 | Live XS hook integration | later COL / packaging |
 | Dual-sink overhead prototype | ARCH-007 |
 | Wire freeze / format defaults | out of scope |
@@ -59,3 +61,5 @@ See mapping table in [`collector/README.md`](https://github.com/hilather/nytprof
 ## Tests
 
 - `collector/t/test_sink_api.c` — null guards, counting hot path, stub v5 routing, kind names, OPEN emit.
+- `collector/t/test_lifecycle_seq.c` — COL-002 transitions + COL-003 gapless seq.
+- `collector/t/test_fake_clock.c` — TEST-003 fake-clock + M4 mini sample.

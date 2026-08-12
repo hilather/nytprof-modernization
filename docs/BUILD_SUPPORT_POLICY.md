@@ -3,7 +3,8 @@
 **Board ID:** BUILD-DUAL-PATH  
 **Status:** landed as dual-path policy + runnable checks (not a full BUILD-001 ADR freeze)  
 **Related:** BUILD-001, BUILD-002, BUILD-003, BUILD-006, COMPAT-009, COMPAT-011, RSK-009  
-**Spike background:** [`docs/PACKAGING_SPIKE.md`](PACKAGING_SPIKE.md)
+**Spike background:** [`docs/PACKAGING_SPIKE.md`](https://github.com/hilather/nytprof-modernization/blob/main/docs/PACKAGING_SPIKE.md)  
+**Collector source-tree (accepted):** [`docs/adrs/0004-collector-packaging-source-tree.md`](https://github.com/hilather/nytprof-modernization/blob/main/docs/adrs/0004-collector-packaging-source-tree.md) — **B0-A overlay** (`collector/`); **accepted** — required before COL-001 / PR-B02 merge; not COL-007 product
 
 This document freezes the **support-tier dual-path contract** for the modernization repo: what must work without Cargo, what is optional when Cargo is present, and how operators verify each path.
 
@@ -33,7 +34,7 @@ This document freezes the **support-tier dual-path contract** for the modernizat
 
 **Status:** candidate facade landed — **not** a full CPAN tarball of Devel::NYTProf XS (that remains **BUILD-003**).
 
-Root [`Makefile.PL`](../Makefile.PL) is a thin packaging entry that generates Makefile targets wrapping the existing `scripts/packaging/*` smokes. It does **not** build oracle XS under `baseline/6.15/src`, and it never puts `crates/` on oracle `PERL5LIB`.
+Root [`Makefile.PL`](https://github.com/hilather/nytprof-modernization/blob/main/Makefile.PL) is a thin packaging entry that generates Makefile targets wrapping the existing `scripts/packaging/*` smokes. It does **not** build oracle XS under `baseline/6.15/src`, and it never puts `crates/` or `collector/` install prefixes on oracle `PERL5LIB`.
 
 ### Control: `NYTPROF_NATIVE`
 
@@ -98,7 +99,7 @@ Behavior:
 |------------|-----|
 | `scripts/baseline/*` calling `cargo` / `rustc` | Oracle pin is Perl/C only |
 | `tools/oracle/*` requiring Rust binaries | Fixture dump/compare is oracle-side |
-| Oracle / legacy smoke putting `crates/` on `PERL5LIB` | Contamination of the pin |
+| Oracle / legacy smoke putting `crates/`, `perl/`, or `collector/` installs on `PERL5LIB` | Contamination of the pin |
 | Failing legacy smoke because Cargo is missing | RSK-009 / COMPAT-011 |
 
 Presence of `crates/` or a Rust toolchain is **allowed** on developer machines; it must not become a **dependency** of the legacy path.
@@ -112,9 +113,46 @@ Presence of `crates/` or a Rust toolchain is **allowed** on developer machines; 
 | Oracle `PERL5LIB` | Built from `baseline/6.15/install` (+ optional `test-deps/`) only |
 | Forbidden | Any `PERL5LIB` entry under `crates/` |
 | Forbidden (oracle context) | Candidate `perl/` facade until explicitly under test outside BASE-001 |
+| Forbidden (oracle context) | Overlay `collector/` tree and candidate installs (`collector/install/`, `prefix/collector/`) — see [Collector overlay](#collector-overlay-source-tree-adr-0004--b0-a) |
 | Native tools | Use binaries (`prefix/bin`, `target/…`) or `cargo run`; not module path |
 
-Enforced by `tools/oracle/env.sh`, `scripts/baseline/build_oracle.sh`, and `scripts/packaging/legacy_only_smoke.sh`.
+Enforced by `tools/oracle/env.sh`, `scripts/baseline/build_oracle.sh`, and `scripts/packaging/legacy_only_smoke.sh` (primarily `crates/` / non-install load paths). Path-component asserts for `collector/` are exercised by `scripts/packaging/collector_sink_smoke.sh` (COL-001).
+
+---
+
+## Collector overlay source tree (ADR-0004 / B0-A)
+
+**Accepted layout:** modernization collector C/XS sources live under repository-root **`collector/`** (B0-A overlay). The 6.15 oracle pin under `baseline/6.15/` remains archives + isolated install for differential tests. **Do not** implement COL-001..007 by patching `baseline/6.15/src` (B0-B rejected). Full decision: [`docs/adrs/0004-collector-packaging-source-tree.md`](https://github.com/hilather/nytprof-modernization/blob/main/docs/adrs/0004-collector-packaging-source-tree.md).
+
+| Path | Role | On oracle `PERL5LIB`? |
+|------|------|------------------------|
+| `baseline/6.15/archives/` | Immutable pin | N/A |
+| `baseline/6.15/install/` | Oracle install only | **Yes** (only this + optional test-deps) |
+| `collector/` | Overlay sink / writers (PR-B02+) | **Never** |
+| `collector/install/` or `prefix/collector/` | Candidate collector install prefix | **Never** (oracle context) |
+| `fixtures/v6/from-c/**` | C-produced v6 fixture output tree | N/A |
+| `crates/`, `perl/` | Native tools / candidate facade | **Never** (oracle context) |
+
+### Dual-path interaction
+
+| Requirement | Detail |
+|-------------|--------|
+| Legacy-only | Must succeed **without** building `collector/` or a C v6 writer |
+| Optional-native | Unchanged; Cargo optional for Rust tools only |
+| Overlay collector | Opt-in when testing sink/writer; not a dependency of `make legacy-smoke` or the legacy half of `offline_gate` |
+| Pin archives | Never rewritten by collector or fixture jobs |
+
+### CI / offline_gate notes (neutrality proof)
+
+| Phase | Gate expectation |
+|-------|------------------|
+| **Pre-sink** | Historical: gate stayed green with no `collector/` tree; no hard C toolchain dep for R1-preview steps |
+| **COL-001..003 + fake-clock scaffold (landed)** | Offline gate step **10** runs `./scripts/packaging/collector_sink_smoke.sh`: isolation asserts always; `make -C collector test` (sink + lifecycle/seq + M4 mini) when CC present; **honest skip** without C toolchain. Stub v5 adapter is **not** wire-byte neutrality vs oracle (**COL-006**); full M4 oracle corpus under fake-clock remains residual (COL-006 + complete TEST-003) |
+| **COL-002+ / COL-006** | Expand to oracle-aligned v5-via-sink stream equality on the agreed corpus once the real writer is adapted |
+| **Isolation** | Parent offline gate still must not put `crates/` (or `collector/` install) on oracle `PERL5LIB`; child smokes own isolation |
+| **Fixtures** | C writer / dual harness writes under `fixtures/v6/from-c/**` only; never mutates `baseline/6.15/archives/` |
+
+**Merge rule:** PR-B02 (COL-001 semantic sink) required **ADR-0004 accepted** (this policy section + ADR). Scaffold does **not** claim COL-007 product, wire freeze, CLI v6 default, or full v5 wire parity.
 
 ---
 
@@ -137,7 +175,6 @@ make offline-gate
 | 3 | `./scripts/packaging/dual_path_smoke.sh` | **Primary packaging path** (legacy always; native if cargo present — installs `prefix/bin` when cargo present) |
 | 4 | `./scripts/packaging/engine_auto_fallback_smoke.sh` | **Required** (ENGINE-AUTO-FALLBACK; needs native discoverable or cargo to build) |
 | 5 | `./scripts/packaging/perl_jsonl_data_all_smoke.sh` | **Required** (pure-Perl JsonlData roll-up: data / line_totals / subdefs / source / a4b / meta / pid / stream_complete / discount / sub_entry) |
-| 5b | `./scripts/packaging/perl_xs_data_readstream_smoke.sh` | **Required** (**PERL-XS-DATA-READSTREAM-MVP** / PR-A06: product Data/ReadStream golden JSONL; binary when native CLI; thin materializer only — not COMPAT-007 / pure-XS wire decode) |
 | 6 | `./scripts/packaging/perl_query_json_smoke.sh` | **Required** (**CI-QUERY-JSON-GATE** / QUERY-JSON-MVP / QUERY-JSON-EXPAND: golden `query --json --jsonl`; no cargo) |
 | 6b | `./scripts/packaging/json_sub_entry_smoke.sh` | **Required** (JSON-SUB-ENTRY-MVP: `sub_entry_events` **0** / **27**; pure-Perl golden; native when available) |
 | 6c | `./scripts/packaging/json_blocks_smoke.sh` | **Required** (JSON-BLOCKS-MVP: blocks-calls1 `line_calls_1_5` **780** / `block_line_calls_1_4` **810**; pure-Perl golden; optional native) |
@@ -149,12 +186,12 @@ make offline-gate
 Rules:
 
 - Exit non-zero on the first failing step; clear banners per step.
-- When cargo is absent: skip step 1 with a clear message; still run harness + packaging + expand steps (step 4 needs a discoverable native CLI or cargo; steps 5–5b–6 are pure-Perl golden JSONL for the required half; step 5b binary half optional when no native CLI; steps 7–9 skip unless prefix/target/`NYTPROF_NATIVE_CLI` already present).
+- When cargo is absent: skip step 1 with a clear message; still run harness + packaging + expand steps (step 4 needs a discoverable native CLI or cargo; steps 5–6 are pure-Perl golden JSONL; steps 7–9 skip unless prefix/target/`NYTPROF_NATIVE_CLI` already present).
 - After step 3 with cargo, dual-path typically installs `prefix/bin`, so steps 7–9 usually run on developer hosts with a Rust toolchain.
 - Never puts `crates/` on oracle `PERL5LIB` (parent does not source oracle env; children own isolation).
 - **Primary packaging:** `dual_path_smoke.sh` (BUILD dual-path policy). Not re-run here: `packaging_gate.sh` (broader suite) or `makemaker_dual_path_smoke.sh` (MakeMaker facade).
-- **Expand (CI-OFFLINE-GATE-EXPAND):** after dual-path, also run `engine_auto_fallback_smoke.sh`, the thin `perl_jsonl_data_all_smoke.sh` roll-up of pure-Perl JsonlData smokes, and step **5b** `perl_xs_data_readstream_smoke.sh` (product Data/ReadStream MVP; thin path only).
-- **Query JSON (CI-QUERY-JSON-GATE):** step 6 wires required `perl_query_json_smoke.sh` (QUERY-JSON-MVP / QUERY-JSON-EXPAND golden `--jsonl`; fail if script missing; no cargo; after step 5b).
+- **Expand (CI-OFFLINE-GATE-EXPAND):** after dual-path, also run `engine_auto_fallback_smoke.sh` and the thin `perl_jsonl_data_all_smoke.sh` roll-up of pure-Perl JsonlData smokes.
+- **Query JSON (CI-QUERY-JSON-GATE):** step 6 wires required `perl_query_json_smoke.sh` (QUERY-JSON-MVP / QUERY-JSON-EXPAND golden `--jsonl`; fail if script missing; no cargo).
 - **JSON-SUB-ENTRY-MVP / JSON-BLOCKS-MVP:** steps 6b–6c required pure-Perl (golden `--jsonl`); native half optional when CLI present.
 - **Native aggregates / cross (NATIVE-AGG-JSON / NATIVE-QUERY-JSON-CROSS):** steps 7–8 when native CLI available; cross asserts shared fields equal between `report --json` and `query --json`.
 - **Capability (CI-CAPABILITY-GATE):** step 9 wires `capability_selftest_smoke.sh` into the offline gate with packaging_gate’s native-available condition (fail-fast when native can be exercised).
@@ -176,24 +213,23 @@ Behavior:
 
 | Script | Tier | Cargo |
 |--------|------|-------|
-| [`scripts/ci/offline_gate.sh`](../scripts/ci/offline_gate.sh) | offline R1 gate (CI-OFFLINE-GATE-EXPAND + CI-QUERY-JSON-GATE + CI-CAPABILITY-GATE) | Cargo tests skip if absent; harness + dual-path + engine_auto_fallback + JsonlData roll-up + product Data/ReadStream smoke (step 5b) + query-JSON required; capability when cargo/prefix/target present |
-| [`scripts/packaging/engine_auto_fallback_smoke.sh`](../scripts/packaging/engine_auto_fallback_smoke.sh) | offline gate step 4 | Prefer-native / fall-back-legacy; never `crates/` on oracle PERL5LIB |
-| [`scripts/packaging/perl_jsonl_data_all_smoke.sh`](../scripts/packaging/perl_jsonl_data_all_smoke.sh) | offline gate step 5 | Thin fail-fast roll-up of pure-Perl JsonlData smokes |
-| [`scripts/packaging/perl_xs_data_readstream_smoke.sh`](../scripts/packaging/perl_xs_data_readstream_smoke.sh) | offline gate step 5b | **PERL-XS-DATA-READSTREAM-MVP**: product Data/ReadStream (golden required; binary when CLI; thin path only) |
-| [`scripts/packaging/perl_query_json_smoke.sh`](../scripts/packaging/perl_query_json_smoke.sh) | offline gate step 6 (CI-QUERY-JSON-GATE) | QUERY-JSON-MVP / QUERY-JSON-EXPAND: `query --json --jsonl` golden; pure-Perl; no cargo |
-| [`scripts/packaging/json_sub_entry_smoke.sh`](../scripts/packaging/json_sub_entry_smoke.sh) | offline gate step 6b | JSON-SUB-ENTRY-MVP: `sub_entry_events` **0**/**27** |
-| [`scripts/packaging/json_blocks_smoke.sh`](../scripts/packaging/json_blocks_smoke.sh) | offline gate step 6c | JSON-BLOCKS-MVP: blocks-calls1 **780**/**810** greppable A4/A4b ints |
-| [`scripts/packaging/native_agg_json_smoke.sh`](../scripts/packaging/native_agg_json_smoke.sh) | offline gate step 7 (optional when native) | NATIVE-AGG-JSON: `report --json` ×2 → **15/3/15** |
-| [`scripts/packaging/native_query_json_cross_smoke.sh`](../scripts/packaging/native_query_json_cross_smoke.sh) | offline gate step 8 (optional when native) | NATIVE-QUERY-JSON-CROSS: native `report --json` vs Perl `query --json` shared fields **15/3/15** + discount **818** |
-| [`scripts/packaging/capability_selftest_smoke.sh`](../scripts/packaging/capability_selftest_smoke.sh) | offline gate step 9 (CI-CAPABILITY-GATE); also packaging_gate | CAPABILITY-SELFTEST + CAPABILITY-JSON-MVP; fails closed without CLI/cargo when invoked directly; offline/packaging gates skip honestly when native unavailable |
-| [`scripts/packaging/legacy_only_smoke.sh`](../scripts/packaging/legacy_only_smoke.sh) | legacy-only | Must not invoke |
-| [`scripts/packaging/install_native.sh`](../scripts/packaging/install_native.sh) | optional-native | Required |
-| [`scripts/packaging/native_install_smoke.sh`](../scripts/packaging/native_install_smoke.sh) | optional-native | Required (expects prefix install) |
-| [`scripts/packaging/native_optional_smoke.sh`](../scripts/packaging/native_optional_smoke.sh) | optional-native | Skips cleanly if absent |
-| [`scripts/packaging/dual_path_smoke.sh`](../scripts/packaging/dual_path_smoke.sh) | both (policy entry / offline gate packaging primary) | Legacy always; native if present |
-| [`scripts/packaging/makemaker_dual_path_smoke.sh`](../scripts/packaging/makemaker_dual_path_smoke.sh) | both (MakeMaker entry) | `Makefile.PL` + `make legacy-smoke`; native via make when cargo present |
-| Root [`Makefile.PL`](../Makefile.PL) | packaging facade | Default legacy; `NYTPROF_NATIVE=0\|1\|auto`; not full XS CPAN; `make offline-gate` |
-| [`scripts/packaging/packaging_gate.sh`](../scripts/packaging/packaging_gate.sh) | broader packaging gate | Mixed fail-fast (legacy + engine select + Perl dispatch + native when present) |
+| [`scripts/ci/offline_gate.sh`](https://github.com/hilather/nytprof-modernization/blob/main/scripts/ci/offline_gate.sh) | offline R1 gate (CI-OFFLINE-GATE-EXPAND + CI-QUERY-JSON-GATE + CI-CAPABILITY-GATE) | Cargo tests skip if absent; harness + dual-path + engine_auto_fallback + JsonlData roll-up + query-JSON required; capability when cargo/prefix/target present |
+| [`scripts/packaging/engine_auto_fallback_smoke.sh`](https://github.com/hilather/nytprof-modernization/blob/main/scripts/packaging/engine_auto_fallback_smoke.sh) | offline gate step 4 | Prefer-native / fall-back-legacy; never `crates/` on oracle PERL5LIB |
+| [`scripts/packaging/perl_jsonl_data_all_smoke.sh`](https://github.com/hilather/nytprof-modernization/blob/main/scripts/packaging/perl_jsonl_data_all_smoke.sh) | offline gate step 5 | Thin fail-fast roll-up of pure-Perl JsonlData smokes |
+| [`scripts/packaging/perl_query_json_smoke.sh`](https://github.com/hilather/nytprof-modernization/blob/main/scripts/packaging/perl_query_json_smoke.sh) | offline gate step 6 (CI-QUERY-JSON-GATE) | QUERY-JSON-MVP / QUERY-JSON-EXPAND: `query --json --jsonl` golden; pure-Perl; no cargo |
+| [`scripts/packaging/json_sub_entry_smoke.sh`](https://github.com/hilather/nytprof-modernization/blob/main/scripts/packaging/json_sub_entry_smoke.sh) | offline gate step 6b | JSON-SUB-ENTRY-MVP: `sub_entry_events` **0**/**27** |
+| [`scripts/packaging/json_blocks_smoke.sh`](https://github.com/hilather/nytprof-modernization/blob/main/scripts/packaging/json_blocks_smoke.sh) | offline gate step 6c | JSON-BLOCKS-MVP: blocks-calls1 **780**/**810** greppable A4/A4b ints |
+| [`scripts/packaging/native_agg_json_smoke.sh`](https://github.com/hilather/nytprof-modernization/blob/main/scripts/packaging/native_agg_json_smoke.sh) | offline gate step 7 (optional when native) | NATIVE-AGG-JSON: `report --json` ×2 → **15/3/15** |
+| [`scripts/packaging/native_query_json_cross_smoke.sh`](https://github.com/hilather/nytprof-modernization/blob/main/scripts/packaging/native_query_json_cross_smoke.sh) | offline gate step 8 (optional when native) | NATIVE-QUERY-JSON-CROSS: native `report --json` vs Perl `query --json` shared fields **15/3/15** + discount **818** |
+| [`scripts/packaging/capability_selftest_smoke.sh`](https://github.com/hilather/nytprof-modernization/blob/main/scripts/packaging/capability_selftest_smoke.sh) | offline gate step 9 (CI-CAPABILITY-GATE); also packaging_gate | CAPABILITY-SELFTEST + CAPABILITY-JSON-MVP; fails closed without CLI/cargo when invoked directly; offline/packaging gates skip honestly when native unavailable |
+| [`scripts/packaging/legacy_only_smoke.sh`](https://github.com/hilather/nytprof-modernization/blob/main/scripts/packaging/legacy_only_smoke.sh) | legacy-only | Must not invoke |
+| [`scripts/packaging/install_native.sh`](https://github.com/hilather/nytprof-modernization/blob/main/scripts/packaging/install_native.sh) | optional-native | Required |
+| [`scripts/packaging/native_install_smoke.sh`](https://github.com/hilather/nytprof-modernization/blob/main/scripts/packaging/native_install_smoke.sh) | optional-native | Required (expects prefix install) |
+| [`scripts/packaging/native_optional_smoke.sh`](https://github.com/hilather/nytprof-modernization/blob/main/scripts/packaging/native_optional_smoke.sh) | optional-native | Skips cleanly if absent |
+| [`scripts/packaging/dual_path_smoke.sh`](https://github.com/hilather/nytprof-modernization/blob/main/scripts/packaging/dual_path_smoke.sh) | both (policy entry / offline gate packaging primary) | Legacy always; native if present |
+| [`scripts/packaging/makemaker_dual_path_smoke.sh`](https://github.com/hilather/nytprof-modernization/blob/main/scripts/packaging/makemaker_dual_path_smoke.sh) | both (MakeMaker entry) | `Makefile.PL` + `make legacy-smoke`; native via make when cargo present |
+| Root [`Makefile.PL`](https://github.com/hilather/nytprof-modernization/blob/main/Makefile.PL) | packaging facade | Default legacy; `NYTPROF_NATIVE=0\|1\|auto`; not full XS CPAN; `make offline-gate` |
+| [`scripts/packaging/packaging_gate.sh`](https://github.com/hilather/nytprof-modernization/blob/main/scripts/packaging/packaging_gate.sh) | broader packaging gate | Mixed fail-fast (legacy + engine select + Perl dispatch + native when present) |
 
 Broader operator gate (includes engine-selection and Perl facade smokes beyond dual-path tiers):
 
@@ -207,7 +243,7 @@ Oracle rebuild (Cargo-free forever):
 ./scripts/baseline/run_all.sh
 ```
 
-Native install MVP contract: [`docs/schemas/native-install-mvp-v0.md`](schemas/native-install-mvp-v0.md).
+Native install MVP contract: [`docs/schemas/native-install-mvp-v0.md`](https://github.com/hilather/nytprof-modernization/blob/main/docs/schemas/native-install-mvp-v0.md).
 
 ---
 
@@ -222,14 +258,17 @@ Native install MVP contract: [`docs/schemas/native-install-mvp-v0.md`](schemas/n
 | COMPAT-009 final tier freeze / full BUILD-001 ADR | open | This doc is the runnable dual-path draft feeding that freeze |
 | MSRV freeze | open (ADR-Q017) | Optional-native uses whatever `rustc` is installed until frozen |
 | Default engine/format flips to native | out of first slice | Native remains opt-in |
+| Collector overlay sources / COL-001..003 + fake-clock scaffold | **partial (PR-B02+B03)** | `collector/` headers + counting/stub-v5 sinks + lifecycle/seq + fake-clock mini M4 + unit tests + `collector_sink_smoke.sh` in offline_gate step 10; **not** live XS hooks, real v5 wire (COL-006), full M4 corpus gate, or COL-007 |
+| COL-007 C v6 writer / wire freeze / CLI v6 default | deferred / open | ADR-0004 + COL-001 scaffold do **not** complete these |
 
 ---
 
 ## Relationship to packaging spike
 
-- Spike charter and layout notes: [`docs/PACKAGING_SPIKE.md`](PACKAGING_SPIKE.md)
+- Spike charter and layout notes: [`docs/PACKAGING_SPIKE.md`](https://github.com/hilather/nytprof-modernization/blob/main/docs/PACKAGING_SPIKE.md)
+- Collector overlay layout (B0-A): [`docs/adrs/0004-collector-packaging-source-tree.md`](https://github.com/hilather/nytprof-modernization/blob/main/docs/adrs/0004-collector-packaging-source-tree.md)
 - This policy **lands** the dual-path contract with a dedicated smoke; the spike remains historical/background detail.
-- **CI-OFFLINE-GATE** / **CI-OFFLINE-GATE-EXPAND** / **CI-QUERY-JSON-GATE** / **CI-CAPABILITY-GATE** (`scripts/ci/offline_gate.sh`) is the single offline R1 fail-fast entry (cargo tests? + harness + dual-path packaging primary + engine_auto_fallback + pure-Perl JsonlData roll-up + product Data/ReadStream smoke step **5b** + required query-JSON smoke + capability_selftest when native available).
+- **CI-OFFLINE-GATE** / **CI-OFFLINE-GATE-EXPAND** / **CI-QUERY-JSON-GATE** / **CI-CAPABILITY-GATE** / **COL-001-SINK-MVP** (`scripts/ci/offline_gate.sh`) is the single offline R1 fail-fast entry (cargo tests? + harness + dual-path packaging primary + engine_auto_fallback + pure-Perl JsonlData roll-up + required query-JSON smoke + capability_selftest when native available + collector sink smoke with honest CC skip).
 - Unified packaging gate remains the broader packaging fail-fast suite; dual-path smoke is the support-tier-focused packaging half.
 - Candidate MakeMaker entry (`Makefile.PL` + `makemaker_dual_path_smoke.sh`) is the dual-path **packaging facade** before full BUILD-003.
 
@@ -268,7 +307,6 @@ Native install MVP contract: [`docs/schemas/native-install-mvp-v0.md`](schemas/n
 
 - [x] Step 4: required `scripts/packaging/engine_auto_fallback_smoke.sh` (ENGINE-AUTO-FALLBACK)
 - [x] Step 5: required `scripts/packaging/perl_jsonl_data_all_smoke.sh` (thin roll-up of pure-Perl JsonlData smokes)
-- [x] Step **5b**: required `scripts/packaging/perl_xs_data_readstream_smoke.sh` (**PERL-XS-DATA-READSTREAM-MVP** / PR-A06 product Data/ReadStream; golden required; binary when CLI; proves thin path only — not COMPAT-007 / pure-XS wire decode)
 - [x] Roll-up covers: `perl_jsonl_data` + `perl_line_totals` + `perl_subdefs` + `perl_source` + `perl_a4b` + `perl_meta` + `perl_pid` + `perl_stream_complete` + `perl_discount` + `perl_sub_entry`
 - [x] Fail-fast banners for new steps; never puts `crates/` on oracle `PERL5LIB`
 - [x] Docs: this section + README offline gate table; board row **before COL-007**
@@ -286,7 +324,7 @@ Native install MVP contract: [`docs/schemas/native-install-mvp-v0.md`](schemas/n
 
 ## Definition of done for CI-QUERY-JSON-GATE
 
-- [x] Step 6: required `scripts/packaging/perl_query_json_smoke.sh` wired into `scripts/ci/offline_gate.sh` (after step 5b product Data/ReadStream smoke; before native-agg / capability)
+- [x] Step 6: required `scripts/packaging/perl_query_json_smoke.sh` wired into `scripts/ci/offline_gate.sh` (after `perl_jsonl_data_all_smoke`; before native-agg / capability)
 - [x] Fail-fast if script missing; clear **OFFLINE GATE** banner for the step
 - [x] Golden `--jsonl` path only; does not require cargo
 - [x] Never puts `crates/` on oracle `PERL5LIB`

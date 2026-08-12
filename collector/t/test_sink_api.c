@@ -233,6 +233,6 @@ int main(void)
         fprintf(stderr, "test_sink_api: %d failure(s)\n", failures);
         return 1;
     }
-    printf("OK: test_sink_api (COL-001 sink interface)\n");
+    printf("OK: test_sink_api (COL-001 sink interface; lifecycle/seq in sibling tests)\n");
     return 0;
 }
