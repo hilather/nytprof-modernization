@@ -1,21 +1,24 @@
 #!/usr/bin/env bash
-# Light measurement harness for first-slice offline paths (P3/P4 engineering proxies).
+# Light measurement harness for offline paths + R2 P1/P2 engineering proxies.
 #
 # NOT a performance certification. Local exploratory timings only.
-# See docs/BENCH_NOTES.md — no public performance claims.
+# See docs/BENCH_NOTES.md — no public performance claims until R2-stable gates green.
 #
 # Usage:
 #   bash tools/bench/light_bench.sh
 #   OUT=/tmp/light_bench.txt bash tools/bench/light_bench.sh
 #   RELEASE=1 RUNS=3 bash tools/bench/light_bench.sh
+#   STEPS=size,collector_micro,dump,report bash tools/bench/light_bench.sh
 #
 # Env:
-#   OUT=path       Optional file to also write the same report (stdout always printed)
-#   FIXTURES=…     Space-separated fixture dirs relative to repo root
-#                  (default: fixtures/v5/default-calls1 fixtures/v5/default-calls2 if present)
-#   STEPS=…        Comma-separated steps (default: dump,verify,report,csv,html)
-#   RUNS=N         Timed repetitions per step (default: 1)
-#   RELEASE=0|1    When 1, cargo build/run --release (default: 0 / debug)
+#   OUT=path         Optional file to also write the same report (stdout always printed)
+#   FIXTURES=…       Space-separated fixture dirs relative to repo root
+#                    (default: fixtures/v5/default-calls1 fixtures/v5/default-calls2 if present)
+#   STEPS=…          Comma-separated steps
+#                    (default: size,dump,verify,report,csv,html,collector_micro)
+#   RUNS=N           Timed repetitions per timed step (default: 1)
+#   RELEASE=0|1      When 1, cargo build/run --release (default: 0 / unset)
+#   SKIP_COLLECTOR=1 Skip collector_micro even if listed
 #
 # Exit 0 on success (missing optional fixtures/steps are skipped, not failures).
 
@@ -46,7 +49,7 @@ if [[ "${RELEASE:-0}" == "1" ]]; then
   PROFILE_LABEL=release
 fi
 
-DEFAULT_STEPS="dump,verify,report,csv,html"
+DEFAULT_STEPS="size,dump,verify,report,csv,html,collector_micro"
 STEPS_CSV="${STEPS:-$DEFAULT_STEPS}"
 # shellcheck disable=SC2206
 IFS=',' read -r -a STEP_LIST <<<"$STEPS_CSV"
@@ -66,6 +69,14 @@ step_wanted() {
   return 1
 }
 
+need_cli=0
+for s in dump verify report csv html; do
+  if step_wanted "$s"; then
+    need_cli=1
+    break
+  fi
+done
+
 # --- timing: prefer /usr/bin/time -f, else bash TIMEFORMAT, else python3 ---
 TIME_MODE=
 if [[ -x /usr/bin/time ]] && /usr/bin/time -f '%e' true >/dev/null 2>&1; then
@@ -76,8 +87,8 @@ else
   TIME_MODE=python
 fi
 
-# Run command; print wall seconds to stdout (one number). Command stderr preserved on failure.
-# Usage: wall_seconds <label> -- <cmd...>
+# Run command; print wall seconds. Command stdout/stderr discarded on success path.
+# Usage: run_timed <label> -- <cmd...>
 # Sets global LAST_WALL_S
 LAST_WALL_S=0
 run_timed() {
@@ -89,8 +100,6 @@ run_timed() {
   local sec
   case "$TIME_MODE" in
     gnu)
-      # GNU time writes to stderr by default; capture only the format line.
-      # Run command with its stdout/stderr discarded for clean bench (caller redirects).
       local tmp
       tmp=$(mktemp)
       set +e
@@ -138,7 +147,6 @@ PY
 )
       ;;
   esac
-  # Normalize to at least 3 decimal places when possible
   if [[ -z "${sec:-}" ]]; then
     sec="0"
   fi
@@ -151,7 +159,6 @@ cli_help() {
 }
 
 cli_has_subcommand() {
-  # Probe help text after build; do not fail the suite if missing.
   local name="$1"
   local help
   help=$(cli_help)
@@ -177,7 +184,7 @@ else
   FIXTURE_LIST=("${DEFAULT_FIXTURES[@]}")
 fi
 
-if [[ ${#FIXTURE_LIST[@]} -eq 0 ]]; then
+if [[ ${#FIXTURE_LIST[@]} -eq 0 ]] && ! step_wanted size && ! step_wanted collector_micro; then
   emit "ERROR: no fixtures found (expected fixtures/v5/default-calls1/nytprof.out)"
   exit 1
 fi
@@ -191,43 +198,48 @@ emit "steps: $STEPS_CSV"
 emit "commit: $(git -C "$ROOT" rev-parse --short HEAD 2>/dev/null || echo unknown)"
 emit "rustc: $(rustc --version 2>/dev/null || echo unknown)"
 emit "note: exploratory local timings only — NOT certification; no public claims"
-emit "note: P3 proxies=dump,verify; P4 proxies=report,csv,html (see docs/BENCH_NOTES.md)"
+emit "note: P1 proxies=collector_micro; P2 proxies=size; P3=dump,verify; P4=report,csv,html"
+emit "note: public-claim-ready only if R2-stable BENCH gates green (docs/BENCH_NOTES.md)"
 emit ""
 
-emit "build: cargo build -q -p nytprof-cli ${RELEASE_FLAG[*]:-}"
-cargo build -q -p nytprof-cli "${RELEASE_FLAG[@]}"
-emit "build: ok"
-emit ""
+if [[ "$need_cli" -eq 1 ]]; then
+  emit "build: cargo build -q -p nytprof-cli ${RELEASE_FLAG[*]:-}"
+  cargo build -q -p nytprof-cli "${RELEASE_FLAG[@]}"
+  emit "build: ok"
+  emit ""
+fi
 
-# Capability probes (after build)
+# Capability probes (after build when needed)
 HAS_CSV=0
 HAS_HTML=0
 HAS_VERIFY=0
-if step_wanted csv && cli_has_subcommand csv; then
-  HAS_CSV=1
-  emit "csv: available"
-elif step_wanted csv; then
-  emit "csv: skipped (subcommand not present)"
-else
-  emit "csv: not requested"
+if [[ "$need_cli" -eq 1 ]]; then
+  if step_wanted csv && cli_has_subcommand csv; then
+    HAS_CSV=1
+    emit "csv: available"
+  elif step_wanted csv; then
+    emit "csv: skipped (subcommand not present)"
+  else
+    emit "csv: not requested"
+  fi
+  if step_wanted html && cli_has_subcommand html; then
+    HAS_HTML=1
+    emit "html: available"
+  elif step_wanted html; then
+    emit "html: skipped (subcommand not present)"
+  else
+    emit "html: not requested"
+  fi
+  if step_wanted verify && cli_has_subcommand verify; then
+    HAS_VERIFY=1
+    emit "verify: available"
+  elif step_wanted verify; then
+    emit "verify: skipped (subcommand not present)"
+  else
+    emit "verify: not requested"
+  fi
+  emit ""
 fi
-if step_wanted html && cli_has_subcommand html; then
-  HAS_HTML=1
-  emit "html: available"
-elif step_wanted html; then
-  emit "html: skipped (subcommand not present)"
-else
-  emit "html: not requested"
-fi
-if step_wanted verify && cli_has_subcommand verify; then
-  HAS_VERIFY=1
-  emit "verify: available"
-elif step_wanted verify; then
-  emit "verify: skipped (subcommand not present)"
-else
-  emit "verify: not requested"
-fi
-emit ""
 
 run_step_reps() {
   local step_name="$1"
@@ -242,6 +254,96 @@ run_step_reps() {
   done
 }
 
+# --- P2: size inventory ---
+emit_file_size() {
+  local path="$1"
+  if [[ ! -f "$path" ]]; then
+    emit "  size $path: SKIP (missing)"
+    return 0
+  fi
+  local bytes
+  if bytes=$(stat -c '%s' "$path" 2>/dev/null); then
+    :
+  elif bytes=$(stat -f '%z' "$path" 2>/dev/null); then
+    :
+  else
+    bytes=$(wc -c <"$path" | tr -d ' ')
+  fi
+  emit "  size $path: ${bytes} bytes"
+}
+
+if step_wanted size; then
+  emit "step: size (P2 storage proxy — inventory only; not a size SLO)"
+  if [[ ${#FIXTURE_LIST[@]} -gt 0 ]]; then
+    for fixdir in "${FIXTURE_LIST[@]}"; do
+      emit_file_size "$fixdir/nytprof.out"
+    done
+  else
+    emit "  (no default v5 fixtures in FIXTURES list)"
+  fi
+  # Committed product E3-EVENT C profiles (codec/packing matrix)
+  shopt -s nullglob
+  v6_files=(fixtures/v6/from-c/*.nytprof)
+  shopt -u nullglob
+  if [[ ${#v6_files[@]} -gt 0 ]]; then
+    for f in "${v6_files[@]}"; do
+      emit_file_size "$f"
+    done
+  else
+    emit "  fixtures/v6/from-c/*.nytprof: none present"
+  fi
+  emit ""
+fi
+
+# --- P1: collector microbench via unit test suite ---
+if step_wanted collector_micro; then
+  emit "step: collector_micro (P1 engineering proxy — not end-to-end collection cert)"
+  if [[ "${SKIP_COLLECTOR:-0}" == "1" ]]; then
+    emit "  collector_micro: skipped (SKIP_COLLECTOR=1)"
+  elif [[ ! -f collector/Makefile ]]; then
+    emit "  collector_micro: skipped (no collector/Makefile)"
+  elif ! command -v cc >/dev/null 2>&1 && ! command -v gcc >/dev/null 2>&1 && ! command -v clang >/dev/null 2>&1; then
+    emit "  collector_micro: skipped (no C compiler)"
+  else
+    # Time the collector unit suite; surface microbench NOTE lines if present.
+    local_log=$(mktemp)
+    set +e
+    if [[ "$TIME_MODE" == "gnu" ]]; then
+      tmp=$(mktemp)
+      /usr/bin/time -f '%e' -o "$tmp" -- make -C collector test >"$local_log" 2>&1
+      rc=$?
+      sec=$(tr -d ' \n' <"$tmp" || true)
+      rm -f "$tmp"
+    else
+      t0=$(date +%s.%N 2>/dev/null || python3 -c 'import time; print(time.perf_counter())')
+      make -C collector test >"$local_log" 2>&1
+      rc=$?
+      t1=$(date +%s.%N 2>/dev/null || python3 -c 'import time; print(time.perf_counter())')
+      sec=$(python3 -c "print(f'{float('$t1')-float('$t0'):.3f}')" 2>/dev/null || echo "0")
+    fi
+    set -e
+    if [[ $rc -ne 0 ]]; then
+      emit "ERROR: collector_micro failed (make -C collector test exit $rc)"
+      # show last lines for diagnosis
+      tail -n 40 "$local_log" | while IFS= read -r line; do emit "  | $line"; done
+      rm -f "$local_log"
+      exit "$rc"
+    fi
+    emit "  collector_micro suite: ${sec:-0}s wall"
+    # Extract engineering NOTE lines (microbench)
+    if grep -E 'NOTE: light microbench|engineering only; not BENCH' "$local_log" >/dev/null 2>&1; then
+      grep -E 'NOTE: light microbench|engineering only; not BENCH' "$local_log" | while IFS= read -r line; do
+        emit "  $line"
+      done
+    else
+      emit "  (no microbench NOTE line captured; suite still green)"
+    fi
+    rm -f "$local_log"
+  fi
+  emit ""
+fi
+
+# --- offline CLI steps (P3/P4 proxies) ---
 for fixdir in "${FIXTURE_LIST[@]}"; do
   out="$fixdir/nytprof.out"
   if [[ ! -f "$out" ]]; then
@@ -249,6 +351,18 @@ for fixdir in "${FIXTURE_LIST[@]}"; do
     emit ""
     continue
   fi
+
+  any_cli=0
+  for s in dump verify report csv html; do
+    if step_wanted "$s"; then
+      any_cli=1
+      break
+    fi
+  done
+  if [[ "$any_cli" -eq 0 ]]; then
+    continue
+  fi
+
   emit "fixture: $out"
 
   if step_wanted dump; then
@@ -292,13 +406,12 @@ for fixdir in "${FIXTURE_LIST[@]}"; do
 done
 
 emit "done (exit 0)"
-emit "claim: none — not certification (docs/BENCH_NOTES.md)"
+emit "claim: none — not certification; public claims only after R2-stable BENCH gates (docs/BENCH_NOTES.md)"
 
 if [[ -n "${OUT:-}" ]]; then
   {
     printf '%s\n' "${REPORT_LINES[@]}"
   } >"$OUT"
-  # Also note path on stderr so stdout report stays clean for capture
   printf 'wrote %s\n' "$OUT" >&2
 fi
 

@@ -92,7 +92,7 @@ Do **not** advertise under this cut:
 5. **COL-008** batched Rust writer as baseline or measured superior backend.
 6. **E3-mixed** multi-kind product C fixture matrix complete.
 7. **Full oracle E4** dual pairs (TEST-003/TEST-008).
-8. **Public performance SLOs** or certified BENCH package.
+8. **Public performance SLOs** or certified BENCH package (PR-C04 ships **P1/P2 methodology + light harness only** — claims remain waived until R2-stable gates green; see [`docs/BENCH_NOTES.md`](https://github.com/hilather/nytprof-modernization/blob/main/docs/BENCH_NOTES.md)).
 9. **CPAN upload** readiness.
 10. That **this packaging PR** completed COL-007 — COL-007 was already **done** at PR-B09.
 

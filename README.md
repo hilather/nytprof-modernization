@@ -68,8 +68,10 @@ perl tools/oracle/compare_jsonl.pl /tmp/oracle.norm.jsonl /tmp/rust.norm.jsonl
 # Native dump parity smoke (dump×2 stability + golden full match):
 ./tools/oracle/selftest_native_dump_parity.sh              # default-calls1
 ./tools/oracle/selftest_native_dump_parity_all.sh          # + calls2-default + blocks-calls1
-# Light wall-time samples (not certification; no public claims):
+# Light wall-time + size samples (not certification; no public claims):
 bash tools/bench/light_bench.sh
+# P1/P2-focused proxies only:
+# STEPS=size,collector_micro bash tools/bench/light_bench.sh
 ```
 
 Binary: `nytprof-dump` (package `nytprof-cli`; subcommands: `dump` / `report` / `summary` / `aggregates` / `csv` / `html` / `folded` / `callgrind` / `cg` / `verify` / `inspect` / `capability` / `selftest` / `capabilities`). Schemas:
@@ -85,7 +87,7 @@ Binary: `nytprof-dump` (package `nytprof-cli`; subcommands: `dump` / `report` / 
 [`docs/schemas/verify-cli-mvp-v0.md`](docs/schemas/verify-cli-mvp-v0.md),
 [`docs/schemas/capability-selftest-mvp-v0.md`](docs/schemas/capability-selftest-mvp-v0.md),
 [`docs/schemas/native-dump-parity-mvp-v0.md`](docs/schemas/native-dump-parity-mvp-v0.md).
-Board: [`docs/FIRST_SLICE_BOARD.md`](docs/FIRST_SLICE_BOARD.md). Exploratory timing notes + harness (not certification): [`docs/BENCH_NOTES.md`](docs/BENCH_NOTES.md), [`tools/bench/light_bench.sh`](tools/bench/light_bench.sh).
+Board: [`docs/FIRST_SLICE_BOARD.md`](https://github.com/hilather/nytprof-modernization/blob/main/docs/FIRST_SLICE_BOARD.md). Exploratory timing notes + P1/P2 methodology (not certification; no public claims until R2-stable gates green): [`docs/BENCH_NOTES.md`](https://github.com/hilather/nytprof-modernization/blob/main/docs/BENCH_NOTES.md), [`tools/bench/light_bench.sh`](https://github.com/hilather/nytprof-modernization/blob/main/tools/bench/light_bench.sh).
 
 ## Oracle (BASE-001)
 
