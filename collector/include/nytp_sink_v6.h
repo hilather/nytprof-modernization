@@ -1,25 +1,23 @@
 /* SPDX-License-Identifier: Artistic-1.0-Perl OR GPL-1.0-or-later
  *
- * COL-007 (PR-B06 + PR-B07) — Absolute v6 writer with codecs / multi-chunk / CRC.
+ * COL-007 (PR-B06..B08) — Provisional v6 wire sink.
  *
- * Routes COMPAT-001 emits through provisional format-v6 absolute EVENT
- * bodies. Layout matches crates/nytprof-format-v6 + nytprof_v6_ids.h.
+ * Routes COMPAT-001 emits through provisional format-v6 EVENT bodies.
+ * Layout matches crates/nytprof-format-v6 + nytprof_v6_ids.h.
  *
- * PR-B07 adds:
- *   - EVENT payload codecs NONE / ZLIB / ZSTD / LZ4 (chunk-framed inflate)
- *   - multi-chunk EVENT seal (records-per-chunk partition; not mid-record)
- *   - header CRC32 + per-chunk payload CRC32 (IEEE / ISO-HDLC)
+ * PR-B06: absolute EVENT bodies + file-prefix
+ * PR-B07: EVENT codecs NONE/ZLIB/ZSTD/LZ4; multi-chunk; header+payload CRC
+ * PR-B08: ADR-0001 packing (site-delta + FLAG_HAS_SEQ continuity);
+ *         mid-stream codec region + empty START_DEFLATE marker;
+ *         ADR-0002 FOOTER-local string dictionary
  *
  * Residuals (honest):
- *   - Not packing (ADR-0001 site-delta / TIME_*_RUN / FLAG_HAS_SEQ) — PR-B08.
- *   - Not FOOTER string dict (ADR-0002) — PR-B08.
- *   - Not mid-stream payload codec switch after START_DEFLATE — PR-B08.
- *   - Not wire freeze; not board COL-007 done (E3-C = PR-B09).
+ *   - Not board COL-007 done (E3-C = PR-B09).
+ *   - Not wire freeze; not CLI v6 default.
  *   - NEW_FID drops eval_*, flags, size, mtime (provisional absolute shape).
  *   - TIME_BLOCK drops sub_line (provisional absolute shape).
  *   - NV doubles projected to non-negative integer ULEB (fail closed).
- *   - START_DEFLATE is empty marker only (no mid-stream codec switch).
- *   - Default does not write COL-003 seq on the wire (no FLAG_HAS_SEQ).
+ *   - Default create remains absolute / no packing / no FOOTER dict.
  */
 #ifndef NYTP_SINK_V6_H
 #define NYTP_SINK_V6_H
@@ -34,6 +32,20 @@
 #ifdef __cplusplus
 extern "C" {
 #endif
+
+/*
+ * Optional create knobs (zero-init = absolute NONE single-chunk, no packing/dict).
+ * header_crc is ignored — CRC is always sealed over the first 32 header bytes.
+ */
+typedef struct nytp_v6_sink_options {
+    uint16_t minor;
+    uint64_t required_features;
+    uint64_t optional_features;
+    uint8_t event_codec; /* NYTPROF_V6_CODEC_* */
+    size_t max_records_per_chunk; /* 0 = unlimited single chunk per region */
+    int enable_packing; /* ADR-0001: site-delta + FLAG_HAS_SEQ continuity */
+    int enable_string_dict; /* ADR-0002: FOOTER-local string dictionary */
+} nytp_v6_sink_options;
 
 /*
  * Create an absolute v6 wire sink (codec NONE EVENT, unlimited single chunk).
@@ -61,7 +73,7 @@ nytp_sink *nytp_v6_sink_create_ex(const char *path, uint16_t minor,
  * max_records_per_chunk:
  *   0  = unlimited → at most one EVENT chunk (mini-profile shape)
  *   n>=1 = split into EVENT chunks of at most n records each (sequence 0..k-1)
- * Header + payload CRCs always sealed.
+ * Header + payload CRCs always sealed. Packing/dict off.
  */
 nytp_sink *nytp_v6_sink_create_codec(const char *path, uint8_t event_codec,
                                      size_t max_records_per_chunk);
@@ -75,7 +87,14 @@ nytp_sink *nytp_v6_sink_create_codec_ex(const char *path, uint16_t minor,
                                         uint8_t event_codec,
                                         size_t max_records_per_chunk);
 
-/* True if sink was created by nytp_v6_sink_create* / create_codec*. */
+/*
+ * Full create with packing / string-dict options (PR-B08).
+ * NULL opt → same as nytp_v6_sink_create(path). Unsupported codec → NULL.
+ */
+nytp_sink *nytp_v6_sink_create_opts(const char *path,
+                                    const nytp_v6_sink_options *opt);
+
+/* True if sink was created by nytp_v6_sink_create* / create_codec* / create_opts. */
 int nytp_v6_sink_is_v6(const nytp_sink *sink);
 
 /* Stats share the counting layout so tests can compare routing. */
@@ -88,8 +107,9 @@ const nytp_counting_stats *nytp_v6_sink_stats(const nytp_sink *sink);
 const char *nytp_v6_sink_path(const nytp_sink *sink);
 
 /*
- * Borrow sealed wire buffer after successful close, or prefix-only mid-stream.
- * Decoder-ready profile only after nytp_sink_close (EVENT chunk(s) sealed).
+ * Borrow sealed wire buffer after successful close, or prefix (+ sealed regions)
+ * mid-stream. Decoder-ready complete profile only after nytp_sink_close
+ * (EVENT region(s) sealed; FOOTER dict when enabled).
  * *out_len receives byte length. Returns NULL if not a v6 sink.
  */
 const uint8_t *nytp_v6_sink_wire(const nytp_sink *sink, size_t *out_len);
@@ -100,31 +120,64 @@ size_t nytp_v6_sink_wire_len(const nytp_sink *sink);
 /* 1 if a path was configured and the buffer has been written to it. */
 int nytp_v6_sink_file_written(const nytp_sink *sink);
 
-/* 1 after close has sealed EVENT chunk(s) into the wire buffer. */
+/* 1 after close has sealed EVENT region(s) (+ optional FOOTER) into wire. */
 int nytp_v6_sink_is_sealed(const nytp_sink *sink);
 
 /* Header major/minor (always major 6 for this adapter). */
 void nytp_v6_sink_version(const nytp_sink *sink, uint16_t *major,
                           uint16_t *minor);
 
-/* Logical event count that will be written across EVENT chunk headers. */
+/* Logical event count in the open body region (not cumulative mid-stream). */
 uint32_t nytp_v6_sink_event_count(const nytp_sink *sink);
 
-/* Configured EVENT payload codec (NYTPROF_V6_CODEC_*). 0 if not v6. */
+/* Configured EVENT payload codec for the **current** region (NYTPROF_V6_CODEC_*). */
 uint8_t nytp_v6_sink_event_codec(const nytp_sink *sink);
 
 /* Configured max records per EVENT chunk (0 = unlimited). */
 size_t nytp_v6_sink_max_records_per_chunk(const nytp_sink *sink);
 
 /*
- * Number of EVENT chunks sealed on close (0 if empty stream / refuse-seal).
- * 0 before seal.
+ * Number of EVENT chunks sealed so far (region seals + final). 0 before any seal.
  */
 uint32_t nytp_v6_sink_event_chunk_count(const nytp_sink *sink);
 
+/* 1 if packing (ADR-0001) is enabled. */
+int nytp_v6_sink_packing_enabled(const nytp_sink *sink);
+
+/* 1 if FOOTER string-dict (ADR-0002) is enabled. */
+int nytp_v6_sink_string_dict_enabled(const nytp_sink *sink);
+
+/* 1 after final close sealed a FOOTER string-dictionary chunk. */
+int nytp_v6_sink_has_footer_dict(const nytp_sink *sink);
+
+/* Dictionary entry count (interned strings); 0 if dict disabled. */
+uint32_t nytp_v6_sink_dict_entry_count(const nytp_sink *sink);
+
 /*
- * Borrow the open event-body buffer (absolute records, not yet framed).
- * Valid until next emit or seal/destroy. NULL if not v6 or already sealed.
+ * Mid-stream codec region switch (PR-B08 / ADR-0001 §6):
+ *   1. Emit empty START_DEFLATE marker into the current open body.
+ *   2. Seal current body as EVENT chunk(s) under the current codec (region seal;
+ *      not final profile seal — packing state continues).
+ *   3. Subsequent emits use next_codec for chunk payloads.
+ * next_codec must be supported and **must differ** from the current codec.
+ * Fail-closed if sealed / sticky FAILED / empty body before marker / bad codec.
+ */
+nytp_status nytp_v6_sink_begin_codec_region(nytp_sink *sink, uint8_t next_codec);
+
+/*
+ * Optional packed same-site run (ADR-0001 TIME_LINE_RUN). Only when packing is
+ * enabled. Emits one wire record expanding to n_ticks logical TIME_LINE events
+ * for FLAG_HAS_SEQ base..base+N-1. n_ticks must be 1..MAX_TIME_RUN_LEN.
+ * Advances packing SiteCursor to (fid,line).
+ */
+nytp_status nytp_v6_sink_emit_time_line_run(nytp_sink *sink, nytp_fid fid,
+                                            nytp_line line,
+                                            const uint64_t *ticks,
+                                            size_t n_ticks);
+
+/*
+ * Borrow the open event-body buffer (not yet framed). Valid until next emit,
+ * region seal, or seal/destroy. NULL if not v6 or already final-sealed.
  */
 const uint8_t *nytp_v6_sink_event_body(const nytp_sink *sink, size_t *out_len);
 
@@ -137,14 +190,16 @@ const uint8_t *nytp_v6_sink_event_body(const nytp_sink *sink, size_t *out_len);
 nytp_status nytp_v6_sink_test_force_body_len(nytp_sink *sink, size_t len);
 
 /*
- * Test hook: fail seal after successfully framing N EVENT chunks, rewinding
- * wire to the pre-seal prefix (atomic multi-chunk seal regression). 0 disables.
+ * Test hook: fail seal after successfully framing N EVENT chunks in the current
+ * seal attempt, rewinding wire to the pre-attempt mark (atomic multi-chunk seal
+ * regression). 0 disables.
  */
 void nytp_v6_sink_test_fail_seal_after_chunks(nytp_sink *sink, uint32_t n);
 
 /*
- * Test hook: run EVENT seal without lifecycle close transition.
- * Used to exercise mid-seal abort + successful retry (public close sticky-fails).
+ * Test hook: run EVENT seal of open body without lifecycle close transition.
+ * Does not emit FOOTER (use public close for full finalization). Used to
+ * exercise mid-seal abort + successful retry.
  */
 nytp_status nytp_v6_sink_test_try_seal(nytp_sink *sink);
 

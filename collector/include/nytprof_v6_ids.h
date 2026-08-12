@@ -115,6 +115,11 @@ extern "C" {
 #define NYTPROF_V6_MAX_TLV_REGION_BYTES (64ull * 1024ull * 1024ull)
 #define NYTPROF_V6_MAX_TIME_RUN_LEN 1048576u
 
+/* ---- FOOTER string-dictionary (ADR-0002 provisional) -------------------- */
+
+#define NYTPROF_V6_MAX_DICT_ENTRIES 1048576u
+#define NYTPROF_V6_MAX_DICT_TOTAL_BYTES (64ull * 1024ull * 1024ull)
+
 #ifdef __cplusplus
 }
 #endif

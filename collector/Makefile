@@ -27,7 +27,8 @@ TESTBINS := \
 	$(BUILD)/test_batch_fast \
 	$(BUILD)/test_v5_wire \
 	$(BUILD)/test_v6_abs_wire \
-	$(BUILD)/test_v6_codec_chunk_crc
+	$(BUILD)/test_v6_codec_chunk_crc \
+	$(BUILD)/test_v6_packing_footer
 
 SRC := \
 	src/nytp_sink.c \
@@ -77,6 +78,9 @@ $(BUILD)/test_v6_abs_wire: t/test_v6_abs_wire.c $(LIB) | dirs
 $(BUILD)/test_v6_codec_chunk_crc: t/test_v6_codec_chunk_crc.c $(LIB) | dirs
 	$(CC) $(CPPFLAGS) $(CFLAGS) -o $@ t/test_v6_codec_chunk_crc.c $(LIB) $(LDFLAGS) $(LDLIBS)
 
+$(BUILD)/test_v6_packing_footer: t/test_v6_packing_footer.c $(LIB) | dirs
+	$(CC) $(CPPFLAGS) $(CFLAGS) -o $@ t/test_v6_packing_footer.c $(LIB) $(LDFLAGS) $(LDLIBS)
+
 test: all
 	./$(BUILD)/test_sink_api
 	./$(BUILD)/test_lifecycle_seq
@@ -85,6 +89,7 @@ test: all
 	./$(BUILD)/test_v5_wire
 	./$(BUILD)/test_v6_abs_wire
 	./$(BUILD)/test_v6_codec_chunk_crc
+	./$(BUILD)/test_v6_packing_footer
 
 clean:
 	rm -rf $(BUILD)

@@ -47,7 +47,8 @@ Plan COL-007 lists dependencies **FMT-002 through FMT-010**. This program **inte
 | E3 harness (writer bytes → Rust decode) | E3 | **open / runway** | COL-007 C producer + harness |
 | C COL-007 absolute MVP | E3 runway | **partial (PR-B06)** | Absolute EVENT bodies; sealed CRC default after B07 |
 | C COL-007 codecs/multi-chunk/CRC | E3 runway | **partial (PR-B07)** | NONE/ZLIB/ZSTD/LZ4 + multi-chunk; not packing/dict/mid-stream switch; not E3-C product |
-| C COL-007 product (board done) | E3 | **deferred** | PR-B09 after B08 packing+dict; use lockfile + ADR-0001/0002 |
+| C COL-007 packing + FOOTER dict + mid-stream | E3 runway | **partial (PR-B08)** | ADR-0001 packing continuity; ADR-0002 FOOTER dict emit; mid-stream region API; engineering dual-path via always-inflate; not E3-C product fixtures |
+| C COL-007 product (board done) | E3 | **deferred** | PR-B09 E3-C fixtures after B08 packing+dict; use lockfile + ADR-0001/0002 |
 | Batched Rust COL-008 writer | E3/E4 | **deferred** (non-baseline) | After dual-equality + ADR re-open |
 | v5↔v6 semantic equality policy | E4 | **open** | Policy + enforcement after COL-007 |
 | Wire freeze FMT-002..010 | — | **open** (deviated as COL-007 hard dep) | After E2/E3 evidence + freeze ADR |

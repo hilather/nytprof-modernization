@@ -23,7 +23,7 @@ ok() { printf 'OK: %s\n' "$*"; }
 fail() { printf 'ERROR: %s\n' "$*" >&2; exit 1; }
 banner() { printf '\n=== %s ===\n' "$*"; }
 
-banner "collector_sink_smoke (COL-001..007-codec + fake-clock + v5/v6 wire)"
+banner "collector_sink_smoke (COL-001..007-pack + fake-clock + v5/v6 wire)"
 
 # ---------------------------------------------------------------------------
 # Tree present (this smoke is only meaningful after PR-B02 lands sources)
@@ -44,6 +44,7 @@ banner "collector_sink_smoke (COL-001..007-codec + fake-clock + v5/v6 wire)"
 [[ -f "$COLLECTOR/t/test_v5_wire.c" ]] || fail "missing test_v5_wire.c (PR-B05)"
 [[ -f "$COLLECTOR/t/test_v6_abs_wire.c" ]] || fail "missing test_v6_abs_wire.c (PR-B06)"
 [[ -f "$COLLECTOR/t/test_v6_codec_chunk_crc.c" ]] || fail "missing test_v6_codec_chunk_crc.c (PR-B07)"
+[[ -f "$COLLECTOR/t/test_v6_packing_footer.c" ]] || fail "missing test_v6_packing_footer.c (PR-B08)"
 ok "collector/ overlay tree present (B0-A; COL-001..007-abs)"
 
 # ---------------------------------------------------------------------------
@@ -234,7 +235,23 @@ fi
 
 # Residual honesty banner.
 echo "NOTE: COL-006 real v5 wire on mini samples — full fixtures/v5/* oracle corpus is complete TEST-003 residual"
-echo "NOTE: COL-007 ABS+CODEC scaffold (codecs/multi-chunk/CRC); packing/dict/E3-C residual — board COL-007 not done; not live XS hooks"
+# Packing / dict / mid-stream artifacts from test_v6_packing_footer
+for ART in   "$COLLECTOR/build/v6_pack_multi.nytprof"   "$COLLECTOR/build/v6_mid_stream.nytprof"   "$COLLECTOR/build/v6_dict.nytprof"   "$COLLECTOR/build/v6_pack_dict.nytprof"
+do
+  [[ -f "$ART" ]] || fail "expected packing/dict artifact $ART after test_v6_packing_footer"
+done
+ok "packing/dict/mid-stream artifacts present"
+
+if command -v cargo >/dev/null 2>&1; then
+  banner "Rust dual-path packing/dict (decode_c_b08)"
+  cargo run -q -p nytprof-format-v6 --example decode_c_b08 --     "$COLLECTOR/build/v6_pack_multi.nytprof"
+  cargo run -q -p nytprof-format-v6 --example decode_c_b08 --     "$COLLECTOR/build/v6_mid_stream.nytprof"
+  cargo run -q -p nytprof-format-v6 --example decode_c_b08 --     "$COLLECTOR/build/v6_dict.nytprof" --dict
+  cargo run -q -p nytprof-format-v6 --example decode_c_b08 --     "$COLLECTOR/build/v6_pack_dict.nytprof" --dict
+  ok "Rust always-inflate accepted packing/dict C bytes"
+fi
+
+echo "NOTE: COL-007 ABS+CODEC+PACK scaffold; E3-C residual — board COL-007 not done; not live XS hooks"
 echo "NOTE: M4 mini sample only — full oracle corpus under fake-clock needs complete TEST-003"
 echo "NOTE: batch light microbench is engineering only — not BENCH-003/006 certification"
 echo "NOTE: flush/compression discount timing vs BASE-003 remains residual"
