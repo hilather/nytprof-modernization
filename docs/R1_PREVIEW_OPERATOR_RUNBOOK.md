@@ -415,6 +415,22 @@ R2-stable is the Phase C certification cut on the **integrated** stack (PR-C01..
 | E3-mixed / full oracle E4 | **residual** |
 | CPAN upload | **not claimed** |
 
+### 7c.1 R4 field window (post R2-stable; no default flip)
+
+After the R2-stable cut, operators may collect **local** field evidence for a future `format=v6` product default decision **without** changing defaults:
+
+```sh
+./scripts/field/r4_field_window_collect.sh --out /tmp/r4-field-pack
+./scripts/field/r4_field_window_smoke.sh   # dual-sink layout + honesty smoke
+```
+
+| Doc / tool | Path |
+|------------|------|
+| Guide | [R4_FIELD_WINDOW.md](https://github.com/hilather/nytprof-modernization/blob/main/docs/R4_FIELD_WINDOW.md) |
+| Report template | [templates/R4_FIELD_WINDOW_REPORT.md](https://github.com/hilather/nytprof-modernization/blob/main/docs/templates/R4_FIELD_WINDOW_REPORT.md) |
+| Pack schema | [schemas/r4-field-window-mvp-v0.md](https://github.com/hilather/nytprof-modernization/blob/main/docs/schemas/r4-field-window-mvp-v0.md) |
+
+**Not** charter R4 completion; promotion is a separate default-change ADR (ADR-Q025 / REL-008) after an accepted field report. Packs must keep `collection_default: v5` and `no_default_flip: true`.
 
 ### `fixtures/v5/default-calls1` (leaf / mid)
 

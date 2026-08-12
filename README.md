@@ -11,6 +11,7 @@ Hybrid modernization of [Devel::NYTProf](https://metacpan.org/dist/Devel-NYTProf
 | [`docs/FIRST_SLICE_BOARD.md`](https://github.com/hilather/nytprof-modernization/blob/main/docs/FIRST_SLICE_BOARD.md) | Ordered first-slice work board |
 | [`docs/RELEASE_NOTES_R2_PREVIEW.md`](https://github.com/hilather/nytprof-modernization/blob/main/docs/RELEASE_NOTES_R2_PREVIEW.md) | **R2-preview** packaging notes (v6 **opt-in only**; not R3 / R4) |
 | [`docs/RELEASE_NOTES_R2_STABLE.md`](https://github.com/hilather/nytprof-modernization/blob/main/docs/RELEASE_NOTES_R2_STABLE.md) | **R2-stable** packaging notes (Phase C tools + residual honesty; not R3/R4; public perf waived) |
+| [`docs/R4_FIELD_WINDOW.md`](https://github.com/hilather/nytprof-modernization/blob/main/docs/R4_FIELD_WINDOW.md) | R4 `format=v6` field-window evidence pack (no default flip; PR-E01) |
 | [`docs/contracts/DUAL_EQUALITY_READINESS_v0.md`](https://github.com/hilather/nytprof-modernization/blob/main/docs/contracts/DUAL_EQUALITY_READINESS_v0.md) | Dual-equality E1–E5 readiness checklist |
 | [`docs/PHASE0_EXIT_CRITERIA.md`](https://github.com/hilather/nytprof-modernization/blob/main/docs/PHASE0_EXIT_CRITERIA.md) | Phase-0 “good enough” gates |
 | [`docs/plan/README.md`](https://github.com/hilather/nytprof-modernization/blob/main/docs/plan/README.md) | Full architecture + 206-task plan package |
@@ -26,7 +27,7 @@ baseline/       immutable oracle pin, inventories, manifests
 fixtures/       golden profiles and expected dumps
 tools/oracle/   scripts to build oracle, dump fixtures, compare
 tools/bench/    light offline timing harness (not certification)
-scripts/        baseline build/test helpers + packaging smokes + `ci/offline_gate.sh`
+scripts/        baseline build/test helpers + packaging smokes + `ci/offline_gate.sh` + `field/` R4 evidence pack
 Makefile.PL     candidate dual-path packaging entry (not full XS CPAN)
 crates/         Rust workspace (v5 reader, provisional v6 preflight crate, compact model, report MVP) — not required for oracle
 perl/           candidate Perl engine-dispatch facade (nytprof-engine) — not used by oracle builds
