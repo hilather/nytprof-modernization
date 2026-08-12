@@ -85,10 +85,20 @@ static void commit_child_seq(nytp_sink *child, nytp_seq seq,
 /*
  * Fan-out helper: run op on primary then secondary.
  * On primary fail, secondary is not called.
- * On secondary fail after primary OK, count fail_secondary (fail-closed sticky
- * is applied by public emit_commit on dual).
+ * On secondary fail after primary OK, count fail_secondary and force a
+ * sticky-fail status so public emit_commit marks dual FAILED for *all*
+ * secondary error codes (IO/FAILED/OVERFLOW already sticky; STATE /
+ * UNSUPPORTED / EXHAUSTED / NULL mapped to FAILED). Partial dual residual:
+ * primary already wrote; no rollback (COL-018).
  */
 typedef nytp_status (*dual_child_emit_fn)(nytp_sink *child, void *ctx);
+
+/* Statuses that emit_commit already sticky-fails on. */
+static int dual_status_is_sticky(nytp_status st)
+{
+    return st == NYTP_ERR_IO || st == NYTP_ERR_FAILED ||
+           st == NYTP_ERR_OVERFLOW;
+}
 
 static nytp_status dual_fanout(nytp_sink *sink, dual_child_emit_fn fn,
                                void *ctx, int logical, nytp_event_kind kind)
@@ -113,6 +123,14 @@ static nytp_status dual_fanout(nytp_sink *sink, dual_child_emit_fn fn,
     st = fn(di->secondary, ctx);
     if (st != NYTP_OK) {
         di->meta.fanout_fail_secondary++;
+        /*
+         * Primary already advanced: any secondary non-OK is partial dual.
+         * Map non-sticky codes (STATE/UNSUPPORTED/…) to FAILED so
+         * emit_commit sticky-fails the dual parent (Issue 1 review).
+         */
+        if (!dual_status_is_sticky(st)) {
+            return NYTP_ERR_FAILED;
+        }
         return st;
     }
 

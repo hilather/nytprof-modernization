@@ -38,7 +38,7 @@ Fan out each COMPAT-001 semantic emit to **two** child sinks (typically **v5 + v
 | Order | Primary then secondary (deterministic finalization order) |
 | Seq | Dual parent owns COL-003; children aligned via `on_logical_committed` (no double public-wrapper assign) |
 | Lifecycle | activate/stop/finalize/fork/close forwarded to both children |
-| Failure | Primary fail → secondary not called; secondary fail after primary OK → fail-closed sticky (partial dual residual) |
+| Failure | Primary fail → secondary not called; secondary fail after primary OK → **fail-closed sticky for all secondary error codes** (IO/FAILED/OVERFLOW returned as-is; STATE/UNSUPPORTED/… mapped to `NYTP_ERR_FAILED` so `emit_commit` sticky-fails dual). Partial dual residual: no primary rollback (COL-018) |
 | Control | `START_DEFLATE` fans out (no COL-003 seq) |
 
 ### Env flags (test/dev only)
@@ -67,11 +67,11 @@ Explicit `nytp_dual_sink_create*` is already opt-in; env probe is for harness ga
 | Full `fixtures/v5/` oracle stream dual equality | complete TEST-003 + TEST-008 M6 suite + live hooks |
 | Product dual-write UX / advertised `format=dual` | **rejected** by OQ-4 |
 | COL-015 fork buffer ownership under dual | COL-015 |
-| Secondary-fail after primary wire write (no rollback) | COL-018 residual / fail-closed sticky |
+| Secondary-fail after primary wire write (no rollback of primary bytes/stats) | COL-018 residual; dual parent **is** sticky-failed for all secondary non-OK |
 | E4 aggregate enforcement on oracle fixture pairs | PR-B10 / E4-v0 after model ingest |
 | Wire freeze / CLI v6 default | after E3/E4 |
 
 ## Tests
 
-- `collector/t/test_dual_sink.c` — counting dual, M4 dual v5+v6, primary-fixture shapes, env probe, secondary fail, finalize order
+- `collector/t/test_dual_sink.c` — counting dual, M4 dual v5+v6, primary-fixture shapes, env probe, secondary fail sticky (IO + STATE/UNSUPPORTED→FAILED hard asserts), finalize order
 - Wired into `make -C collector test` and `collector_sink_smoke.sh`

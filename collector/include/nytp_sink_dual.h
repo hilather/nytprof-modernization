@@ -15,8 +15,9 @@
  *   - Full fixtures/v5/ oracle stream equality under dual needs live hooks
  *     / complete TEST-003 + TEST-008 M6 suite (not claimed here).
  *   - COL-015 fork/PID ownership matrix remains residual.
- *   - Secondary-fail after primary wire write is fail-closed sticky
- *     (partial dual residual; COL-018 may harden).
+ *   - Secondary-fail after primary wire write: dual parent sticky-fails for
+ *     all secondary non-OK (STATE/UNSUPPORTED mapped to FAILED); primary
+ *     bytes/stats are not rolled back (partial dual residual; COL-018).
  */
 #ifndef NYTP_SINK_DUAL_H
 #define NYTP_SINK_DUAL_H

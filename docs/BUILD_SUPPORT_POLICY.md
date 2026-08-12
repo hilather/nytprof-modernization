@@ -147,7 +147,7 @@ Enforced by `tools/oracle/env.sh`, `scripts/baseline/build_oracle.sh`, and `scri
 | Phase | Gate expectation |
 |-------|------------------|
 | **Pre-sink** | Historical: gate stayed green with no `collector/` tree; no hard C toolchain dep for R1-preview steps |
-| **COL-001..006 + fake-clock scaffold (landed)** | Offline gate step **10** runs `./scripts/packaging/collector_sink_smoke.sh`: isolation asserts always; `make -C collector test` (sink + lifecycle/seq + M4 mini + **batch/fast** + **v5 wire**) when CC present (`-lz`); **honest skip** without C toolchain. Real v5 wire writer (COL-006) produces mini streams accepted by Rust `nytprof-format-v5`; full M4 oracle corpus under fake-clock remains residual (**complete TEST-003**); light microbench is **not** BENCH certification; flush-discount timing residual; I32 tick projection residual (OI-003-01) |
+| **COL-001..007 + COL-014 dual (test/dev) + fake-clock scaffold (landed)** | Offline gate step **10** runs `./scripts/packaging/collector_sink_smoke.sh`: isolation asserts always; `make -C collector test` (sink + lifecycle/seq + M4 mini + **batch/fast** + **v5 wire** + **v6 abs/codec/packing** + **COL-014 dual-sink test/dev-only OQ-4**) when CC present (`-lz -lzstd -llz4`); **honest skip** without C toolchain. Real v5 wire (COL-006) + v6 writer (COL-007) mini streams; dual fan-out is **test/dev-only** (not product `format=dual`); full M4 oracle corpus under fake-clock remains residual (**complete TEST-003**); full fixtures dual residual (**TEST-008**); light microbench is **not** BENCH certification; flush-discount timing residual; I32 tick projection residual (OI-003-01) |
 | **Complete TEST-003** | Expand to oracle-aligned v5-via-sink stream equality on the agreed `fixtures/v5/*` corpus under fake-clock |
 | **Isolation** | Parent offline gate still must not put `crates/` (or `collector/` install) on oracle `PERL5LIB`; child smokes own isolation |
 | **Fixtures** | C writer / dual harness writes under `fixtures/v6/from-c/**` only; never mutates `baseline/6.15/archives/` |
@@ -258,8 +258,8 @@ Native install MVP contract: [`docs/schemas/native-install-mvp-v0.md`](https://g
 | COMPAT-009 final tier freeze / full BUILD-001 ADR | open | This doc is the runnable dual-path draft feeding that freeze |
 | MSRV freeze | open (ADR-Q017) | Optional-native uses whatever `rustc` is installed until frozen |
 | Default engine/format flips to native | out of first slice | Native remains opt-in |
-| Collector overlay sources / COL-001..006 + fake-clock scaffold | **partial (PR-B02..B05)** | `collector/` headers + counting + **real v5 wire** sinks + lifecycle/seq + **bounded batch + stmt fast path** + fake-clock mini M4 + `test_v5_wire` + `collector_sink_smoke.sh` in offline_gate step 10; **not** live XS hooks, full M4 corpus gate, BENCH cert, or COL-007 |
-| COL-007 C v6 writer / wire freeze / CLI v6 default | deferred / open | ADR-0004 + COL-001 scaffold do **not** complete these |
+| Collector overlay sources / COL-001..007 + COL-014 dual (test/dev) + fake-clock | **partial (PR-B02..B10a)** | `collector/` headers + counting + **real v5 wire** + **v6 abs/codec/packing** + **COL-014 dual-sink (test/dev-only OQ-4)** + lifecycle/seq + batch/fast + fake-clock mini M4 + `test_v5_wire` / `test_dual_sink` + `collector_sink_smoke.sh` in offline_gate step 10; **not** live XS hooks, full M4 corpus gate, BENCH cert, product dual UX, or wire freeze / CLI v6 default |
+| COL-007 product E3-EVENT / wire freeze / CLI v6 default | E3-EVENT **done** (PR-B09); wire freeze / CLI default **open** | Product E3-EVENT C fixtures green; dual-sink harness (PR-B10a) is test/dev-only; wire freeze and CLI v6 default residual |
 
 ---
 

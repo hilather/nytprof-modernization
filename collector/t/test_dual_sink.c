@@ -396,13 +396,23 @@ static void test_counting_dual_fanout(void)
     nytp_sink_destroy(dual);
 }
 
-static void test_secondary_fail_sticky(void)
+/*
+ * After secondary fail (primary already wrote): dual must sticky-fail.
+ * Covers IO (native sticky) and STATE (mapped to FAILED by dual_fanout).
+ */
+static void assert_secondary_partial_sticky(nytp_status arm_err,
+                                            nytp_status expect_emit_err,
+                                            const char *label)
 {
     nytp_sink *ok = nytp_counting_sink_create();
     nytp_sink *bad = nytp_counting_sink_create();
     nytp_sink *dual;
     const nytp_dual_compare_meta *m;
-    EXPECT(ok && bad, "create");
+    const nytp_counting_stats *sa;
+    const nytp_counting_stats *sb;
+    char msg[96];
+
+    EXPECT(ok && bad, label);
     if (!ok || !bad) {
         if (ok) {
             nytp_sink_destroy(ok);
@@ -413,23 +423,53 @@ static void test_secondary_fail_sticky(void)
         return;
     }
     dual = nytp_dual_sink_create(ok, bad, 1, 1);
-    EXPECT(dual != NULL, "dual");
+    EXPECT(dual != NULL, label);
     if (!dual) {
         nytp_sink_destroy(ok);
         nytp_sink_destroy(bad);
         return;
     }
-    EXPECT(nytp_sink_activate(dual) == NYTP_OK, "act");
-    /* Arm secondary to fail next emit. */
-    EXPECT(nytp_counting_sink_fail_next(bad, NYTP_ERR_IO) == NYTP_OK, "arm");
-    EXPECT(nytp_emit_time_line(dual, 1, 1, 1) == NYTP_ERR_IO, "secondary fail");
+    EXPECT(nytp_sink_activate(dual) == NYTP_OK, label);
+    EXPECT(nytp_counting_sink_fail_next(bad, arm_err) == NYTP_OK, label);
+    snprintf(msg, sizeof(msg), "%s emit err", label);
+    EXPECT(nytp_emit_time_line(dual, 1, 1, 1) == expect_emit_err, msg);
+
     m = nytp_dual_sink_meta(dual);
-    EXPECT(m && m->fanout_fail_secondary == 1, "fail_secondary counted");
-    /* Primary already wrote; dual sticky-fails via emit_commit. */
-    EXPECT(nytp_sink_get_state(dual) == NYTP_SINK_FAILED ||
-               nytp_emit_time_line(dual, 2, 1, 1) != NYTP_OK,
-           "dual fail-closed after secondary error");
+    EXPECT(m && m->fanout_fail_secondary == 1, label);
+    EXPECT(m && m->fanout_ok == 0, label);
+
+    /* Hard sticky-fail — not soft OR with next-emit check alone. */
+    snprintf(msg, sizeof(msg), "%s state FAILED", label);
+    EXPECT(nytp_sink_get_state(dual) == NYTP_SINK_FAILED, msg);
+    snprintf(msg, sizeof(msg), "%s fail_reason", label);
+    EXPECT(nytp_sink_fail_reason(dual) == expect_emit_err, msg);
+    snprintf(msg, sizeof(msg), "%s next emit STATE", label);
+    EXPECT(nytp_emit_time_line(dual, 2, 1, 1) == NYTP_ERR_STATE, msg);
+    /* No logical commit on dual (seq not advanced). */
+    EXPECT(nytp_sink_logical_count(dual) == 0, label);
+    EXPECT(!nytp_dual_sink_logical_equal(dual), label);
+
+    /* Primary counted emit; secondary did not (fail_next before count). */
+    sa = nytp_counting_sink_stats(nytp_dual_sink_primary(dual));
+    sb = nytp_counting_sink_stats(nytp_dual_sink_secondary(dual));
+    EXPECT(sa && sa->by_kind[NYTP_EVT_TIME_LINE] == 1, label);
+    EXPECT(sb && sb->by_kind[NYTP_EVT_TIME_LINE] == 0, label);
+    /* Primary seq ring empty — dual never committed logical. */
+    EXPECT(sa && sa->logical_emits == 0 && sa->seq_ring_len == 0, label);
+
     nytp_sink_destroy(dual);
+}
+
+static void test_secondary_fail_sticky(void)
+{
+    /* IO is natively sticky via emit_commit. */
+    assert_secondary_partial_sticky(NYTP_ERR_IO, NYTP_ERR_IO, "secondary IO");
+    /* STATE maps to FAILED so dual sticky-fails (Issue 1). */
+    assert_secondary_partial_sticky(NYTP_ERR_STATE, NYTP_ERR_FAILED,
+                                    "secondary STATE→FAILED");
+    /* UNSUPPORTED similarly mapped. */
+    assert_secondary_partial_sticky(NYTP_ERR_UNSUPPORTED, NYTP_ERR_FAILED,
+                                    "secondary UNSUPPORTED→FAILED");
 }
 
 static void test_finalize_order_and_lifecycle(void)
