@@ -625,6 +625,11 @@ pub fn e4_v0_aggregates_equal(
                 _ => {}
             }
         }
+        for k in b.block_line_totals.keys() {
+            if !a.block_line_totals.contains_key(k) {
+                mismatches.push(format!("A4b missing left {k:?}"));
+            }
+        }
     }
     if a.sub_return_totals.len() != b.sub_return_totals.len() {
         mismatches.push(format!(
@@ -687,6 +692,11 @@ pub fn e4_v0_aggregates_equal(
                     mismatches.push(format!("A7 {key:?} times differ"));
                 }
             }
+        }
+    }
+    for key in b.call_edges.keys() {
+        if !a.call_edges.contains_key(key) {
+            mismatches.push(format!("A7 missing left edge {key:?}"));
         }
     }
     if a.sub_defs != b.sub_defs {
