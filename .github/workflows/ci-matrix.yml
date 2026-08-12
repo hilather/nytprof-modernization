@@ -136,13 +136,37 @@ jobs:
             python3 \
             perl
 
-      - name: Install macOS library deps for collector
+      - name: Install macOS library deps for collector + oracle zlib
         if: runner.os == 'macOS'
         run: |
           set -euo pipefail
           # Homebrew is preinstalled; zstd/lz4 needed when collector links codecs.
           brew list zstd >/dev/null 2>&1 || brew install zstd
           brew list lz4 >/dev/null 2>&1 || brew install lz4
+          # zlib: macOS SDK usually has zlib.h; brew zlib is a fallback when
+          # Makefile.PL cannot see the SDK include tree (oracle HAS_ZLIB).
+          brew list zlib >/dev/null 2>&1 || brew install zlib
+          # Export SDK include so host-local oracle rebuild enables compression.
+          if command -v xcrun >/dev/null 2>&1; then
+            SDKROOT="$(xcrun --show-sdk-path)"
+            export SDKROOT
+            if [[ -f "$SDKROOT/usr/include/zlib.h" ]]; then
+              export INCLUDE="${INCLUDE:+$INCLUDE:}$SDKROOT/usr/include"
+              echo "macOS SDK zlib.h: $SDKROOT/usr/include/zlib.h"
+            fi
+          fi
+          BZ="$(brew --prefix zlib)"
+          if [[ -f "$BZ/include/zlib.h" ]]; then
+            export INCLUDE="${INCLUDE:+$INCLUDE:}$BZ/include"
+            export LIBRARY_PATH="${LIBRARY_PATH:+$LIBRARY_PATH:}$BZ/lib"
+            echo "brew zlib: $BZ"
+          fi
+          # Persist for subsequent steps (oracle rebuild in matrix_gate).
+          {
+            echo "SDKROOT=${SDKROOT:-}"
+            echo "INCLUDE=${INCLUDE:-}"
+            echo "LIBRARY_PATH=${LIBRARY_PATH:-}"
+          } >> "$GITHUB_ENV"
           command -v clang
           command -v perl
           command -v python3

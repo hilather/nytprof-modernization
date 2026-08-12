@@ -27,12 +27,44 @@ if [[ -f Makefile ]]; then
   make distclean >/dev/null 2>&1 || true
 fi
 
+# macOS / Xcode: zlib.h lives under the SDK (not bare /usr/include). NYTProf's
+# Makefile.PL only searches INCLUDE + a few fixed dirs; without the SDK path it
+# silently builds without HAS_ZLIB and later fails on compressed fixtures
+# ("File uses compression but compression is not supported by this build").
+if [[ "$(uname -s 2>/dev/null || true)" == "Darwin" ]]; then
+  SDKROOT="${SDKROOT:-}"
+  if [[ -z "$SDKROOT" ]] && command -v xcrun >/dev/null 2>&1; then
+    SDKROOT="$(xcrun --show-sdk-path 2>/dev/null || true)"
+  fi
+  if [[ -n "$SDKROOT" && -f "$SDKROOT/usr/include/zlib.h" ]]; then
+    export INCLUDE="${INCLUDE:+$INCLUDE:}$SDKROOT/usr/include"
+    # Help the linker resolve -lz from the same SDK when needed.
+    if [[ -d "$SDKROOT/usr/lib" ]]; then
+      export LIBRARY_PATH="${LIBRARY_PATH:+$LIBRARY_PATH:}$SDKROOT/usr/lib"
+    fi
+    echo "build_oracle: Darwin SDK zlib via INCLUDE=$SDKROOT/usr/include"
+  else
+    echo "build_oracle: WARNING: Darwin zlib.h not found under SDKROOT=${SDKROOT:-<unset>}; oracle may lack compression" >&2
+  fi
+  # Homebrew zlib (optional extra) when present.
+  if command -v brew >/dev/null 2>&1; then
+    BZ="$(brew --prefix zlib 2>/dev/null || true)"
+    if [[ -n "$BZ" && -f "$BZ/include/zlib.h" ]]; then
+      export INCLUDE="${INCLUDE:+$INCLUDE:}$BZ/include"
+      export LIBRARY_PATH="${LIBRARY_PATH:+$LIBRARY_PATH:}$BZ/lib"
+      echo "build_oracle: also using brew zlib at $BZ"
+    fi
+  fi
+fi
+
 {
   echo "=== build_oracle $(date -u +%Y-%m-%dT%H:%M:%SZ) ==="
   echo "ROOT=$ROOT"
   echo "SRC_DIR=$SRC_DIR"
   echo "INSTALL_DIR=$INSTALL_DIR"
   echo "PERL5LIB=${PERL5LIB-<unset>}"
+  echo "INCLUDE=${INCLUDE-<unset>}"
+  echo "LIBRARY_PATH=${LIBRARY_PATH-<unset>}"
   which perl
   perl -V
   echo "=== perl Makefile.PL ==="
@@ -42,6 +74,17 @@ fi
   echo "=== make install ==="
   make install
 } 2>&1 | tee "$BUILD_LOG"
+
+# Fail closed if zlib was not enabled: compressed v5 fixtures are required by the
+# offline gate dual_path smoke. Makefile.PL prints "Found deflateInit2 in zlib.h".
+if ! grep -q 'Found deflateInit2 in zlib.h' "$BUILD_LOG" \
+  && ! grep -qE -- '-DHAS_ZLIB' "$BUILD_LOG"; then
+  echo "ERROR: oracle build did not enable HAS_ZLIB (zlib not detected).
+  Compressed fixtures will fail on this host. On macOS, ensure Xcode CLI tools
+  provide zlib.h (xcrun --show-sdk-path) or install brew zlib and re-run.
+  Log: $BUILD_LOG" >&2
+  exit 1
+fi
 
 # Locate installed module
 MOD_PATH="$(find "$INSTALL_DIR" -path '*/Devel/NYTProf.pm' | head -1)"
