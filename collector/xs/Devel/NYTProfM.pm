@@ -59,6 +59,7 @@ $Devel::NYTProfM::PRODUCT_STMT_EMIT     = 1;
 $Devel::NYTProfM::PRODUCT_SUB_EMIT      = 1;
 $Devel::NYTProfM::PRODUCT_META_EMIT     = 1;
 $Devel::NYTProfM::PRODUCT_COMPRESS_EMIT = 1;
+$Devel::NYTProfM::PRODUCT_COMPRESS      = 0;
 $Devel::NYTProfM::PRODUCT_V6_COLLECT    = DB::product_v6_collect() ? 1 : 0;
 $Devel::NYTProfM::PRODUCT_OPTIONS_PARSE = 1;
 $Devel::NYTProfM::PRODUCT_ADDPID        = 0;
@@ -345,6 +346,8 @@ sub _product_install_fork_hook {
         die "unknown NYTPROF option: slowops\n";
     }
     $Devel::NYTProfM::PRODUCT_SLOWOPS = $slowops;
+    my $compress = _product_int_opt( $opts, 'compress', 0 );
+    $Devel::NYTProfM::PRODUCT_COMPRESS = $compress ? 1 : 0;
 }
 
 init_profiler();    # G03a: hold in-memory v5 sink — never writes nytprof.out
@@ -367,6 +370,12 @@ init_profiler();    # G03a: hold in-memory v5 sink — never writes nytprof.out
             $st = enable_sink($path);
             if ( $st != 0 ) {
                 die "DB::enable_sink($path) status=$st\n";
+            }
+            if ( $Devel::NYTProfM::PRODUCT_COMPRESS ) {
+                $st = emit_start_deflate();
+                if ( $st != 0 ) {
+                    die "DB::emit_start_deflate status=$st\n";
+                }
             }
         }
         $Devel::NYTProfM::PRODUCT_XS_ATTACH = 1;

@@ -80,7 +80,7 @@ Sources: `baseline/6.15/src/NYTProf.xs` options table (~lines 249–283) + strin
 | `file` | output path | **work** | work | |
 | `start` | when to start | **work** (begin/no) | work | full start modes residual if not ported |
 | `end` | end/finish modes | fail-closed or work subset | work subset documented | OI-003-04 lifecycle residual |
-| `compress` / level | zlib after header | **work** (G03e) | work | mid-deflate fork residual |
+| `compress` / level | zlib after header | **live attach** `compress=1` → START_DEFLATE | work | mid-deflate fork residual |
 | `stmts` | statement profiling | **work** (G03b) | work | |
 | `blocks` | TIME_BLOCK | **live attach work** (DI-01 780/810; not full opcode) | work | G03b emit + PR-B1 live `blocks=1`; not DI-03 |
 | `subs` | sub profiling | **work** (G03c) | work | |
