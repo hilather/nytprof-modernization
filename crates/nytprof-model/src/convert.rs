@@ -403,17 +403,15 @@ fn encode_to_v6(events: &[Event], opts: ConvertOptions) -> ConvertResult<Vec<u8>
                 // Zero sub_line (or absent arg) is representable and projects cleanly.
                 if ev.args.len() > 4 {
                     let sub_line = arg_u64(&ev.args, 4, "TIME_BLOCK", "sub_line", ev.seq)?;
-                    if sub_line != 0 {
-                        if !opts.allow_lossy {
-                            return Err(ConvertError::Strict {
-                                detail: format!(
-                                    "seq {}: TIME_BLOCK.sub_line={sub_line} not representable on v6 absolute body (strict refuse non-zero; no silent zeroing)",
-                                    ev.seq
-                                ),
-                            });
-                        }
-                        // --allow-lossy: drop sub_line (absolute body has no field).
+                    if sub_line != 0 && !opts.allow_lossy {
+                        return Err(ConvertError::Strict {
+                            detail: format!(
+                                "seq {}: TIME_BLOCK.sub_line={sub_line} not representable on v6 absolute body (strict refuse non-zero; no silent zeroing)",
+                                ev.seq
+                            ),
+                        });
                     }
+                    // --allow-lossy: drop non-zero sub_line (absolute body has no field).
                 }
                 ops.push(Op::TimeBlock {
                     fid,
