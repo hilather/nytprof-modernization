@@ -23,6 +23,8 @@ First module RPM targets **Rocky 8 / EL8 base Perl 5.26**. AppStream Perl 5.32 i
 
 `%check` is [`t/installed_attach.t`](https://github.com/hilather/nytprof-modernization/blob/main/t/installed_attach.t) plus [`t/installed_scripts.t`](https://github.com/hilather/nytprof-modernization/blob/main/t/installed_scripts.t) with `PERL5LIB` = buildroot **vendorarch:vendorlib** (`.so` under `%{perl_vendorarch}`). D1-B attach **15/3/15**; `format=v6` fail-closed; `readelf` must not `NEEDED` libzstd/liblz4. **Scripts:** `%{_bindir}/nytprofhtml` / `nytprofcsv` / `nytprofcg` / `nytprof-engine` plus bundled unsigned Rocky 8 `%{_bindir}/nytprof-cli` (and `nytprof-dump` symlink). Overwrite stock `/usr/bin` names on clash (`rpm -Uvh --replacefiles`). Rebuild the ELF with [`scripts/packaging/build_el8_nytprof_cli.sh`](https://github.com/hilather/nytprof-modernization/blob/main/scripts/packaging/build_el8_nytprof_cli.sh) (`rockylinux:8`). `%build` stays cargo-free. Mock: [`a3_el8_mock_module.sh`](https://github.com/hilather/nytprof-modernization/blob/main/scripts/packaging/a3_el8_mock_module.sh) on `rocky+epel-8-x86_64` when usable; **SKIP** if mock is absent or unusable. Signing/COPR not required for test-drive.
 
+**Testdrive RPM (unsigned, not mock-certified):** [`scripts/packaging/build_el8_module_rpm.sh`](https://github.com/hilather/nytprof-modernization/blob/main/scripts/packaging/build_el8_module_rpm.sh) runs `rpmbuild -ba` in `rockylinux:8` (docker on this host, native on Rocky 8). Tag workflow [`.github/workflows/release-el8-rpm.yml`](https://github.com/hilather/nytprof-modernization/blob/main/.github/workflows/release-el8-rpm.yml) attaches `perl-NYTProfM-6.15-1.el8.x86_64.rpm` to the GitHub Release.
+
 ## Tools package (`nytprof-cli.spec`)
 
 | Field | Value |

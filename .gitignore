@@ -26,6 +26,9 @@ __pycache__/
 # Local native CLI install (scripts/packaging/install_native.sh)
 /prefix/
 
+# Local / CI RPM and staged-dist artifacts (never commit binaries)
+/dist/
+
 # Collector overlay build products (COL-001+; never baseline/6.15/)
 /collector/build/
 /collector/install/

@@ -26,8 +26,11 @@ This guide is **docs-landed**. It is **not** a CPAN TRIAL upload, **not** a publ
 |---------|----------------|--------------|
 | **CPAN (primary)** | Dist **`NYTProfM`**, module **`Devel::NYTProfM`**, product `$VERSION` **6.15** | Identity frozen (Option B / KD-16/17 superseded). **`CPAN-TRIAL-READY` is notes-ready** — no TRIAL upload, no `cpanm NYTProfM` of this tree from PAUSE yet |
 | **Rocky / EL8 RPM (companion)** | `dnf install perl-NYTProfM` | Spec MVP (`EL8-RPM-MODULE`). **Not** mock-certified / public COPR unless those rows land. Same sources as CPAN |
+| **Rocky 8 testdrive (unsigned GitHub Release)** | `rpm -Uvh --replacefiles perl-NYTProfM-6.15-1.el8.x86_64.rpm` | Download the `v*` release asset. Workflow [`.github/workflows/release-el8-rpm.yml`](https://github.com/hilather/nytprof-modernization/blob/main/.github/workflows/release-el8-rpm.yml). **Not** mock-certified / signed / COPR |
 
-When those channels exist:
+Testdrive (no yum repo yet): download `perl-NYTProfM-6.15-1.el8.x86_64.rpm` from the GitHub Release and `sudo rpm -Uvh --replacefiles` that file. `--replacefiles` overwrites stock `/usr/bin/nytprofhtml` if `perl-Devel-NYTProf` is present.
+
+When yum/CPAN channels exist:
 
 ```text
 # CPAN (after J01/J02 TRIAL — not uploaded now)

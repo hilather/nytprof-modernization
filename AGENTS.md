@@ -106,7 +106,7 @@ Agents that cut a release, merge a stack to `main`, push a version tag, or publi
 | Step | Action |
 |------|--------|
 | **1. Identify the head** | After `git push origin main` and/or `git push origin <tag>`, note the commit SHA and any tag (`v*`). |
-| **2. List runs** | `gh run list --branch main --limit 10` (and `gh run list --limit 10` filtered by the tag push if present). Expect workflow **CI matrix (BUILD-006 MVP)** (`.github/workflows/ci-matrix.yml`). |
+| **2. List runs** | `gh run list --branch main --limit 10` (and `gh run list --limit 10` filtered by the tag push if present). Expect workflow **CI matrix (BUILD-006 MVP)** (`.github/workflows/ci-matrix.yml`). On `v*` also expect **Release EL8 RPM (test-drive)** (`.github/workflows/release-el8-rpm.yml`) and wait until `perl-NYTProfM-6.15-*.el8.x86_64.rpm` is attached to the GitHub Release. |
 | **3. Wait for completion** | `gh run watch <run-id> --exit-status` (or poll until `completed`). Prefer waiting on **all** jobs: `rust-smoke` and both matrix rows (`linux-x86_64`, `macos-arm64`). |
 | **4. On failure** | `gh run view <run-id> --log-failed`. Fix on a branch, open/merge to `main`, retag only if the release notes/tag commit must move (prefer a patch tag `vX.Y.Z` over force-moving published tags). Re-run watch until green. |
 | **5. Record** | In the release body or session handoff: run URL(s), conclusion, and any residual honest skips (oracle pin, cargo-absent packaging paths). |
@@ -133,6 +133,8 @@ When fixing a CI failure, also **harden** so the next release does not hit the s
 # After push to main / tag:
 gh run list --branch main --limit 5
 gh run watch "$(gh run list --branch main --workflow 'CI matrix (BUILD-006 MVP)' --limit 1 --json databaseId -q '.[0].databaseId')" --exit-status
+# After a v* tag:
+gh run watch "$(gh run list --workflow 'Release EL8 RPM (test-drive)' --limit 1 --json databaseId -q '.[0].databaseId')" --exit-status
 
 # On failure:
 gh run view <run-id> --log-failed | tail -200

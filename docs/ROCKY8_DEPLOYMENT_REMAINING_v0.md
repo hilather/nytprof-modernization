@@ -71,7 +71,8 @@ Rev-4 [`docs/PRODUCT_COMPLETION_DROP_IN_v0.md`](https://github.com/hilather/nytp
 | `copr-cli` / `createrepo_c` / `dnf` / `yum` | **ABSENT** |
 | `gpg` | **present** (`/usr/bin/gpg`) |
 | `packaging/rpm/RPM-GPG-KEY-nytprofm` | **not in tree** |
-| GHA mock / publish job | **not in** `.github/workflows/` (only `ci-matrix.yml`, `sec002-fuzz-mvp.yml`) |
+| GHA mock / COPR publish | **not** present (A3/A5 residual) |
+| GHA testdrive rpmbuild | [`.github/workflows/release-el8-rpm.yml`](https://github.com/hilather/nytprof-modernization/blob/main/.github/workflows/release-el8-rpm.yml) on `v*` — unsigned `rpmbuild` in `rockylinux:8`, **not** mock-certified |
 
 Any smoke that needs mock/rpmbuild **must** honest-SKIP on this class of host. A red k01 on a mock-less CI runner is a design bug.
 

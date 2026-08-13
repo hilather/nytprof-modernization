@@ -1,6 +1,12 @@
 Revision history for NYTProfM (product modernization)
 
 6.15  2026-08-13
+        v0.2.6 testdrive: Rocky 8 perl-NYTProfM RPM (unsigned) ships
+        -d:NYTProfM, I03 nytprofhtml wrappers, and bundled EL8 nytprof-cli.
+        Rebuild: scripts/packaging/build_el8_module_rpm.sh. Tag workflow
+        .github/workflows/release-el8-rpm.yml attaches the EL8 RPM.
+        Not PAUSE/COPR/GPG.
+
         Identity Option B: CPAN DISTNAME NYTProfM, debugger
         Devel::NYTProfM, $VERSION 6.15 (match baseline/6.15 pin).
         Operators switch to perl -d:NYTProfM. Stock Devel::NYTProf /
