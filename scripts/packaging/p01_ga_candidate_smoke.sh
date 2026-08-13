@@ -51,8 +51,10 @@ fi
 
 BLOB="$(cat "$NOTES" "$CHANGES")"
 for needle in \
-  'Devel::NYTProf' \
-  '7.00' \
+  'Devel::NYTProfM' \
+  '6.15' \
+  'perl-NYTProfM' \
+  '-d:NYTProfM' \
   'collection drop-in preview' \
   'D1-B' \
   'WAIVE' \
@@ -65,6 +67,14 @@ do
   grep -F -q -- "$needle" <<<"$BLOB" \
     || fail "GA-candidate notes/Changes missing required string: $needle"
 done
+grep -F -q 'Devel::NYTProf' "$NOTES" \
+  || fail "GA-candidate notes must still name stock Devel::NYTProf as not the product"
+if grep -Eiq 'Identity:.*Devel::NYTProf`? ≥ 7\.00|Identity:.*≥ 7\.00' "$NOTES"; then
+  fail "GA-candidate notes still teach product ≥ 7.00 (Option B is 6.15)"
+fi
+if grep -F -q 'perl-Devel-NYTProf.spec' "$NOTES"; then
+  fail "GA-candidate notes still cite perl-Devel-NYTProf.spec as product"
+fi
 grep -Eiq 'Rocky.*D1-B|D1-B only|default RPM = D1-B' <<<"$BLOB" \
   || fail "notes must say Rocky default RPM is D1-B only"
 grep -Eiq 'not uploaded to PAUSE' <<<"$BLOB" \

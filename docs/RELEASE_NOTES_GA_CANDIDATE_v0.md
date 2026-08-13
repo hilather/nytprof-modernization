@@ -3,10 +3,10 @@
 **Status:** **GA-candidate MVP** — **not** final GA marketing  
 **Date:** 2026-08-13  
 **Board ID:** `P01-GA-CANDIDATE`  
-**Identity:** **`Devel::NYTProf` ≥ 7.00** (J01 `VERSION_FROM`)  
+**Identity:** **`NYTProfM` / `Devel::NYTProfM` 6.15** / `perl -d:NYTProfM` (Option B; J01 `VERSION_FROM`)  
 **Does not supersede:** [PROGRAM_CHARTER.md](https://github.com/hilather/nytprof-modernization/blob/main/docs/PROGRAM_CHARTER.md), ADRs 0001–0010, [DROP_IN_DOD_v0.md](https://github.com/hilather/nytprof-modernization/blob/main/docs/contracts/DROP_IN_DOD_v0.md)
 
-This cut advertises **collection drop-in preview** on **advertised flavors** only. It is not SEC-012 complete, not uploaded to PAUSE, and does not flip R3/R4 defaults.
+This cut advertises **collection drop-in preview** on **advertised flavors** only. It is not SEC-012 complete, not uploaded to PAUSE, and does not flip R3/R4 defaults. Stock **`Devel::NYTProf` / `-d:NYTProf`** remains the oracle pin — it is **not** this product (prior ≥ 7.00 identity is superseded).
 
 ---
 
@@ -15,10 +15,10 @@ This cut advertises **collection drop-in preview** on **advertised flavors** onl
 | Flavor | Claim | Evidence |
 |--------|-------|----------|
 | **CPAN / source D1-A** | Attach-preview with optional `format=v6` when built `xs-nytprof-v6` / `NYTPROF_V6_COLLECT` (EVENT path). Multi-kind v6 collection is **EVENT-only honesty** unless E3-mixed ships. | G05 D1-A `NYTPROF6`; `collection_default` remains **v5** |
-| **Rocky / EL8 default RPM = D1-B only** | K01 `perl-Devel-NYTProf` is **v5-only** (`-lz`). K01 ≠ full D1-A. `PRODUCT-V6-COLLECT-EL8` stays **residual**. | [perl-Devel-NYTProf.spec](https://github.com/hilather/nytprof-modernization/blob/main/packaging/rpm/perl-Devel-NYTProf.spec) |
+| **Rocky / EL8 default RPM = D1-B only** | K01 `perl-NYTProfM` is **v5-only** (`-lz`). K01 ≠ full D1-A. `PRODUCT-V6-COLLECT-EL8` stays **residual**. Attach-only module RPM (no I03 scripts). | [perl-NYTProfM.spec](https://github.com/hilather/nytprof-modernization/blob/main/packaging/rpm/perl-NYTProfM.spec) |
 | **Tools companion** | `nytprof-cli` RPM is **not** drop-in collection (K02 / ADR-0010). | [nytprof-cli.spec](https://github.com/hilather/nytprof-modernization/blob/main/packaging/rpm/nytprof-cli.spec) |
 
-Live `-d:NYTProf` with `file=` (D1-B) still yields shipped report leaf **15** / mid **3** / mid→leaf **15** on the default-calls1-shaped workload.
+Live `-d:NYTProfM` with `file=` (D1-B) still yields shipped report leaf **15** / mid **3** / mid→leaf **15** on the default-calls1-shaped workload.
 
 ---
 

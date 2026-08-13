@@ -12,6 +12,7 @@ baseline/6.15/src-*/
 
 # Scratch / local
 /tmp/
+/var/mock-a3/
 *.log
 __pycache__/
 *.py[cod]

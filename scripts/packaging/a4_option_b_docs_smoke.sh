@@ -30,6 +30,9 @@ RUNBOOK="$ROOT/docs/R1_PREVIEW_OPERATOR_RUNBOOK.md"
 MOD_SCHEMA="$ROOT/docs/schemas/el8-module-rpm-mvp-v0.md"
 TOOLS_SCHEMA="$ROOT/docs/schemas/el8-tools-rpm-mvp-v0.md"
 MODULE_SPEC="$ROOT/packaging/rpm/perl-NYTProfM.spec"
+P01_NOTES="$ROOT/docs/RELEASE_NOTES_GA_CANDIDATE_v0.md"
+DOD="$ROOT/docs/contracts/DROP_IN_DOD_v0.md"
+MATRIX="$ROOT/docs/contracts/R1_RESIDUAL_READINESS_MATRIX_v0.md"
 
 usage() {
   cat <<'EOF'
@@ -63,7 +66,8 @@ if [[ -n "${PERL5LIB:-}" ]]; then
 fi
 
 for f in "$MIG" "$BUILD" "$BOARD" "$ANNEX" "$COMPLETION" "$ADR" "$RUNBOOK" \
-         "$MOD_SCHEMA" "$TOOLS_SCHEMA" "$MODULE_SPEC"; do
+         "$MOD_SCHEMA" "$TOOLS_SCHEMA" "$MODULE_SPEC" "$P01_NOTES" "$DOD" \
+         "$MATRIX"; do
   [[ -f "$f" ]] || fail "missing $f"
 done
 
@@ -245,7 +249,44 @@ if grep -E '^Provides:' "$MODULE_SPEC" | grep -E -q 'perl\(Devel::NYTProf\)[^M]'
 fi
 ok "shipped perl-NYTProfM.spec matches Option B docs"
 
+# --- P01 GA-candidate notes (product recipes, not historical Changes 7.00) ---
+leftover_recipes "$P01_NOTES" "P01 notes"
+if grep -F -q 'perl-Devel-NYTProf.spec' "$P01_NOTES"; then
+  fail "P01 notes still cite perl-Devel-NYTProf.spec"
+fi
+if grep -Eiq 'Identity:.*≥[[:space:]]*7\.00|Identity:.*>=[[:space:]]*7\.00' "$P01_NOTES"; then
+  fail "P01 notes still teach product ≥ 7.00"
+fi
+grep -F -q 'perl-NYTProfM' "$P01_NOTES" \
+  || fail "P01 notes missing perl-NYTProfM"
+grep -F -q -- '-d:NYTProfM' "$P01_NOTES" \
+  || fail "P01 notes missing -d:NYTProfM"
+ok "P01 notes teach Option B product identity"
+
+# --- Living DROP_IN_DOD header / D1-B name ---
+if grep -E -q 'Default[[:space:]]+Rocky/EL8 `perl-Devel-NYTProf`' "$DOD"; then
+  fail "DROP_IN_DOD D1-B row still names perl-Devel-NYTProf as default Rocky RPM"
+fi
+grep -F -q 'perl-NYTProfM' "$DOD" \
+  || fail "DROP_IN_DOD missing perl-NYTProfM"
+grep -F -q -- '-d:NYTProfM' "$DOD" \
+  || fail "DROP_IN_DOD missing -d:NYTProfM"
+if grep -E -q 'Do \*\*not\*\* claim collection drop-in, CPAN-TRIAL, EL8 RPM' "$DOD"; then
+  fail "DROP_IN_DOD header still forbids all EL8/collection claims (A4b honesty pass)"
+fi
+grep -F -q 'ROCKY8_DEPLOYMENT_REMAINING_v0.md' "$DOD" \
+  || fail "DROP_IN_DOD must point at ROCKY8_DEPLOYMENT_REMAINING_v0.md for claim language"
+ok "DROP_IN_DOD living header is Option B / A4b claim language"
+
+# --- Residual matrix EL8-RPM-MODULE current spec path ---
+if grep -E 'EL8-RPM-MODULE' "$MATRIX" | grep -F -q 'perl-Devel-NYTProf.spec'; then
+  fail "residual matrix EL8-RPM-MODULE still cites perl-Devel-NYTProf.spec"
+fi
+grep -E 'EL8-RPM-MODULE' "$MATRIX" | grep -F -q 'perl-NYTProfM.spec' \
+  || fail "residual matrix EL8-RPM-MODULE missing perl-NYTProfM.spec"
+ok "residual matrix EL8-RPM-MODULE cites perl-NYTProfM.spec"
+
 echo "NOT-YET: S2 dual_path primary rewrite"
-echo "NOT-YET: BUILD-003-FULL / PAUSE upload / A3 maintainer-mock / A5b COPR"
+echo "NOT-YET: BUILD-003-FULL / PAUSE upload / A5b COPR / named-host mock log"
 ok "A4-OPTION-B-DOCS"
 exit 0

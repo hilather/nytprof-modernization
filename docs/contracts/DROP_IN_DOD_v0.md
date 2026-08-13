@@ -3,7 +3,8 @@
 **Status:** docs-landed (PR-G01) — G03a load + G03b–G03e emit-MVP + G04 attach-MVP + G05 options/`format=v6` + G06 fork/`addpid` MVP landed; **not** full TEST-018 / mid-deflate-in-child / full 6.15 opcode  
 **Board ID:** `DROP-IN-DOD-V0`  
 **Date:** 2026-08-12  
-**Approved design:** [docs/PRODUCT_COMPLETION_DROP_IN_v0.md](https://github.com/hilather/nytprof-modernization/blob/main/docs/PRODUCT_COMPLETION_DROP_IN_v0.md) (rev 4, product answers frozen)  
+**Approved design:** [docs/PRODUCT_COMPLETION_DROP_IN_v0.md](https://github.com/hilather/nytprof-modernization/blob/main/docs/PRODUCT_COMPLETION_DROP_IN_v0.md) (rev 4, product answers frozen; identity superseded by Option B)  
+**Rocky remaining-work SoT:** [docs/ROCKY8_DEPLOYMENT_REMAINING_v0.md](https://github.com/hilather/nytprof-modernization/blob/main/docs/ROCKY8_DEPLOYMENT_REMAINING_v0.md) (claim language after A4b)  
 **Graft annex:** [docs/schemas/product-xs-graft-annex-v0.md](https://github.com/hilather/nytprof-modernization/blob/main/docs/schemas/product-xs-graft-annex-v0.md)  
 **Attach smoke schema:** [docs/schemas/product-attach-smoke-mvp-v0.md](https://github.com/hilather/nytprof-modernization/blob/main/docs/schemas/product-attach-smoke-mvp-v0.md)  
 **Dual-path policy:** [docs/BUILD_SUPPORT_POLICY.md](https://github.com/hilather/nytprof-modernization/blob/main/docs/BUILD_SUPPORT_POLICY.md)  
@@ -11,7 +12,9 @@
 
 This contract extracts the binding drop-in DoD from the approved rev-4 design. It does **not** supersede the [program charter](https://github.com/hilather/nytprof-modernization/blob/main/docs/PROGRAM_CHARTER.md), accepted ADRs 0001–0009, or the residual matrix.
 
-**Explicit honesty:** G03a **load** is landed (`perl -d:NYTProf` loads product `Devel::NYTProf`; no `nytprof.out` on trivial `-e`). G03b–G03e **emit-MVP** remain. G04 **attach-MVP** is landed: live `perl -d:NYTProf` with `NYTPROF file=` on a default-calls1-shaped program writes `NYTProf 5`; shipped dump/report shows leaf **15** / mid **3** / mid→leaf **15**. This is Perl `DB::sub`/`DB::DB`, **not** full 6.15 opcode/`entersub`. G05 **options + format=v6** tests are landed: unknown keys and `format=dual` fail-closed; D1-B `format=v6` fail-closed (`v6_collect` rebuild text, no `NYTPROF6` file); D1-A `xs-nytprof-v6` writes `NYTPROF6`; default/`format=v5` live attach still leaf **15** / mid **3** / mid→leaf **15**. G06 **fork/`addpid` MVP** is landed: live `fork` + `addpid=1` writes parent `NYTProf 5` and `<file>.<childpid>` `NYTProf 5` via shipped `nytp_fork_*`. **Residuals:** mid-deflate continue-in-child, full TEST-018, `sigexit`. DI-01 live **780/810** and DI-02 live **27** + CORE: names are landed (not full opcode). Do **not** claim collection drop-in, CPAN-TRIAL, EL8 RPM, or full BUILD-003.
+**Explicit honesty:** G03a **load** is landed (`perl -d:NYTProfM` loads product `Devel::NYTProfM`; no `nytprof.out` on trivial `-e`). G03b–G03e **emit-MVP** remain. G04 **attach-MVP** is landed: live `perl -d:NYTProfM` with `NYTPROF file=` on a default-calls1-shaped program writes `NYTProf 5`; shipped dump/report shows leaf **15** / mid **3** / mid→leaf **15**. This is Perl `DB::sub`/`DB::DB`, **not** full 6.15 opcode/`entersub`. G05 **options + format=v6** tests are landed: unknown keys and `format=dual` fail-closed; D1-B `format=v6` fail-closed (`v6_collect` rebuild text, no `NYTPROF6` file); D1-A `xs-nytprof-v6` writes `NYTPROF6`; default/`format=v5` live attach still leaf **15** / mid **3** / mid→leaf **15**. G06 **fork/`addpid` MVP** is landed: live `fork` + `addpid=1` writes parent `NYTProf 5` and `<file>.<childpid>` `NYTProf 5` via shipped `nytp_fork_*`. **Residuals:** mid-deflate continue-in-child, full TEST-018, `POSIX::_exit` flush. DI-01 live **780/810** and DI-02 live **27** + CORE: names are landed (not full opcode).
+
+**Claim language (A4b):** Rocky **collection attach** on default D1-B may be claimed only after A3 maintainer-mock + A5a unsigned-bootstrap honesty ([`docs/ROCKY8_DEPLOYMENT_REMAINING_v0.md`](https://github.com/hilather/nytprof-modernization/blob/main/docs/ROCKY8_DEPLOYMENT_REMAINING_v0.md)). Until then: spec MVP, not mock-certified, not public COPR. Do **not** claim CPAN-TRIAL **upload**, full BUILD-003, tools-alone drop-in, or full 6.15 opcode. The module RPM is **attach-only**.
 
 ---
 
@@ -57,7 +60,7 @@ TRIAL may ship a **subset**. Packaging (D4) and dual-path (D5) **must gate TRIAL
 | Flavor ID | Typical artifact | Linked sinks | D1 bar | `format=v6` behavior |
 |-----------|------------------|--------------|--------|----------------------|
 | **D1-A — full product** | CPAN dual-flavor / source build with `NYTPROF_V6_COLLECT=1` (default for **advertised-options GA** on CPAN); EL8 **`--with v6_collect`** rebuild | v5 + v6 (`-lz -lzstd -llz4`) | Full advertised-options matrix including v6 opt-in → `NYTPROF6` | **work** (G05) |
-| **D1-B — v5-only module** | **Default** Rocky/EL8 `perl-Devel-NYTProf` RPM (KD-21); optional CPAN `NYTPROF_V6_COLLECT=0` | **v5 only** (`-lz`; selective OBJECT / `libnytp_sink_v5.a`) | D1 **minus** v6 collection; all other advertised-options rows | **fail-closed**: croak/clear error *“format=v6 requires v6-enabled build (install v6_collect package or rebuild with --with v6_collect)”* — never silent ignore or partial write |
+| **D1-B — v5-only module** | **Default** Rocky/EL8 `perl-NYTProfM` RPM (KD-21); optional CPAN `NYTPROF_V6_COLLECT=0` | **v5 only** (`-lz`; selective OBJECT / `libnytp_sink_v5.a`) | D1 **minus** v6 collection; all other advertised-options rows | **fail-closed**: croak/clear error *“format=v6 requires v6-enabled build (install v6_collect package or rebuild with --with v6_collect)”* — never silent ignore or partial write |
 
 | Claim language | Requires |
 |----------------|----------|

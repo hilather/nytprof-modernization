@@ -34,11 +34,24 @@ When those channels exist:
 cpanm NYTProfM                # or: cpanm Devel::NYTProfM
                               # expect 6.15; refuse any 0.3.x / PackagingEntry $VERSION
 
-# Rocky / EL8 (after K01 — spec exists; public repo residual)
+# Rocky / EL8 — unsigned internal bootstrap (NOT a production policy)
+# gpgcheck=0 is temporary until A5b live key (holder: hilather).
+# /etc/yum.repos.d/nytprofm-internal.repo:
+#   [nytprofm-internal]
+#   name=NYTProfM internal (unsigned bootstrap)
+#   baseurl=https://example.invalid/nytprofm/el8/
+#   enabled=1
+#   gpgcheck=0
 dnf install perl-NYTProfM
 ```
 
-Collection + legacy scripts live in the **module** package (`perl-NYTProfM` / CPAN dist **NYTProfM**). Native `nytprof-cli` is a **tools companion**, not drop-in by itself.
+The EL8 **module RPM is attach-only** (`.pm` + `.so`). It does **not** ship I03 `nytprofhtml` / `nytprof-engine`. To **read** a product `NYTProf 5` file on Rocky:
+
+1. stock `nytprofhtml` if `perl-Devel-NYTProf` remains installed,
+2. source-tree I03 prefix (`install_product_scripts.sh`) — not the RPM,
+3. `nytprof-cli` after milestone C (signed prebuilt).
+
+Native `nytprof-cli` is a **tools companion**, not drop-in by itself.
 
 Optional native (when BUILD-003 / I02 path is used): `NYTPROF_NATIVE=0` (default, cargo-free collection + legacy report), `=1` (require cargo/prebuilt), `=auto` (install CLI if present).
 

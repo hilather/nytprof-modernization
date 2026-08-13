@@ -1,0 +1,6 @@
+NYTPROFM-GPG-STUB
+NOT A LIVE KEY — A5a stub.
+Intended holder: GitHub repo owner hilather (KD-R15).
+Replace only when A5b/C1 checks in a real OpenPGP public key.
+Do not rpm --import this file.
+Do not treat gpgcheck=0 as a production policy.

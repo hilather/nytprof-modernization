@@ -22,7 +22,10 @@ BuildRequires:  gcc
 BuildRequires:  make
 BuildRequires:  perl-devel
 BuildRequires:  perl-generators
+BuildRequires:  perl(ExtUtils::ParseXS)
+BuildRequires:  perl(ExtUtils::Embed)
 BuildRequires:  zlib-devel
+BuildRequires:  binutils
 # Module path is cargo-free. Do not BuildRequire cargo, rustc, or rustup.
 %if %{with v6_collect}
 BuildRequires:  libzstd-devel
@@ -63,29 +66,36 @@ make -C collector xs-nytprof
 
 %install
 rm -rf %{buildroot}
-instdir=%{buildroot}%{perl_vendorlib}
+instlib=%{buildroot}%{perl_vendorlib}
+instarch=%{buildroot}%{perl_vendorarch}
 %if %{with v6_collect}
 src=collector/build/xs-nytprof-v6
 %else
 src=collector/build/xs-nytprof
 %endif
-mkdir -p ${instdir}/Devel/NYTProfM ${instdir}/auto/Devel/NYTProfM
-install -m 644 ${src}/Devel/NYTProfM.pm ${instdir}/Devel/NYTProfM.pm
-install -m 644 ${src}/Devel/NYTProfM/Core.pm ${instdir}/Devel/NYTProfM/Core.pm
+mkdir -p ${instlib}/Devel/NYTProfM ${instarch}/auto/Devel/NYTProfM
+install -m 644 ${src}/Devel/NYTProfM.pm ${instlib}/Devel/NYTProfM.pm
+install -m 644 ${src}/Devel/NYTProfM/Core.pm ${instlib}/Devel/NYTProfM/Core.pm
 install -m 755 ${src}/auto/Devel/NYTProfM/NYTProfM.so \
-  ${instdir}/auto/Devel/NYTProfM/NYTProfM.so
+  ${instarch}/auto/Devel/NYTProfM/NYTProfM.so
 
 %check
-# mock/EL8 %%check (default = D1-B): no network, no cargo.
-# Drive installed files only (PR-A2). Do NOT require NYTPROF6 / nytprof-cli.
-export PERL5LIB=%{buildroot}%{perl_vendorlib}
+# mock/EL8 %%check (default = D1-B): no cargo. Drive installed files only.
+# Dual PERL5LIB so DynaLoader finds vendorarch .so (KD-R12).
+export PERL5LIB=%{buildroot}%{perl_vendorarch}:%{buildroot}%{perl_vendorlib}
 %{__perl} t/installed_attach.t
+# D1-B: no libzstd / liblz4
+if readelf -d %{buildroot}%{perl_vendorarch}/auto/Devel/NYTProfM/NYTProfM.so \
+    | grep -E -q 'NEEDED.*lib(zstd|lz4)'; then
+  echo "ERROR: D1-B NYTProfM.so NEEDED libzstd or liblz4" >&2
+  exit 1
+fi
 
 %files
 %license Changes
 %{perl_vendorlib}/Devel/NYTProfM.pm
 %{perl_vendorlib}/Devel/NYTProfM/
-%{perl_vendorlib}/auto/Devel/NYTProfM/
+%{perl_vendorarch}/auto/Devel/NYTProfM/
 
 %changelog
 * Thu Aug 13 2026 nytprof-modernization <devnull@example.com> - 6.15-1

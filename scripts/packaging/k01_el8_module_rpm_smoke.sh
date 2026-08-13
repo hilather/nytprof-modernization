@@ -15,6 +15,7 @@ cd "$ROOT"
 
 SPEC="$ROOT/packaging/rpm/perl-NYTProfM.spec"
 G05="$ROOT/scripts/packaging/g05_options_format_smoke.sh"
+A3="$ROOT/scripts/packaging/a3_el8_mock_module.sh"
 V6_MSG="format=v6 requires v6-enabled build (install v6_collect package or rebuild with --with v6_collect)"
 
 usage() {
@@ -50,6 +51,15 @@ fi
 
 [[ -f "$SPEC" ]] || fail "missing $SPEC"
 [[ -x "$G05" ]] || fail "missing shipped G05 smoke: $G05"
+[[ -x "$A3" ]] || fail "missing A3 mock runner: $A3"
+grep -F -q '%{perl_vendorarch}' "$SPEC" \
+  || fail "spec must install NYTProfM.so under %{perl_vendorarch}"
+grep -F -q 'perl(ExtUtils::ParseXS)' "$SPEC" \
+  || fail "spec missing BuildRequires perl(ExtUtils::ParseXS)"
+grep -F -q 'perl(ExtUtils::Embed)' "$SPEC" \
+  || fail "spec missing BuildRequires perl(ExtUtils::Embed)"
+grep -F -q 'binutils' "$SPEC" \
+  || fail "spec missing BuildRequires binutils"
 
 # --- real spec contents (not a stub dump) ---
 grep -E -q '^Name:[[:space:]]+perl-NYTProfM' "$SPEC" \
@@ -132,12 +142,23 @@ else
   echo "SKIP: no rpmspec/rpmbuild on PATH — spec + G05 asserts hold (not mock-certified)"
 fi
 
-if ! command -v mock >/dev/null 2>&1; then
-  echo "SKIP: mock not installed — not mock-certified multi-stream"
+echo "running A3 mock runner (SKIP if mock absent or unusable)"
+set +e
+A3_OUT="$(bash "$A3" 2>&1)"
+A3_RC=$?
+set -e
+printf '%s\n' "$A3_OUT"
+[[ "$A3_RC" -eq 0 ]] || fail "a3_el8_mock_module.sh failed (rc=$A3_RC)"
+if grep -E -q '^SKIP:' <<<"$A3_OUT"; then
+  ok "A3 honest SKIP — not maintainer-mock certified"
+else
+  grep -F -q 'OK: A3 maintainer-mock rebuild' <<<"$A3_OUT" \
+    || fail "A3 did not report maintainer-mock rebuild"
+  ok "A3 mock rebuild green"
 fi
 
-echo "NOT-YET: EL8-RPM-TOOLS / K02 nytprof-cli spec"
 echo "NOT-YET: BUILD-003-FULL / S2 dual_path rewrite"
 echo "NOT-YET: D1-A default Rocky / AppStream 5.32 multi-stream"
+echo "NOT-YET: public COPR / live rpmsign (A5b)"
 ok "EL8-RPM-MODULE"
 exit 0
