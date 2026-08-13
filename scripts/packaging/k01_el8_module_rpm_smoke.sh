@@ -66,6 +66,11 @@ grep -F -q '%{_bindir}/nytprof-engine' "$SPEC" \
   || fail "spec must install %{_bindir}/nytprof-engine"
 grep -F -q 't/installed_scripts.t' "$SPEC" \
   || fail "spec %check must drive t/installed_scripts.t"
+grep -F -q '%{_bindir}/nytprof-cli' "$SPEC" \
+  || fail "spec must install bundled EL8 nytprof-cli next to nytprofhtml"
+if awk '/^%build/,/^%install/' "$SPEC" | grep -v '^#' | grep -Eiq 'cargo |rustc |rustup'; then
+  fail "module spec %build must not invoke cargo/rustc/rustup (prebuilt only)"
+fi
 
 # --- real spec contents (not a stub dump) ---
 grep -E -q '^Name:[[:space:]]+perl-NYTProfM' "$SPEC" \

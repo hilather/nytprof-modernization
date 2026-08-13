@@ -37,8 +37,12 @@ for my $wrap ( $html, $csv, $cg ) {
     $src =~ /baseline\/6\.15/ and die "$wrap must not be oracle nytprofhtml\n";
 }
 
+my $cli = File::Spec->catfile( $bindir, 'nytprof-cli' );
+-x $cli or die "missing sibling nytprof-cli at $cli (EL8 prebuilt)\n";
+
 require Devel::NYTProf::EngineDispatch;
 print "OK: installed scripts nytprofhtml/csv/cg + nytprof-engine + EngineDispatch\n";
+print "OK: sibling nytprof-cli present\n";
 
 if ( my $jsonl = $ENV{NYTPROF_JSONL} ) {
     -f $jsonl or die "NYTPROF_JSONL not readable: $jsonl\n";

@@ -21,6 +21,7 @@ __pycache__/
 # Future Rust
 /target/
 **/target/
+/.cargo-el8/
 
 # Local native CLI install (scripts/packaging/install_native.sh)
 /prefix/

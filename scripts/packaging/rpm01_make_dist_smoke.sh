@@ -76,6 +76,8 @@ UNPACK="$WORK/NYTProfM-6.15"
   || fail "unpack missing EngineDispatch.pm"
 [[ -f "$UNPACK/t/installed_scripts.t" ]] \
   || fail "unpack missing t/installed_scripts.t"
+[[ -x "$UNPACK/prebuilt/el8-x86_64/nytprof-cli" ]] \
+  || fail "unpack missing prebuilt/el8-x86_64/nytprof-cli (Rocky 8 nytprof-cli)"
 ok "unpacked NYTProfM-6.15 layout"
 
 JSONL="$ROOT/fixtures/v5/default-calls1/readstream.jsonl"
@@ -85,6 +87,17 @@ PERL5LIB="$UNPACK/perl/lib" NYTPROF_BINDDIR="$UNPACK/perl/bin" \
   NYTPROF_JSONL="$JSONL" perl "$UNPACK/t/installed_scripts.t" \
   || fail "staged installed_scripts.t failed"
 ok "staged nytprof-engine query 15/3/15"
+
+CLI="$UNPACK/prebuilt/el8-x86_64/nytprof-cli"
+FIX="$ROOT/fixtures/v5/default-calls1/nytprof.out"
+[[ -f "$FIX" ]] || fail "missing $FIX"
+echo "running: staged EL8 nytprof-cli report --json (15/3/15)"
+CLI_OUT="$("$CLI" report --json "$FIX")"
+grep -E -q '"leaf_returns"[[:space:]]*:[[:space:]]*15|leaf_returns=15' <<<"$CLI_OUT" \
+  || fail "prebuilt nytprof-cli missing leaf_returns=15"
+grep -E -q '"mid_returns"[[:space:]]*:[[:space:]]*3|mid_returns=3' <<<"$CLI_OUT" \
+  || fail "prebuilt nytprof-cli missing mid_returns=3"
+ok "staged EL8 nytprof-cli report 15/3/15"
 
 if ! command -v cc >/dev/null 2>&1 && ! command -v gcc >/dev/null 2>&1; then
   echo "SKIP: no C compiler — tarball layout asserts hold (not BUILD-003-FULL)"

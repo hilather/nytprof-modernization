@@ -52,6 +52,18 @@ for pm in EngineDispatch.pm JsonlData.pm JsonlReadStream.pm LegacyBridge.pm \
   cp -a "$ROOT/perl/lib/Devel/NYTProf/$pm" "$STAGE/perl/lib/Devel/NYTProf/$pm"
 done
 
+PREBUILT="$ROOT/packaging/prebuilt/el8-x86_64/nytprof-cli"
+[[ -x "$PREBUILT" ]] \
+  || { echo "ERROR: missing EL8 prebuilt $PREBUILT (run scripts/packaging/build_el8_nytprof_cli.sh)" >&2; exit 1; }
+mkdir -p "$STAGE/prebuilt/el8-x86_64"
+cp -a "$PREBUILT" "$STAGE/prebuilt/el8-x86_64/nytprof-cli"
+cp -a "$PREBUILT" "$STAGE/perl/bin/nytprof-cli"
+chmod 755 "$STAGE/prebuilt/el8-x86_64/nytprof-cli" "$STAGE/perl/bin/nytprof-cli"
+if [[ -f "$ROOT/packaging/prebuilt/el8-x86_64/README.md" ]]; then
+  cp -a "$ROOT/packaging/prebuilt/el8-x86_64/README.md" \
+    "$STAGE/prebuilt/el8-x86_64/README.md"
+fi
+
 # Minimal facade: identity only. %build does not run this for XS.
 cat > "$STAGE/Makefile.PL" <<'PL'
 use strict;

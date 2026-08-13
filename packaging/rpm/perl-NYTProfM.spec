@@ -39,19 +39,18 @@ Requires:       libzstd
 Requires:       lz4
 %endif
 
-# Tools companion nytprof-cli is a separate RPM (K02). This module also ships
-# I03 wrappers (nytprofhtml/csv/cg → nytprof-engine). Those names overwrite
-# stock /usr/bin/nytprofhtml if both packages are installed (test-drive:
-# rpm -Uvh --replacefiles). Does not Obsoletes perl-Devel-NYTProf.
-# Native html/csv still need nytprof-cli when engine=native. query --jsonl
-# is cargo-free. RPM signing / COPR is not required for this test-drive.
+# I03 wrappers + unsigned Rocky 8 nytprof-cli ELF (prebuilt/el8-x86_64/).
+# %build stays cargo-free. Sibling /usr/bin/nytprof-cli makes nytprofhtml work.
+# Overwrites stock /usr/bin/nytprofhtml on clash (rpm -Uvh --replacefiles).
+# Does not Obsoletes perl-Devel-NYTProf. Signing / COPR not required (test-drive).
 
 %description
 NYTProfM 6.15 (Devel::NYTProfM) product module for Rocky 8 / EL8 (advertised
 stream: base Perl 5.26). Operators use perl -d:NYTProfM (not -d:NYTProf).
-Also installs nytprof-engine and familiar nytprofhtml/nytprofcsv/nytprofcg
-wrappers (overwrite stock /usr/bin names if they clash). Default build is
-D1-B: v5-only collector linked with -lz (libnytp_sink_v5.a). No cargo in %%build.
+Also installs nytprof-engine, familiar nytprofhtml/nytprofcsv/nytprofcg
+wrappers, and an unsigned Rocky 8 nytprof-cli next to them so html/csv work
+without a second RPM. Overwrites stock /usr/bin names if they clash. Default
+build is D1-B: v5-only collector linked with -lz. No cargo in %%build.
 
 format=v6 on this default flavor fail-closes with:
   format=v6 requires v6-enabled build (install v6_collect package or rebuild with --with v6_collect)
@@ -101,6 +100,10 @@ install -m 755 perl/bin/nytprof-engine %{buildroot}%{_bindir}/nytprof-engine
 install -m 755 perl/bin/nytprofhtml %{buildroot}%{_bindir}/nytprofhtml
 install -m 755 perl/bin/nytprofcsv %{buildroot}%{_bindir}/nytprofcsv
 install -m 755 perl/bin/nytprofcg %{buildroot}%{_bindir}/nytprofcg
+# Unsigned Rocky 8 prebuilt (not compiled in mock).
+test -x prebuilt/el8-x86_64/nytprof-cli
+install -m 755 prebuilt/el8-x86_64/nytprof-cli %{buildroot}%{_bindir}/nytprof-cli
+ln -sf nytprof-cli %{buildroot}%{_bindir}/nytprof-dump
 
 %check
 # mock/EL8 %%check (default = D1-B): no cargo. Drive installed files only.
@@ -109,6 +112,8 @@ export PERL5LIB=%{buildroot}%{perl_vendorarch}:%{buildroot}%{perl_vendorlib}
 %{__perl} t/installed_attach.t
 export NYTPROF_BINDDIR=%{buildroot}%{_bindir}
 %{__perl} t/installed_scripts.t
+test -x %{buildroot}%{_bindir}/nytprof-cli
+%{buildroot}%{_bindir}/nytprof-cli capability --json | grep -F '"collection_default":"v5"'
 # D1-B: no libzstd / liblz4
 if readelf -d %{buildroot}%{perl_vendorarch}/auto/Devel/NYTProfM/NYTProfM.so \
     | grep -E -q 'NEEDED.*lib(zstd|lz4)'; then
@@ -126,10 +131,13 @@ fi
 %{_bindir}/nytprofhtml
 %{_bindir}/nytprofcsv
 %{_bindir}/nytprofcg
+%{_bindir}/nytprof-cli
+%{_bindir}/nytprof-dump
 
 %changelog
 * Thu Aug 13 2026 nytprof-modernization <devnull@example.com> - 6.15-1
 - K01: identity NYTProfM / Devel::NYTProfM 6.15; -d:NYTProfM
 - D1-B v5-only module RPM (zlib, no cargo)
 - I03 nytprofhtml/csv/cg + nytprof-engine (overwrite stock /usr/bin names)
+- Bundle unsigned Rocky 8 nytprof-cli ELF (no cargo in %%build)
 - Does not Provides perl(Devel::NYTProf) (operator switch)
