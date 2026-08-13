@@ -1,20 +1,22 @@
 <!--
-Status: docs-landed (PR-MIG01) — not GA
+Status: docs-landed (PR-MIG01 + PR-A4 Option B identity)
 Board: MIG01
-Does not supersede: charter / ADRs 0001–0009 / DROP_IN_DOD
+Does not supersede: charter / ADRs 0001–0010 / DROP_IN_DOD
 -->
 
-**Status:** docs-landed (PR-MIG01) — **not GA**  
+**Status:** docs-landed (PR-MIG01 + **PR-A4 Option B identity**) — **not GA**  
 **Board:** `MIG01`  
-**Date:** 2026-08-12  
-**Plan alignment:** REL-002-style operator migration ([`docs/plan/19_ROLLOUT_RELEASE_AND_MIGRATION_TASKS.md`](https://github.com/hilather/nytprof-modernization/blob/main/docs/plan/19_ROLLOUT_RELEASE_AND_MIGRATION_TASKS.md) C.6 in [`docs/PRODUCT_COMPLETION_DROP_IN_v0.md`](https://github.com/hilather/nytprof-modernization/blob/main/docs/PRODUCT_COMPLETION_DROP_IN_v0.md))  
-**Does not supersede:** [`docs/PROGRAM_CHARTER.md`](https://github.com/hilather/nytprof-modernization/blob/main/docs/PROGRAM_CHARTER.md), accepted ADRs 0001–0009, or [`docs/contracts/DROP_IN_DOD_v0.md`](https://github.com/hilather/nytprof-modernization/blob/main/docs/contracts/DROP_IN_DOD_v0.md)
+**Date:** 2026-08-13  
+**Plan alignment:** REL-002-style operator migration ([`docs/plan/19_ROLLOUT_RELEASE_AND_MIGRATION_TASKS.md`](https://github.com/hilather/nytprof-modernization/blob/main/docs/plan/19_ROLLOUT_RELEASE_AND_MIGRATION_TASKS.md) C.6 in [`docs/PRODUCT_COMPLETION_DROP_IN_v0.md`](https://github.com/hilather/nytprof-modernization/blob/main/docs/PRODUCT_COMPLETION_DROP_IN_v0.md); identity superseded by [`docs/DROP_IN_RPM_COMPLETION_v0.md`](https://github.com/hilather/nytprof-modernization/blob/main/docs/DROP_IN_RPM_COMPLETION_v0.md) Option B)  
+**Does not supersede:** [`docs/PROGRAM_CHARTER.md`](https://github.com/hilather/nytprof-modernization/blob/main/docs/PROGRAM_CHARTER.md), accepted ADRs 0001–0010, or [`docs/contracts/DROP_IN_DOD_v0.md`](https://github.com/hilather/nytprof-modernization/blob/main/docs/contracts/DROP_IN_DOD_v0.md)
 
-# Operator migration — drop-in Devel::NYTProf (v0)
+# Operator migration — NYTProfM (Option B)
 
-How to move between stock Devel::NYTProf **6.14/6.15**, this product (**`Devel::NYTProf` ≥ 7.00** identity), and native tools — without treating any flavor as “full drop-in.”
+How to move between stock Devel::NYTProf **6.14/6.15** (`perl -d:NYTProf`), this product (**`NYTProfM` / `Devel::NYTProfM` `$VERSION` 6.15** / `perl -d:NYTProfM`), and native tools — without treating any flavor as “full drop-in.”
 
-This guide is **docs-landed**. It is **not** a CPAN TRIAL, **not** an EL8 RPM ship notice, and **not** a GA claim.
+Operators **switch** at the name. The product is **parallel** to stock. It does **not** take the stock CPAN or RPM name.
+
+This guide is **docs-landed**. It is **not** a CPAN TRIAL upload, **not** a public COPR ship notice, and **not** a GA claim.
 
 ---
 
@@ -22,20 +24,21 @@ This guide is **docs-landed**. It is **not** a CPAN TRIAL, **not** an EL8 RPM sh
 
 | Channel | Command / form | Status today |
 |---------|----------------|--------------|
-| **CPAN (primary)** | Coordinated name **`Devel::NYTProf`**, product `$VERSION` **≥ 7.00** | Identity frozen (KD-16/17). **`CPAN-TRIAL-READY` is residual** — no TRIAL upload, no `cpanm Devel::NYTProf` of this tree yet |
-| **Rocky / EL8 RPM (companion)** | `dnf install perl-Devel-NYTProf` | **Residual** — `EL8-RPM-MODULE` not shipped. Same sources as CPAN when K01 lands |
+| **CPAN (primary)** | Dist **`NYTProfM`**, module **`Devel::NYTProfM`**, product `$VERSION` **6.15** | Identity frozen (Option B / KD-16/17 superseded). **`CPAN-TRIAL-READY` is notes-ready** — no TRIAL upload, no `cpanm NYTProfM` of this tree from PAUSE yet |
+| **Rocky / EL8 RPM (companion)** | `dnf install perl-NYTProfM` | Spec MVP (`EL8-RPM-MODULE`). **Not** mock-certified / public COPR unless those rows land. Same sources as CPAN |
 
 When those channels exist:
 
 ```text
-# CPAN (after J01/J02 TRIAL — not ready now)
-cpanm Devel::NYTProf          # expect ≥ 7.00; refuse any 0.3.x product $VERSION
+# CPAN (after J01/J02 TRIAL — not uploaded now)
+cpanm NYTProfM                # or: cpanm Devel::NYTProfM
+                              # expect 6.15; refuse any 0.3.x / PackagingEntry $VERSION
 
-# Rocky / EL8 (after K01 — not shipped now)
-dnf install perl-Devel-NYTProf
+# Rocky / EL8 (after K01 — spec exists; public repo residual)
+dnf install perl-NYTProfM
 ```
 
-Collection + legacy scripts live in the **module** package (`perl-Devel-NYTProf` / CPAN dist). Native `nytprof-cli` is a **tools companion**, not drop-in by itself.
+Collection + legacy scripts live in the **module** package (`perl-NYTProfM` / CPAN dist **NYTProfM**). Native `nytprof-cli` is a **tools companion**, not drop-in by itself.
 
 Optional native (when BUILD-003 / I02 path is used): `NYTPROF_NATIVE=0` (default, cargo-free collection + legacy report), `=1` (require cargo/prebuilt), `=auto` (install CLI if present).
 
@@ -43,26 +46,27 @@ Optional native (when BUILD-003 / I02 path is used): `NYTPROF_NATIVE=0` (default
 
 ## 2. Coexistence with the stock package
 
-Stock Rocky/EPEL may already ship **`perl-Devel-NYTProf` 6.14/6.15**. The product keeps the **same RPM name**.
+Stock Rocky/EPEL may already ship **`perl-Devel-NYTProf` 6.14/6.15**. The product is a **different RPM name** (`perl-NYTProfM`) and does **not** replace stock via EVR.
 
 | Rule | Operator meaning |
 |------|------------------|
-| **EVR / Epoch upgrade** | Product Version **≥ 7.00** (optional Epoch if the packager needs it) so `dnf upgrade` replaces 6.15 |
-| **No self-Obsoletes** | Do **not** `Obsoletes: perl-Devel-NYTProf < %{version}` on the same name — that confuses solvers |
-| **Obsoletes only for other names** | Only when retiring an alias (`perl-Devel-NYTProf-modern`, `nytprof-modernization-perl`, …) |
-| **Provides** | `perl(Devel::NYTProf) = %{version}` |
+| **Parallel NEVRA** | Product Version **6.15** matches the stock number on purpose. Different **Name** avoids an EVR fight with distro 6.15 |
+| **No Provides stock** | Do **not** `Provides: perl(Devel::NYTProf)` — solvers must not treat this as stock |
+| **No self-Obsoletes** | Do **not** `Obsoletes: perl-NYTProfM < %{version}` on the same name |
+| **Obsoletes only for other names** | Only when retiring an alias (`perl-NYTProfM-modern`, `nytprof-modernization-perl`, …) |
+| **Provides** | `perl(Devel::NYTProfM) = %{version}` |
 
-You do **not** install the product next to stock 6.15 under the same name. Upgrade or downgrade the one package.
+You **can** leave stock `perl-Devel-NYTProf` installed. The operator switch is the debugger name (`-d:NYTProfM` vs stock `-d:NYTProf`).
 
 ---
 
 ## 3. Rocky / EL8 flavors (D1-B default vs D1-A)
 
-Default Rocky/EL8 `perl-Devel-NYTProf` is **D1-B**: v5-only collection, linked **`-lz` only** (`libnytp_sink_v5.a` / selective `OBJECT`). It does **not** pull zstd/lz4.
+Default Rocky/EL8 `perl-NYTProfM` is **D1-B**: v5-only collection, linked **`-lz` only** (`libnytp_sink_v5.a` / selective `OBJECT`). It does **not** pull zstd/lz4.
 
 | Flavor | Typical artifact | `format=v6` |
 |--------|------------------|-------------|
-| **D1-B** (default EL8 RPM) | `dnf install perl-Devel-NYTProf` | **Fail-closed** (no file, no silent ignore) |
+| **D1-B** (default EL8 RPM) | `dnf install perl-NYTProfM` | **Fail-closed** (no file, no silent ignore) |
 | **D1-A** | CPAN advertised-options build, or EL8 rebuild **`--with v6_collect`** | **Works** → `NYTPROF6` |
 
 On a D1-B install, `NYTPROF=format=v6:…` must croak with **exactly**:
@@ -71,13 +75,13 @@ On a D1-B install, `NYTPROF=format=v6:…` must croak with **exactly**:
 format=v6 requires v6-enabled build (install v6_collect package or rebuild with --with v6_collect)
 ```
 
-**How to get D1-A on EL8** (when the spec exists — K01 residual):
+**How to get D1-A on EL8** (when the spec exists — K01 residual for mock `--with`):
 
 ```text
 # rebuild / mock flavor (packager)
 rpmbuild --with v6_collect …
 # or install a v6_collect subpackage if the spec ships one
-# (perl-Devel-NYTProf+v6_collect / equivalent)
+# (perl-NYTProfM+v6_collect / equivalent)
 
 # BuildRequires then add libzstd-devel + lz4-devel (EPEL if needed)
 # Runtime: libzstd + lz4 in addition to zlib
@@ -103,18 +107,20 @@ rpmbuild --with v6_collect …
 Examples:
 
 ```sh
-# Default v5 (any flavor)
-NYTPROF=file=/tmp/nytprof.out perl -d:NYTProf your_script.pl
+# Default v5 (any flavor) — product debugger name
+NYTPROF=file=/tmp/nytprof.out perl -d:NYTProfM your_script.pl
 
 # Explicit v5
-NYTPROF=file=/tmp/nytprof.out:format=v5 perl -d:NYTProf your_script.pl
+NYTPROF=file=/tmp/nytprof.out:format=v5 perl -d:NYTProfM your_script.pl
 
 # v6 — only on D1-A / --with v6_collect
-NYTPROF=file=/tmp/nytprof.out:format=v6 perl -d:NYTProf your_script.pl
+NYTPROF=file=/tmp/nytprof.out:format=v6 perl -d:NYTProfM your_script.pl
 
 # Fork MVP: parent file + per-child file.<pid>
-NYTPROF=file=/tmp/nytprof.out:addpid=1 perl -d:NYTProf your_script.pl
+NYTPROF=file=/tmp/nytprof.out:addpid=1 perl -d:NYTProfM your_script.pl
 ```
+
+Stock/oracle collection remains `perl -d:NYTProf` under isolated `P-ORACLE` (`baseline/6.15/install` only). That is **not** this product.
 
 Advertised-options vs residual rows live in [`docs/contracts/DROP_IN_DOD_v0.md`](https://github.com/hilather/nytprof-modernization/blob/main/docs/contracts/DROP_IN_DOD_v0.md). Full 6.15 opcode/`entersub` attach is **not** claimed.
 
@@ -146,7 +152,7 @@ nytprof-cli html nytprof.out --out-dir ./report
 
 `engine=legacy` is the one-step report escape (oracle / product-legacy path). Native HTML is MVP (CSS + excl + optional flame) — **not** oracle DOM. Tablesorter / shared JS are **WAIVE** for GA-candidate (M01), not CLOSE.
 
-A CLI-only RPM is **“native NYTProf tools”**, not drop-in collection.
+A CLI-only RPM is **“native NYTProf tools”**, not drop-in collection. Tools `Recommends: perl-NYTProfM`.
 
 ---
 
@@ -154,13 +160,15 @@ A CLI-only RPM is **“native NYTProf tools”**, not drop-in collection.
 
 | What you changed | How to go back |
 |------------------|----------------|
-| RPM fleet on product ≥ 7.00 | `dnf downgrade perl-Devel-NYTProf` → distro 6.15 |
-| CPAN / local prefix | Reinstall prior 6.15 (or prior TRIAL when one exists) |
+| RPM fleet on product `perl-NYTProfM` | `dnf remove perl-NYTProfM` — stock `perl-Devel-NYTProf` is untouched |
+| CPAN / local prefix | Uninstall `NYTProfM` / `Devel::NYTProfM`; stock `-d:NYTProf` remains if installed |
 | Tried `format=v6` | `format=v5` or omit `format` (`collection_default` is v5) |
 | Native report / HTML surprise | `engine=legacy` or `NYTPROF_ENGINE=legacy`; omit the tools RPM |
 | EL8 v6 rebuild | Return to default D1-B package (no `--with v6_collect`) |
 
-v5 profile files remain valid across downgrade. v6 files are **opt-in**; old 6.15 tools do **not** read them — convert or keep v5.
+Do **not** `dnf downgrade` stock `perl-Devel-NYTProf` to undo this product — that was the pre-Option-B story.
+
+v5 profile files remain valid across rollback. v6 files are **opt-in**; old 6.15 tools do **not** read them — convert or keep v5.
 
 R3 (`engine=auto` as product default) and R4 (`collection_default: v6`) are **not** executed. Do not treat this guide as permission to flip them.
 
@@ -185,8 +193,8 @@ Never put repo **`crates/`** on oracle `PERL5LIB`. Also keep product install and
 
 | Profile | `PERL5LIB` | Use |
 |---------|------------|-----|
-| **P-ORACLE** | `baseline/6.15/install` only | Differential / 6.15 dump compare |
-| **P-PRODUCT-LEGACY** | Product prefix (XS + pure-Perl) | Cargo-free collection + legacy report |
+| **P-ORACLE** | `baseline/6.15/install` only | Differential / 6.15 dump compare; stock `perl -d:NYTProf` |
+| **P-PRODUCT-LEGACY** | Product prefix (XS + pure-Perl) | Cargo-free collection (`perl -d:NYTProfM`) + legacy report |
 | **P-PRODUCT-DUAL** | Product prefix + discoverable `nytprof-cli` | Accelerated report/convert |
 
 `dual_path_smoke.sh` is still **oracle-primary**. **S2** (primary half switches to P-PRODUCT-LEGACY) is **not executed**. After full BUILD-003, operator “legacy-only” means **P-PRODUCT-LEGACY**, not “install the 6.15 pin.”
@@ -202,8 +210,8 @@ This document does **not** make these true:
 | Residual / stamp | Meaning |
 |------------------|---------|
 | **Not `BUILD-003-FULL`** | Root `Makefile.PL` is not a complete XS CPAN dual-build (`full_build003=1` residual) |
-| **Not `CPAN-TRIAL-READY`** | No coordinated `Devel::NYTProf` ≥ 7.00 TRIAL upload |
-| **Not EL8 RPM shipped** | `EL8-RPM-MODULE` / `EL8-RPM-TOOLS` residual; `dnf install` above is the **intended** path |
+| **Not `CPAN-TRIAL-READY` upload** | No `NYTProfM` **6.15** TRIAL on PAUSE |
+| **Not EL8 RPM shipped to COPR** | `EL8-RPM-MODULE` spec MVP; `dnf install perl-NYTProfM` is the **intended** path when a repo exists |
 | **S2 `dual_path` not executed** | Packaging smoke still P-ORACLE primary (KD-25) |
 | **`collection_default: v5`** | Capability / stamps must not claim v6 default (pre-R4) |
 | **M01 tablesorter / shared JS** | **WAIVE** for GA-candidate (doc residual, not CLOSE). Native HTML is not oracle DOM/JS |
@@ -219,7 +227,8 @@ Do **not** market “full drop-in” without naming the **flavor** (D1-A vs D1-B
 | Doc | Role |
 |-----|------|
 | [docs/contracts/DROP_IN_DOD_v0.md](https://github.com/hilather/nytprof-modernization/blob/main/docs/contracts/DROP_IN_DOD_v0.md) | Binding D1–D6 / flavors / options |
-| [docs/PRODUCT_COMPLETION_DROP_IN_v0.md](https://github.com/hilather/nytprof-modernization/blob/main/docs/PRODUCT_COMPLETION_DROP_IN_v0.md) | Approved design (C.6 source) |
+| [docs/DROP_IN_RPM_COMPLETION_v0.md](https://github.com/hilather/nytprof-modernization/blob/main/docs/DROP_IN_RPM_COMPLETION_v0.md) | Option B identity + remaining completion plan |
+| [docs/PRODUCT_COMPLETION_DROP_IN_v0.md](https://github.com/hilather/nytprof-modernization/blob/main/docs/PRODUCT_COMPLETION_DROP_IN_v0.md) | Approved rev-4 design (identity superseded by Option B) |
 | [docs/BUILD_SUPPORT_POLICY.md](https://github.com/hilather/nytprof-modernization/blob/main/docs/BUILD_SUPPORT_POLICY.md) | Dual-path + S0–S3 |
 | [docs/R1_PREVIEW_OPERATOR_RUNBOOK.md](https://github.com/hilather/nytprof-modernization/blob/main/docs/R1_PREVIEW_OPERATOR_RUNBOOK.md) | Offline operator runbook |
 | [docs/contracts/R1_RESIDUAL_READINESS_MATRIX_v0.md](https://github.com/hilather/nytprof-modernization/blob/main/docs/contracts/R1_RESIDUAL_READINESS_MATRIX_v0.md) | Residual honesty |

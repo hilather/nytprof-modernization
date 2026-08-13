@@ -132,10 +132,10 @@ Network in mock, if any, is only to retrieve the **already-signed** artifact + s
 | Claim | Allowed? |
 |-------|----------|
 | “Native NYTProf tools” / dump / report / convert (with capability honesty) | Yes, once K02 ships under this policy |
-| “Drop-in replacement for Devel::NYTProf” / collection attach / `perl -d:NYTProf` | **No** — that is the **module** RPM (K01) + D1–D6 |
+| “Drop-in replacement for Devel::NYTProf” / collection attach / `perl -d:NYTProfM` | **No** — that is the **module** RPM (K01 `perl-NYTProfM`) + D1–D6 |
 | `collection_default: v6` | **No** until an executed ADR-0008 flip |
 
-Recommended relation remains `Recommends:` / `Suggests:` `perl-Devel-NYTProf` — weak dep, not a substitute for the module. A tools-only install MUST NOT set `product_xs_attach` or otherwise stamp collection drop-in.
+Recommended relation remains `Recommends:` / `Suggests:` `perl-NYTProfM` — weak dep, not a substitute for the module. A tools-only install MUST NOT set `product_xs_attach` or otherwise stamp collection drop-in.
 
 ### 7. Module RPM (K01) remains cargo-free D1-B
 
@@ -143,7 +143,7 @@ This ADR **does not** change K01.
 
 | Package | Policy (unchanged) |
 |---------|-------------------|
-| `perl-Devel-NYTProf` (default EL8) | Cargo-free mock; **D1-B** v5-only link (`libnytp_sink_v5.a` / `-lz`); `format=v6` **fail-closed** (KD-21) |
+| `perl-NYTProfM` (default EL8) | Cargo-free mock; **D1-B** v5-only link (`libnytp_sink_v5.a` / `-lz`); `format=v6` **fail-closed** (KD-21); Option B (no `Provides: perl(Devel::NYTProf)`) |
 | Optional `--with v6_collect` | D1-A on EL8; still **no** Rust in the module build |
 | Tools (`nytprof-cli`) | Signed prebuilt only (§1–§5); **not** part of the module `%build` |
 

@@ -14,7 +14,7 @@
 |-------|--------|
 | Name | `nytprof-cli` |
 | Role | Tools companion (report/dump/html) |
-| Recommends | `perl-Devel-NYTProf` |
+| Recommends | `perl-NYTProfM` |
 | Ingest | Signed CI prebuilt `linux-x86_64` (ADR-0010) |
 | mock `%build` | Unpack + verify; **no** rustup / cargo / rustc |
 | Drop-in | **No** — collection is the module RPM |

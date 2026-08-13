@@ -10,6 +10,8 @@ Source: copied from the design-skill rev 4 (2026-08-12)
 **Does not supersede:** charter / ADRs 0001–0009 / residual matrix  
 **Source:** copied from the design-skill rev 4 (2026-08-12)
 
+> **Identity superseded by Option B.** Shipped product names are **`NYTProfM` / `Devel::NYTProfM` `$VERSION` 6.15** / `perl -d:NYTProfM` / `perl-NYTProfM`. Frozen rev-4 KD-16/17 body below is **historical** and is not rewritten. Current completion plan: [`docs/DROP_IN_RPM_COMPLETION_v0.md`](https://github.com/hilather/nytprof-modernization/blob/main/docs/DROP_IN_RPM_COMPLETION_v0.md).
+
 # Design: Product Completion — Full Drop-In Replacement + Packaging Horizon
 
 | Field | Value |

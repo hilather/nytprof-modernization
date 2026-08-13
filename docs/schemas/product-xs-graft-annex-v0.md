@@ -182,31 +182,32 @@ $PREFIX/bin/nytprof-cli   # only if dual-path native installed
 
 ---
 
-## Annex C — EL8 / Rocky names and EVR
+## Annex C — EL8 / Rocky names (Option B)
 
 | RPM | Contents | Drop-in? |
 |-----|----------|----------|
-| `perl-Devel-NYTProf` | XS + pure-Perl + legacy scripts | **Yes** (collection + legacy tools) — when attach is actually green |
-| `nytprof-cli` | Native CLI binaries | **No** — tools companion |
-| Optional | `perl-Devel-NYTProf-tools` meta Requires both | Convenience |
+| `perl-NYTProfM` | XS + pure-Perl + legacy scripts | **Yes** (collection + legacy tools) — when attach is actually green. **Parallel** to stock `perl-Devel-NYTProf` |
+| `nytprof-cli` | Native CLI binaries | **No** — tools companion (`Recommends: perl-NYTProfM`) |
+| Optional | `perl-NYTProfM-tools` meta Requires both | Convenience |
 
-**EVR / Obsoletes:**
+**Identity / Obsoletes:**
 
-- Product `$VERSION` / RPM Version **≥ 7.00** so EVR sorts above stock 6.15.
-- **No self-Obsoletes** (`perl-Devel-NYTProf < %{version}` confuses solvers).
+- Product `$VERSION` / RPM Version **6.15** (same number as stock; different **Name** — no EVR fight).
+- Do **not** Provides stock `perl(Devel::NYTProf)`.
+- **No self-Obsoletes** (`perl-NYTProfM < %{version}` confuses solvers).
 - Obsoletes only for *other* names / aliases being retired.
 - Default module RPM = **D1-B** (`libnytp_sink_v5.a`, `-lz` only) unless `--with v6_collect` → D1-A.
 
 ```text
-Name:      perl-Devel-NYTProf
-Provides:  perl(Devel::NYTProf) = %{version}
-# Same NEVRA name: replacement is driven by Epoch/Version/Release ONLY.
-# Do NOT self-Obsoletes: perl-Devel-NYTProf < %{version}
+Name:      perl-NYTProfM
+Provides:  perl(Devel::NYTProfM) = %{version}
+# Parallel to stock perl-Devel-NYTProf. Do NOT Provides perl(Devel::NYTProf).
+# Do NOT self-Obsoletes: perl-NYTProfM < %{version}
 ```
 
 **EL8 tools (KD-13):** signed CI prebuilt `nytprof-cli` artifacts — **not** rustup-in-mock. K03 ADR hard-gates K02.
 
-**G01 status:** Annex C is **docs-landed**. `EL8-RPM-MODULE` / `EL8-RPM-TOOLS` / `CPAN-TRIAL-READY` remain residual. This annex is **not implemented**.
+**G01/A4 status:** Annex C is **docs-landed** (Option B). `EL8-RPM-MODULE` spec MVP is [`perl-NYTProfM.spec`](https://github.com/hilather/nytprof-modernization/blob/main/packaging/rpm/perl-NYTProfM.spec). Mock-certified / public COPR remain residual.
 
 ---
 
