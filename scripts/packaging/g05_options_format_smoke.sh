@@ -105,7 +105,8 @@ resolve_cc() {
 print_residuals() {
   echo "G06 fork/addpid: g06_fork_addpid_smoke.sh"
   echo "NOT-YET: mid-deflate continue-in-child / TEST-018"
-  echo "NOT-YET: full 6.15 opcode/entersub / blocks-calls1 line5 780"
+  echo "DI-01 blocks=1 780/810: di01_blocks_780_smoke.sh"
+  echo "NOT-YET: full 6.15 opcode/entersub / DI-02 SUB_ENTRY 27"
   echo "NOT-YET: PRODUCT-V6-COLLECT-EL8 / CPAN-TRIAL / EL8 RPM"
 }
 

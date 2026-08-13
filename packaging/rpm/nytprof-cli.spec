@@ -78,7 +78,7 @@ fi
 # optional nytprof-dump installed when present in the prebuilt payload
 
 %changelog
-* Thu Aug 13 2026 nytprof-modernization <devnull@example.com> - 7.00-1
-- K02: tools companion RPM; Recommends perl-Devel-NYTProf
+* Thu Aug 13 2026 nytprof-modernization <devnull@example.com> - 6.15-1
+- K02: tools companion RPM; Recommends perl-NYTProfM
 - ADR-0010 signed CI prebuilt ingest; no rustup-in-mock
-- Not drop-in collection / not perl -d:NYTProf
+- Not drop-in collection / not perl -d:NYTProfM

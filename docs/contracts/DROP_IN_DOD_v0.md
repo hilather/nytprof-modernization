@@ -82,7 +82,7 @@ Sources: `baseline/6.15/src/NYTProf.xs` options table (~lines 249–283) + strin
 | `end` | end/finish modes | fail-closed or work subset | work subset documented | OI-003-04 lifecycle residual |
 | `compress` / level | zlib after header | **work** (G03e) | work | mid-deflate fork residual |
 | `stmts` | statement profiling | **work** (G03b) | work | |
-| `blocks` | TIME_BLOCK | **work** (G03b) | work | |
+| `blocks` | TIME_BLOCK | **live attach work** (DI-01 780/810; not full opcode) | work | G03b emit + PR-B1 live `blocks=1`; not DI-03 |
 | `subs` | sub profiling | **work** (G03c) | work | |
 | `calls` | 0/1/2 entry-return | **work** 0/1/2 on primary fixtures | work | XSUB/goto/exception residual OI-003-03 |
 | `leave` | leave correction | residual or work | work if green else residual | |
@@ -233,7 +233,7 @@ Do **not** market “Full dual-path drop-in” without listing day-one residuals
 | `SEC-002-CONTINUOUS-FUZZ-MVP` | Continuous-fuzz job wrapping existing batteries | wrapper + workflow | **done (MVP / job)** — not cargo-fuzz / AFL / deep corpus |
 | `API-DATA-COMPAT007` | Bless-array residual | explicit residual until PERL-005 | **residual** |
 | `NS-NYTPROFM-IDENTITY` | CPAN/RPM name **NYTProfM**, `$VERSION` **6.15**, `-d:NYTProfM` | identity slice | **done (MVP / Option B)** — operators switch; not PAUSE; report facades stay `Devel::NYTProf::*` |
-| `DROP-IN-REMAINING` | Remaining advertised-options / GA drop-in | opcode + D2 + S2 + publish | **residual** — attach-preview MVP only |
+| `DROP-IN-REMAINING` | Remaining advertised-options / GA drop-in | opcode + D2 + S2 + publish | **residual** — attach-preview MVP only. Completion design: [DROP_IN_RPM_COMPLETION_v0.md](https://github.com/hilather/nytprof-modernization/blob/main/docs/DROP_IN_RPM_COMPLETION_v0.md) |
 
 **Not ready (do not advertise as shipped):** full 6.15 opcode/`entersub` attach, full TEST-018, mid-deflate-in-child, signed CI prebuilt **pipeline**, PAUSE upload, `BUILD-003-FULL`, independent SEC-012 sign-off, full SEC-002 cargo-fuzz/AFL. `EL8-RPM-MODULE` / `EL8-RPM-TOOLS` are **spec MVP** only (not mock-certified / not pipeline-complete). `CPAN-TRIAL-READY` is **notes-ready MVP** only (not uploaded). P02 is **checklist / job MVP** only (not GA marketing). G03a debugger **load**, G03b–G03e **emit-MVP**, G04 **attach-MVP**, G05 **options/`format=v6` tests**, and G06 **fork/`addpid` MVP** are shipped.
 

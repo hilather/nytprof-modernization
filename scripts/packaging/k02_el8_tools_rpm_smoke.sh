@@ -81,9 +81,9 @@ if command -v rpmspec >/dev/null 2>&1; then
   if [[ "$SPECRC" -ne 0 ]]; then
     echo "SKIP: rpmspec --srpm failed (host macros / missing Source*) — spec file asserts hold"
   else
-    grep -E -q 'nytprof-cli-7\.00' <<<"$SPECQ" \
-      || fail "rpmspec query missing nytprof-cli-7.00"
-    ok "rpmspec queried real spec as nytprof-cli-7.00"
+    grep -E -q 'nytprof-cli-6\.15' <<<"$SPECQ" \
+      || fail "rpmspec query missing nytprof-cli-6.15"
+    ok "rpmspec queried real spec as nytprof-cli-6.15"
   fi
 elif command -v rpmbuild >/dev/null 2>&1; then
   echo "SKIP: rpmbuild present but no isolated mock / signed tarball"

@@ -8,8 +8,8 @@
 #
 # Does NOT invoke DB::emit_* from the workload. Does NOT rewrite dual_path
 # (stays oracle-primary). collection_default stays v5. G03a trivial -e
-# still writes no nytprof.out. G05 format=v6 / G06 fork / full opcode /
-# blocks-calls1 line5 780 remain residual.
+# still writes no nytprof.out. Default (no blocks=) stays TIME_LINE
+# (no TIME_BLOCK). G05 format=v6 / G06 fork / full opcode / DI-02 27 remain residual.
 #
 # When CC + Perl XS headers exist:
 #   make -C collector xs-nytprof, isolated product @INC, live attach + dump.
@@ -107,7 +107,8 @@ print_residuals() {
   echo "G05 options/format: g05_options_format_smoke.sh"
   echo "G06 fork/addpid: g06_fork_addpid_smoke.sh"
   echo "NOT-YET: mid-deflate continue-in-child / TEST-018"
-  echo "NOT-YET: full 6.15 opcode/entersub / blocks-calls1 line5 780"
+  echo "DI-01 blocks=1 780/810: di01_blocks_780_smoke.sh"
+  echo "NOT-YET: full 6.15 opcode/entersub / DI-02 SUB_ENTRY 27"
 }
 
 if ! CC_BIN="$(resolve_cc)"; then
@@ -249,7 +250,11 @@ has_tag() {
 
 has_tag "$DUMP" "SUB_RETURN" || fail "dump missing SUB_RETURN (from produced bytes)"
 has_tag "$DUMP" "SUB_CALLERS" || fail "dump missing SUB_CALLERS (from produced bytes)"
-ok "dump JSONL has SUB_RETURN + SUB_CALLERS from produced bytes"
+has_tag "$DUMP" "TIME_LINE" || fail "dump missing TIME_LINE (default attach must stay TIME_LINE)"
+if has_tag "$DUMP" "TIME_BLOCK"; then
+  fail "default attach must not emit TIME_BLOCK (blocks=0)"
+fi
+ok "dump JSONL has SUB_RETURN + SUB_CALLERS + TIME_LINE (no TIME_BLOCK)"
 
 set +e
 "${CLI_CMD[@]}" report "$PROFILE" >"$REPORT_TXT" 2>"$REPORT_TXT.err"

@@ -358,13 +358,13 @@ Binding contracts landed; G02 landed the D1-B **v5-only link artifact** and a **
 | `E4-02-ORACLE-PAIR-MVP` | **done (MVP)** — second oracle dual pair (blocks-calls1) count surfaces; **not** full TEST-008 / A4 780 attach / S2 |
 | `E4-03-ORACLE-PAIR-MVP` | **done (MVP)** — third oracle dual pair (calls2-default) count surfaces; **not** full TEST-008 / SUB_ENTRY 27 attach / S2 |
 | `NS-NYTPROFM-IDENTITY` | **done (MVP / Option B)** — CPAN **NYTProfM**, `Devel::NYTProfM` **6.15**, `-d:NYTProfM`; not PAUSE; not Provides stock Devel::NYTProf |
-| `DROP-IN-REMAINING` | **residual** — opcode/780/`calls=2`/TEST-003/S2/COMPAT-007/publish after identity |
+| `DROP-IN-REMAINING` | **residual** — opcode/`calls=2` 27/TEST-003/S2/COMPAT-007/publish. **DI-01 live 780/810 landed** (PR-B1; not full opcode). |
 | `TOOL-MERGE-AGGREGATE-SUM-MVP` | **done (MVP)** — opt-in `--aggregate-sum`; stream-concat default; **not** full nytprofmerge option parity / S2 |
 | `SEC-012-CHECKLIST-MVP` | **done (MVP / checklist)** — not independent sign-off |
 | `SEC-002-CONTINUOUS-FUZZ-MVP` | **done (MVP / job)** — not cargo-fuzz / AFL / deep corpus |
 | `API-DATA-COMPAT007` | **residual** |
 
-Do **not** mark EL8 RPM or `BUILD-003-FULL` as ready. `CPAN-TRIAL-READY` is **notes-ready MVP** only (**not** PAUSE uploaded). G04 **attach-MVP** is landed (live `-d:NYTProf` default-calls1 **15/3/15** via `DB::sub`/`DB::DB`; not full 6.15 opcode/`entersub`). G03a **load** (no `nytprof.out` on trivial `-e`) remains; G03b–G03e emit-MVP remain. **Residuals:** blocks-calls1 line5 **780**, mid-deflate continue-in-child, full TEST-018. G05 options/`format=v6` and G06 fork/`addpid` MVP landed. Annex: [`product-xs-graft-annex-v0.md`](https://github.com/hilather/nytprof-modernization/blob/main/docs/schemas/product-xs-graft-annex-v0.md). Dual-path remains **oracle-primary** until S2 ([BUILD_SUPPORT_POLICY](https://github.com/hilather/nytprof-modernization/blob/main/docs/BUILD_SUPPORT_POLICY.md)).
+Do **not** mark EL8 RPM or `BUILD-003-FULL` as ready. `CPAN-TRIAL-READY` is **notes-ready MVP** only (**not** PAUSE uploaded). G04 **attach-MVP** is landed (live `-d:NYTProf` default-calls1 **15/3/15** via `DB::sub`/`DB::DB`; not full 6.15 opcode/`entersub`). G03a **load** (no `nytprof.out` on trivial `-e`) remains; G03b–G03e emit-MVP remain. **Residuals:** `calls=2` SUB_ENTRY **27**, mid-deflate continue-in-child, full TEST-018. DI-01 live **780/810** is landed (not full opcode). G05 options/`format=v6` and G06 fork/`addpid` MVP landed. Annex: [`product-xs-graft-annex-v0.md`](https://github.com/hilather/nytprof-modernization/blob/main/docs/schemas/product-xs-graft-annex-v0.md). Dual-path remains **oracle-primary** until S2 ([BUILD_SUPPORT_POLICY](https://github.com/hilather/nytprof-modernization/blob/main/docs/BUILD_SUPPORT_POLICY.md)).
 
 ### Operator re-verify (preview)
 

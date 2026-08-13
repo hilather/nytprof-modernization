@@ -3,6 +3,8 @@
 **Board:** `EL8-RPM-MODULE` (K01 spec/D1-B MVP) + `EL8-RPM-TOOLS` (K02 spec/MVP)  
 **Not:** signed CI publish pipeline complete, mock-certified multi-stream, D1-A as default Rocky, tools-alone drop-in.
 
+**Completion design:** [docs/DROP_IN_RPM_COMPLETION_v0.md](https://github.com/hilather/nytprof-modernization/blob/main/docs/DROP_IN_RPM_COMPLETION_v0.md) (PR-A0/A1 started). Source0 is produced by [`scripts/packaging/make_nytprofm_dist.sh`](https://github.com/hilather/nytprof-modernization/blob/main/scripts/packaging/make_nytprofm_dist.sh) (`NYTProfM-6.15.tar.gz`). Smoke: [`rpm01_make_dist_smoke.sh`](https://github.com/hilather/nytprof-modernization/blob/main/scripts/packaging/rpm01_make_dist_smoke.sh). **Not** BUILD-003-FULL.
+
 ## Advertised stream
 
 First module RPM targets **Rocky 8 / EL8 base Perl 5.26**. AppStream Perl 5.32 is a **multi-stream residual**.

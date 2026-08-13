@@ -23,6 +23,7 @@ __pycache__/
 ^Devel-NYTProf-\d
 ^NYTProfM-.*\.tar\.gz$
 ^NYTProfM-\d
+^dist/
 \.bak$
 \.swp$
 ~$

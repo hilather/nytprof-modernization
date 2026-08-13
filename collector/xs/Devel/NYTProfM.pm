@@ -20,7 +20,9 @@
 # format=v6 fail-closed on D1-B (v6_collect message); D1-A enable_sink_v6.
 # PR-G06  — addpid=1 installs CORE::GLOBAL::fork → nytp_fork_* + addpid
 # child reinit (`<file>.<pid>`). Mid-deflate continue-in-child residual.
-# Not full 6.15 opcode/entersub attach.
+# PR-B1 / DI-01 — NYTPROF blocks=1 live TIME_BLOCK + first-seen fid table
+# + visit_contexts block/sub lines (not full opcode / not DI-03 / not
+# slowops PRINT-MATCH). Default blocks=0 stays TIME_LINE (G04).
 # Shape follows 6.15 Devel::NYTProf.pm: package Devel::NYTProfM then DB,
 # require Core, init_profiler().
 
@@ -61,20 +63,37 @@ $Devel::NYTProfM::PRODUCT_V6_COLLECT    = DB::product_v6_collect() ? 1 : 0;
 $Devel::NYTProfM::PRODUCT_OPTIONS_PARSE = 1;
 $Devel::NYTProfM::PRODUCT_ADDPID        = 0;
 $Devel::NYTProfM::PRODUCT_FORK_HOOK     = 0;
+# DI-01 stamps (6.15 defaults): blocks=0, calls=1, slowops=2.
+$Devel::NYTProfM::PRODUCT_BLOCKS        = 0;
+$Devel::NYTProfM::PRODUCT_CALLS         = 1;
+$Devel::NYTProfM::PRODUCT_SLOWOPS       = 2;
+$Devel::NYTProfM::PRODUCT_STMT_OPS      = 0;
 
 our @product_sub_stack;
 our $product_in_hook = 0;
 
-# G04 statement hook (enabled only with NYTPROF file= + $^P 0x02).
-# Emits TIME_LINE through the shipped nytp_emit_time_line wrapper so
-# shipped report/verify accept the stream (fail-closed on zero TIME_*).
-# Not 6.15 opcode statement profiler / blocks-780.
+# G04 / DI-01 statement hook (enabled only with NYTPROF file= + $^P 0x02).
+# Default (blocks=0): TIME_LINE via shipped nytp_emit_time_line.
+# blocks=1: TIME_BLOCK via fid_for_filename + block_and_sub_lines, unless
+# a targeted DBSTATE/NEXTSTATE slice (PRODUCT_STMT_OPS) already emits.
+# Not full 6.15 opcode / DI-03.
 sub DB {
     return unless $Devel::NYTProfM::PRODUCT_XS_ATTACH;
     return if $product_in_hook;
-    my ( undef, undef, $line ) = caller;
+    return if $Devel::NYTProfM::PRODUCT_STMT_OPS;
+    my ( undef, $file, $line ) = caller;
     $product_in_hook = 1;
-    eval { DB::emit_time_line( 1, 1, $line || 1 ); 1 };
+    eval {
+        my $fid = DB::fid_for_filename($file);
+        if ($Devel::NYTProfM::PRODUCT_BLOCKS) {
+            my ( $bl, $sl ) = DB::block_and_sub_lines();
+            DB::emit_time_block( 1, $fid, $line || 1, $bl || $line, $sl || $line );
+        }
+        else {
+            DB::emit_time_line( 1, $fid, $line || 1 );
+        }
+        1;
+    };
     $product_in_hook = 0;
 }
 
@@ -104,6 +123,16 @@ sub _product_parse_nytprof {
         $opts{$opt} = $val;
     }
     return \%opts;
+}
+
+sub _product_int_opt {
+    my ( $opts, $key, $default ) = @_;
+    return $default unless exists $opts->{$key};
+    my $val = $opts->{$key};
+    if ( !defined $val || $val !~ /^-?\d+$/ ) {
+        die "unknown NYTPROF option: $key\n";
+    }
+    return 0 + $val;
 }
 
 sub _product_nytprof_file {
@@ -223,6 +252,27 @@ sub _product_install_fork_hook {
     my $addpid = $opts->{addpid};
     $Devel::NYTProfM::PRODUCT_ADDPID =
       ( defined $addpid && $addpid ne '' && $addpid ne '0' ) ? 1 : 0;
+
+    # DI-01: stamp blocks/calls/slowops. Honor blocks=1 for TIME_BLOCK.
+    # slowops=2 is the 6.15 default — do not fail-closed. slowops=1 is
+    # residual until PR-B2 / full opcode. PRINT/MATCH install is PR-B2.
+    my $blocks = _product_int_opt( $opts, 'blocks', 0 );
+    $Devel::NYTProfM::PRODUCT_BLOCKS = $blocks ? 1 : 0;
+    my $calls = _product_int_opt( $opts, 'calls', 1 );
+    if ( $calls < 0 || $calls > 2 ) {
+        die "unknown NYTPROF option: calls\n";
+    }
+    $Devel::NYTProfM::PRODUCT_CALLS = $calls;
+    my $slowops = _product_int_opt( $opts, 'slowops', 2 );
+    if ( $slowops == 1 ) {
+        die "slowops=1 (collapsed CORE:: package) is residual until full "
+          . "opcode attach; use default/slowops=2 (PRINT/MATCH subset) or "
+          . "slowops=0\n";
+    }
+    if ( $slowops != 0 && $slowops != 2 ) {
+        die "unknown NYTPROF option: slowops\n";
+    }
+    $Devel::NYTProfM::PRODUCT_SLOWOPS = $slowops;
 }
 
 init_profiler();    # G03a: hold in-memory v5 sink — never writes nytprof.out
@@ -252,6 +302,13 @@ init_profiler();    # G03a: hold in-memory v5 sink — never writes nytprof.out
         $^P |= 0x02;    # line-by-line (dbstate already compiled when $^P != 0)
         $^P |= 0x20;    # start with single-step on
         $DB::single = 1;    # pp_dbstate calls DB::DB only when this is true
+        if ( $Devel::NYTProfM::PRODUCT_BLOCKS ) {
+            # DBSTATE/NEXTSTATE/UNSTACK TIME_BLOCK slice — not DI-03 opcode.
+            my $st_ops = DB::install_product_stmt_ops();
+            if ( $st_ops == 0 ) {
+                $Devel::NYTProfM::PRODUCT_STMT_OPS = 1;
+            }
+        }
         if ( $Devel::NYTProfM::PRODUCT_ADDPID ) {
             _product_install_fork_hook();
         }
