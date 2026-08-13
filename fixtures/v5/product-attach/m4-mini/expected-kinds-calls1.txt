@@ -1,0 +1,9 @@
+# projected oracle presence — regen: dual dump then project; not a full dump
+# MUST_KIND_SET: NEW_FID TIME_LINE SUB_RETURN SUB_CALLERS SUB_ENTRY
+# TIME_BLOCK is dropped on default mini (blocks=0)
+NEW_FID present
+TIME_LINE present
+TIME_BLOCK absent
+SUB_RETURN present
+SUB_CALLERS present
+SUB_ENTRY absent
