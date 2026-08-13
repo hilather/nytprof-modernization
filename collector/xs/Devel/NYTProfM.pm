@@ -70,6 +70,8 @@ $Devel::NYTProfM::PRODUCT_SLOWOPS       = 2;
 $Devel::NYTProfM::PRODUCT_STMT_OPS      = 0;
 $Devel::NYTProfM::PRODUCT_SLOWOPS_OPS   = 0;
 $Devel::NYTProfM::PRODUCT_REQUIRE_REBIND = 0;
+$Devel::NYTProfM::PRODUCT_SIGEXIT        = '';
+$Devel::NYTProfM::PRODUCT_SIGEXIT_DONE   = 0;
 
 our @product_sub_stack;
 our $product_in_hook = 0;
@@ -265,6 +267,33 @@ sub _product_install_require_rebind {
     };
 }
 
+sub _product_sigexit_signals {
+    my ($opts) = @_;
+    my $v = $opts->{sigexit};
+    return () unless defined $v && length $v && $v ne '0';
+    if ( $v eq '1' ) {
+        return qw(INT TERM HUP PIPE);
+    }
+    return map { uc $_ } grep { length } split /,/, $v;
+}
+
+sub _product_sigexit_handler {
+    return if $Devel::NYTProfM::PRODUCT_SIGEXIT_DONE;
+    $Devel::NYTProfM::PRODUCT_SIGEXIT_DONE = 1;
+    eval { finish_profiler(); 1 };
+    exit 1;
+}
+
+sub _product_install_sigexit {
+    my (@sigs) = @_;
+    return unless @sigs;
+    # POSIX::_exit / raw SYS_exit residual: END does not run; no flush.
+    for my $s (@sigs) {
+        $SIG{$s} = \&_product_sigexit_handler;
+    }
+    $Devel::NYTProfM::PRODUCT_SIGEXIT = join ',', @sigs;
+}
+
 sub _product_install_fork_hook {
     return if $Devel::NYTProfM::PRODUCT_FORK_HOOK;
     # Do not `no warnings` here: compiling that loads warnings.pm before
@@ -368,6 +397,10 @@ init_profiler();    # G03a: hold in-memory v5 sink — never writes nytprof.out
         }
         if ( $Devel::NYTProfM::PRODUCT_ADDPID ) {
             _product_install_fork_hook();
+        }
+        my @sigexit = _product_sigexit_signals( _product_parse_nytprof() );
+        if (@sigexit) {
+            _product_install_sigexit(@sigexit);
         }
     }
 }

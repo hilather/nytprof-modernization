@@ -341,7 +341,7 @@ Binding contracts landed; G02 landed the D1-B **v5-only link artifact** and a **
 | `G03D-META-EMIT` | **done** — `nytp_emit_attribute` / `option` / `new_fid` / `src_line` / `sub_info` / `pid_start` / `pid_end` via product XS; dump seven meta tags on a real `NYTProf 5` mini; no G04 fixture parity |
 | `G03E-COMPRESS-EMIT` | **done** — `nytp_emit_start_deflate` via product XS; dump/verify inflate recovers a post-deflate event on a real `NYTProf 5` mini; **mid-deflate fork residual**; no G04 fixture parity |
 | `PRODUCT-XS-ATTACH-MVP` | **done (MVP)** — live `-d:NYTProf` + `NYTPROF file=` + `DB::sub`/`DB::DB`; dump/report leaf **15** / mid **3** / mid→leaf **15**. **Residuals:** full opcode/blocks-780 |
-| `PRODUCT-FORK-ADDPID-MVP` | **done (MVP)** — live `fork` + `addpid=1`; parent + `<file>.<childpid>` `NYTProf 5` via `nytp_fork_*`. **Residuals:** mid-deflate-in-child / TEST-018 / `sigexit` |
+| `PRODUCT-FORK-ADDPID-MVP` | **done (MVP)** — live `fork` + `addpid=1`; parent + `<file>.<childpid>` `NYTProf 5` via `nytp_fork_*`. **Residuals:** mid-deflate-in-child / TEST-018 / `_exit` flush |
 | `PRODUCT-LEGACY-SMOKE` | **done (MVP)** — cargo-free prefix install + live `-d:NYTProf` 15/3/15; **not** BUILD-003-FULL / S2 dual_path |
 | `I02-MAKEMAKER-NATIVE` | **done (MVP)** — `NYTPROF_NATIVE=1` fail-closed without cargo; `auto`/`=0` cargo-free; cargo-present install `nytprof-cli` 15/3/15 |
 | `I03-DIST-SCRIPTS` | **done (MVP)** — cargo-free EngineDispatch + `nytprofhtml`/`nytprofcsv` in product prefix; installed `query --json --jsonl` 15/3/15; **not** 6.15 nytprofhtml DOM / BUILD-003-FULL / S2 |

@@ -95,7 +95,7 @@ Sources: `baseline/6.15/src/NYTProf.xs` options table (~lines 249–283) + strin
 | `addpid` | pid in filename | **work** (G06) | work | |
 | `nameevals` / `nameanonsubs` | naming | residual | residual or work | |
 | `evals` | eval profiling | residual | residual | |
-| `sigexit` / posix exit | signal end | residual | residual | COL-015 honesty |
+| `sigexit` / posix exit | signal end | **live** `sigexit=1` → INT/TERM/HUP/PIPE flush | work subset | `_exit` / BUS/SEGV residual |
 | `perldb` / embed options | debugger interaction | residual | residual | |
 | **`format`** | **new product** | `v5` default; `v6` per **D1-A/D1-B**; `dual` **reject** | **D1-A:** v6 work; **D1-B:** v6 fail-closed | not a 6.15 option; see packaging flavors |
 | unknown option | — | **fail-closed** (croak/warn+abort configure) | fail-closed | prefer over silent ignore |
