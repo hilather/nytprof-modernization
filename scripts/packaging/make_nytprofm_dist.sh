@@ -21,6 +21,8 @@ trap cleanup EXIT
 mkdir -p "$STAGE/collector/include" \
          "$STAGE/collector/src" \
          "$STAGE/collector/xs/Devel/NYTProfM" \
+         "$STAGE/perl/bin" \
+         "$STAGE/perl/lib/Devel/NYTProf" \
          "$STAGE/t"
 
 cp -a "$ROOT/collector/Makefile" "$STAGE/collector/Makefile"
@@ -36,7 +38,19 @@ fi
 cp -a "$ROOT/Changes" "$STAGE/Changes"
 cp -a "$ROOT/t/workload-calls1.pl" "$STAGE/t/workload-calls1.pl"
 cp -a "$ROOT/t/installed_attach.t" "$STAGE/t/installed_attach.t"
+cp -a "$ROOT/t/installed_scripts.t" "$STAGE/t/installed_scripts.t"
 cp -a "$ROOT/t/nytprof_v5_tag_table.inc" "$STAGE/t/nytprof_v5_tag_table.inc"
+
+# I03 report wrappers + EngineDispatch (module RPM owns /usr/bin/nytprofhtml).
+for wrap in nytprof-engine nytprofhtml nytprofcsv nytprofcg; do
+  cp -a "$ROOT/perl/bin/$wrap" "$STAGE/perl/bin/$wrap"
+done
+for pm in EngineDispatch.pm JsonlData.pm JsonlReadStream.pm LegacyBridge.pm \
+          Data.pm ReadStream.pm; do
+  [[ -f "$ROOT/perl/lib/Devel/NYTProf/$pm" ]] \
+    || { echo "ERROR: missing perl/lib/Devel/NYTProf/$pm" >&2; exit 1; }
+  cp -a "$ROOT/perl/lib/Devel/NYTProf/$pm" "$STAGE/perl/lib/Devel/NYTProf/$pm"
+done
 
 # Minimal facade: identity only. %build does not run this for XS.
 cat > "$STAGE/Makefile.PL" <<'PL'

@@ -45,13 +45,9 @@ cpanm NYTProfM                # or: cpanm Devel::NYTProfM
 dnf install perl-NYTProfM
 ```
 
-The EL8 **module RPM is attach-only** (`.pm` + `.so`). It does **not** ship I03 `nytprofhtml` / `nytprof-engine`. To **read** a product `NYTProf 5` file on Rocky:
+The EL8 **module RPM** ships collection **and** I03 report wrappers: `nytprof-engine`, `nytprofhtml`, `nytprofcsv`, `nytprofcg`. Those names overwrite stock `/usr/bin/nytprofhtml` (etc.) if `perl-Devel-NYTProf` is also installed — test-drive with `rpm -Uvh --replacefiles` if `dnf` reports a file conflict. The RPM does **not** Obsoletes stock.
 
-1. stock `nytprofhtml` if `perl-Devel-NYTProf` remains installed,
-2. source-tree I03 prefix (`install_product_scripts.sh`) — not the RPM,
-3. `nytprof-cli` after milestone C (signed prebuilt).
-
-Native `nytprof-cli` is a **tools companion**, not drop-in by itself.
+`nytprofhtml` is the **product** wrapper (exec sibling `nytprof-engine html`), **not** a new 6.15 DOM `nytprofhtml`. Native `html`/`csv` still need a discoverable `nytprof-cli`. Cargo-free proof is `nytprof-engine query --json --jsonl`. RPM signing / public COPR is **not** required for this test-drive.
 
 Optional native (when BUILD-003 / I02 path is used): `NYTPROF_NATIVE=0` (default, cargo-free collection + legacy report), `=1` (require cargo/prebuilt), `=auto` (install CLI if present).
 

@@ -46,13 +46,16 @@ if grep -Eiq 'dnf copr enable' "$README"; then
 fi
 ok "README unsigned-bootstrap runbook"
 
-grep -F -q 'attach-only' "$MIG" \
-  || fail "MIG01 missing attach-only module RPM honesty"
+grep -F -q 'nytprofhtml' "$MIG" \
+  || fail "MIG01 missing product nytprofhtml in the module RPM"
+if grep -Eiq 'module RPM is attach-only' "$MIG"; then
+  fail "MIG01 still says the module RPM is attach-only (scripts now ship)"
+fi
 grep -Eiq 'unsigned internal bootstrap|not a production policy' "$MIG" \
   || fail "MIG01 missing unsigned-bootstrap / not-production-policy wording"
 grep -F -q 'gpgcheck=0' "$MIG" \
   || fail "MIG01 missing gpgcheck=0 bootstrap recipe"
-ok "MIG01 attach-only + unsigned bootstrap"
+ok "MIG01 product nytprofhtml in module RPM + unsigned bootstrap"
 
 echo "NOT-YET: A5b live rpmsign / COPR / gpgcheck=1"
 echo "NOT-YET: C1 signed nytprof-cli pipeline"

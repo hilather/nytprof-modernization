@@ -60,6 +60,12 @@ grep -F -q 'perl(ExtUtils::Embed)' "$SPEC" \
   || fail "spec missing BuildRequires perl(ExtUtils::Embed)"
 grep -F -q 'binutils' "$SPEC" \
   || fail "spec missing BuildRequires binutils"
+grep -F -q '%{_bindir}/nytprofhtml' "$SPEC" \
+  || fail "spec must install %{_bindir}/nytprofhtml (product I03 wrapper)"
+grep -F -q '%{_bindir}/nytprof-engine' "$SPEC" \
+  || fail "spec must install %{_bindir}/nytprof-engine"
+grep -F -q 't/installed_scripts.t' "$SPEC" \
+  || fail "spec %check must drive t/installed_scripts.t"
 
 # --- real spec contents (not a stub dump) ---
 grep -E -q '^Name:[[:space:]]+perl-NYTProfM' "$SPEC" \

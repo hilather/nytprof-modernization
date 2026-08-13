@@ -68,7 +68,23 @@ UNPACK="$WORK/NYTProfM-6.15"
 [[ -f "$UNPACK/t/workload-calls1.pl" ]] || fail "unpack missing t/workload-calls1.pl"
 [[ -f "$UNPACK/t/installed_attach.t" ]] || fail "unpack missing t/installed_attach.t"
 [[ -f "$UNPACK/Makefile.PL" ]] || fail "unpack missing staged Makefile.PL"
+[[ -f "$UNPACK/perl/bin/nytprofhtml" ]] \
+  || fail "unpack missing perl/bin/nytprofhtml (I03 wrappers must ship in Source0)"
+[[ -f "$UNPACK/perl/bin/nytprof-engine" ]] \
+  || fail "unpack missing perl/bin/nytprof-engine"
+[[ -f "$UNPACK/perl/lib/Devel/NYTProf/EngineDispatch.pm" ]] \
+  || fail "unpack missing EngineDispatch.pm"
+[[ -f "$UNPACK/t/installed_scripts.t" ]] \
+  || fail "unpack missing t/installed_scripts.t"
 ok "unpacked NYTProfM-6.15 layout"
+
+JSONL="$ROOT/fixtures/v5/default-calls1/readstream.jsonl"
+[[ -f "$JSONL" ]] || fail "missing $JSONL"
+echo "running: staged t/installed_scripts.t (query --json --jsonl 15/3/15)"
+PERL5LIB="$UNPACK/perl/lib" NYTPROF_BINDDIR="$UNPACK/perl/bin" \
+  NYTPROF_JSONL="$JSONL" perl "$UNPACK/t/installed_scripts.t" \
+  || fail "staged installed_scripts.t failed"
+ok "staged nytprof-engine query 15/3/15"
 
 if ! command -v cc >/dev/null 2>&1 && ! command -v gcc >/dev/null 2>&1; then
   echo "SKIP: no C compiler — tarball layout asserts hold (not BUILD-003-FULL)"

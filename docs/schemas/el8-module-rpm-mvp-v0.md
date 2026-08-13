@@ -17,7 +17,7 @@
 - Advertised stream: Rocky 8 **base Perl 5.26**
 - `format=v6` fail-closed with the `v6_collect` rebuild string
 - Live attach (when CC/XS present) leaf **15** / mid **3** / mid→leaf **15** via shipped G05 / `t/installed_attach.t`
-- **Attach-only:** `.pm` + `.so`. No I03 `nytprofhtml` / `nytprof-engine` in this RPM.
+- **Scripts:** `%{_bindir}/nytprofhtml` / `nytprofcsv` / `nytprofcg` / `nytprof-engine` plus `Devel::NYTProf::{EngineDispatch,JsonlData,…}`. Overwrites stock `/usr/bin/nytprofhtml` on clash. Native html still needs `nytprof-cli`. Signing not required for test-drive.
 
 `--with v6_collect` is documented D1-A, not default K01 green.
 
