@@ -4,7 +4,7 @@
 **Status:** implemented (PR-C01)  
 **Plan tasks:** TOOL-004, TOOL-005, FMT-013 (strict path)  
 **Depends on:** product dual decode (`ProfileModel` / PR-B11a), wire freeze (PR-B11), v5 encoder (`nytprof-format-v5`), absolute v6 EVENT encode  
-**Not:** lossy convert, packing/string-dict v6 output, merge/repack/salvage (PR-C02), full oracle wall-NV PID projection
+**Not:** default lossy; packing/string-dict v6 output; full oracle wall-NV PID projection on the **strict** path. Opt-in `--allow-lossy`: [`convert-lossy-mvp-v0.md`](https://github.com/hilather/nytprof-modernization/blob/main/docs/schemas/convert-lossy-mvp-v0.md) (**L01**).
 
 ## Goal
 
@@ -54,7 +54,7 @@ Library API: `nytprof_model::{convert_bytes, convert_path, encode_events, Conver
 | Non-zero `TIME_BLOCK.sub_line` | v6 | **error** (absolute body has no field; no silent zeroing). Zero `sub_line` is representable. |
 | VERSION major | v5 projection | only majors **5** or **6** accepted; other majors refuse |
 
-**No `--allow-lossy`** in this MVP (explicit residual). Lossy absolute-body projection of non-zero `sub_line` / extended `NEW_FID` is **not** the default and is not available.
+**`--allow-lossy` is opt-in only** (L01). Strict remains the default. Lossy projections are documented in [`convert-lossy-mvp-v0.md`](https://github.com/hilather/nytprof-modernization/blob/main/docs/schemas/convert-lossy-mvp-v0.md).
 
 ## Old-tool acceptance (v5 outputs)
 

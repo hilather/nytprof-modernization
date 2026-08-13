@@ -1,0 +1,10 @@
+#!/usr/bin/env perl
+# Familiar 6.15-style name → sibling nytprof-engine csv (I03).
+use strict;
+use warnings;
+use FindBin;
+use File::Spec;
+
+my $engine = File::Spec->catfile( $FindBin::Bin, 'nytprof-engine' );
+exec $^X, $engine, 'csv', @ARGV
+  or die "nytprofcsv: cannot exec $engine: $!\n";

@@ -13,7 +13,7 @@
 //! - `callgrind <file>` / `cg <file>` — Callgrind-style text export
 //! - `verify <file>` / `inspect <file>` — decode + model load; short OK summary
 //! - `convert --to=v5|v6 <in> -o <out>` — strict v5↔v6 conversion (PR-C01)
-//! - `merge --to=v5|v6 -o <out> IN…` — stream-concat merge + fid remap (PR-C02)
+//! - `merge --to=v5|v6 [--aggregate-sum] -o <out> IN…` — stream-concat (default) or L02 aggregate-sum
 //! - `repack [--to=v5|v6] <in> -o <out>` — full re-encode (PR-C02)
 //! - `salvage [--to=v5|v6] <in> -o <out>` — longest complete verified prefix (PR-C02)
 //! - `capability` / `selftest` / `capabilities` — native offline capability self-test
@@ -46,8 +46,9 @@ use std::path::{Path, PathBuf};
 use std::process;
 
 use nytprof_model::{
-    convert_path, decode_events_from_path, detect_convert_target, merge_paths, repack_path,
-    salvage_path, ConvertTarget, ProfileModel,
+    convert_path, convert_path_with, decode_events_from_path, detect_convert_target, merge_paths,
+    merge_paths_with, repack_path, salvage_path, ConvertOptions, ConvertTarget, MergeMode,
+    ProfileModel,
 };
 use nytprof_report::{
     render_callgrind, render_csv_report, render_edges_csv, render_folded_stacks,
@@ -220,7 +221,9 @@ fn print_usage() {
          nytprof-cli verify <profile.out>        Decode + model; short OK summary\n  \
          nytprof-cli inspect <profile.out>       Alias for verify\n  \
          nytprof-cli convert --to=v5|v6 IN -o OUT  Strict v5↔v6 conversion\n  \
+         nytprof-cli convert --to=v6 --allow-lossy IN -o OUT  Opt-in NV truncate\n  \
          nytprof-cli merge --to=v5|v6 -o OUT IN… Stream-concat merge + fid remap\n  \
+         nytprof-cli merge --to=v5|v6 --aggregate-sum -o OUT IN… Same-file A4/A5 sum\n  \
          nytprof-cli repack [--to=v5|v6] IN -o OUT  Full re-encode (default: same family)\n  \
          nytprof-cli salvage [--to=v5|v6] IN -o OUT Longest complete verified prefix\n  \
          nytprof-cli capability                  Native offline capability self-test\n  \
@@ -238,9 +241,11 @@ fn print_usage() {
          -o PATH / --output PATH       Output profile path (required)\n\n\
          Merge / repack / salvage (PR-C02; recovery semantics unambiguous):\n  \
          merge: every input fully decodes; stream concat + fid remap; fail closed\n  \
+         merge --aggregate-sum: remap later NEW_FID names onto first stream (L02)\n  \
          repack: full decode required; clean re-encode to --to (default same family)\n  \
          salvage: longest complete verified prefix only; always labels incomplete\n  \
          --to=v5|v6                    Target (required for merge; optional repack/salvage)\n  \
+         --aggregate-sum               Opt-in same-filename line/sub total sum (merge)\n  \
          -o PATH / --output PATH       Output path (required)\n\n\
          Capability options:\n  \
          --json / --format=json        Machine-readable JSON (CAPABILITY-JSON-MVP)\n  \
@@ -259,17 +264,19 @@ fn print_usage() {
 /// nytprof-cli convert --to=v5 <input> -o <output>
 /// ```
 ///
-/// Fail-closed on unrepresentable values. Successful v5 outputs are readable by
-/// the independent v5 decoder (old-tool shape). No `--allow-lossy` in this MVP.
+/// Fail-closed on unrepresentable values unless `--allow-lossy` is set.
+/// Successful v5 outputs are readable by the independent v5 decoder (old-tool shape).
+/// Strict remains the default (no silent NV truncate).
 fn cmd_convert(args: &[String]) -> Result<(), Box<dyn std::error::Error>> {
     if args.iter().any(|a| a == "-h" || a == "--help") {
         print_usage();
         return Ok(());
     }
-    let usage = "Usage: nytprof-cli convert --to=v5|v6 <input> -o <output>";
+    let usage = "Usage: nytprof-cli convert --to=v5|v6 [--allow-lossy] <input> -o <output>";
     let mut target: Option<ConvertTarget> = None;
     let mut output: Option<String> = None;
     let mut input: Option<String> = None;
+    let mut allow_lossy = false;
     let mut i = 0;
     while i < args.len() {
         match args[i].as_str() {
@@ -283,11 +290,12 @@ fn cmd_convert(args: &[String]) -> Result<(), Box<dyn std::error::Error>> {
             flag if flag.starts_with("--to=") => {
                 target = Some(ConvertTarget::parse(&flag["--to=".len()..])?);
             }
+            "--allow-lossy" => {
+                allow_lossy = true;
+            }
             "-o" | "--output" => {
                 i += 1;
-                let p = args
-                    .get(i)
-                    .ok_or(format!("{usage} (-o requires PATH)"))?;
+                let p = args.get(i).ok_or(format!("{usage} (-o requires PATH)"))?;
                 if output.is_some() {
                     return Err(format!("{usage} (duplicate -o)").into());
                 }
@@ -315,7 +323,13 @@ fn cmd_convert(args: &[String]) -> Result<(), Box<dyn std::error::Error>> {
     let input = input.ok_or(format!("{usage} (input path required)"))?;
     let output = output.ok_or(format!("{usage} (-o required)"))?;
 
-    convert_path(&input, &output, target)?;
+    let opts = ConvertOptions { allow_lossy };
+    convert_path_with(&input, &output, target, opts)?;
+    if allow_lossy {
+        eprintln!(
+            "NOTE: --allow-lossy: fractional NV truncated toward 0; NEW_FID extras and TIME_BLOCK.sub_line dropped (absolute v6 body)"
+        );
+    }
     // Greppable success line (operators / packaging).
     println!(
         "OK: convert --to={} {} -> {}",
@@ -326,19 +340,22 @@ fn cmd_convert(args: &[String]) -> Result<(), Box<dyn std::error::Error>> {
     Ok(())
 }
 
-/// nytprof-cli merge --to=v5|v6 -o OUT IN1 IN2 [IN3...]
+/// nytprof-cli merge --to=v5|v6 [--aggregate-sum] -o OUT IN1 IN2 [IN3...]
 ///
-/// Stream-concat merge with deterministic fid remap. Every input must fully
-/// decode (fail closed). See `docs/schemas/merge-repack-salvage-mvp-v0.md`.
+/// Default: stream-concat merge with deterministic fid remap. Opt-in
+/// `--aggregate-sum` remaps later NEW_FID names onto the first stream.
+/// Every input must fully decode (fail closed).
 fn cmd_merge(args: &[String]) -> Result<(), Box<dyn std::error::Error>> {
     if args.iter().any(|a| a == "-h" || a == "--help") {
         print_usage();
         return Ok(());
     }
-    let usage = "Usage: nytprof-cli merge --to=v5|v6 -o <output> <input> [<input>...]";
+    let usage =
+        "Usage: nytprof-cli merge --to=v5|v6 [--aggregate-sum] -o <output> <input> [<input>...]";
     let mut target: Option<ConvertTarget> = None;
     let mut output: Option<String> = None;
     let mut inputs: Vec<String> = Vec::new();
+    let mut aggregate_sum = false;
     let mut i = 0;
     while i < args.len() {
         match args[i].as_str() {
@@ -352,11 +369,12 @@ fn cmd_merge(args: &[String]) -> Result<(), Box<dyn std::error::Error>> {
             flag if flag.starts_with("--to=") => {
                 target = Some(ConvertTarget::parse(&flag["--to=".len()..])?);
             }
+            "--aggregate-sum" => {
+                aggregate_sum = true;
+            }
             "-o" | "--output" => {
                 i += 1;
-                let p = args
-                    .get(i)
-                    .ok_or(format!("{usage} (-o requires PATH)"))?;
+                let p = args.get(i).ok_or(format!("{usage} (-o requires PATH)"))?;
                 if output.is_some() {
                     return Err(format!("{usage} (duplicate -o)").into());
                 }
@@ -380,13 +398,23 @@ fn cmd_merge(args: &[String]) -> Result<(), Box<dyn std::error::Error>> {
     if inputs.is_empty() {
         return Err(format!("{usage} (at least one input required)").into());
     }
-    merge_paths(&inputs, &output, target)?;
-    println!(
-        "OK: merge --to={} inputs={} -> {}",
-        target.as_str(),
-        inputs.len(),
-        output
-    );
+    if aggregate_sum {
+        merge_paths_with(&inputs, &output, target, MergeMode::AggregateSum)?;
+        println!(
+            "OK: merge --to={} --aggregate-sum inputs={} -> {}",
+            target.as_str(),
+            inputs.len(),
+            output
+        );
+    } else {
+        merge_paths(&inputs, &output, target)?;
+        println!(
+            "OK: merge --to={} inputs={} -> {}",
+            target.as_str(),
+            inputs.len(),
+            output
+        );
+    }
     Ok(())
 }
 
@@ -417,9 +445,7 @@ fn cmd_repack(args: &[String]) -> Result<(), Box<dyn std::error::Error>> {
             }
             "-o" | "--output" => {
                 i += 1;
-                let p = args
-                    .get(i)
-                    .ok_or(format!("{usage} (-o requires PATH)"))?;
+                let p = args.get(i).ok_or(format!("{usage} (-o requires PATH)"))?;
                 if output.is_some() {
                     return Err(format!("{usage} (duplicate -o)").into());
                 }
@@ -488,9 +514,7 @@ fn cmd_salvage(args: &[String]) -> Result<(), Box<dyn std::error::Error>> {
             }
             "-o" | "--output" => {
                 i += 1;
-                let p = args
-                    .get(i)
-                    .ok_or(format!("{usage} (-o requires PATH)"))?;
+                let p = args.get(i).ok_or(format!("{usage} (-o requires PATH)"))?;
                 if output.is_some() {
                     return Err(format!("{usage} (duplicate -o)").into());
                 }
@@ -730,11 +754,8 @@ fn exercise_convert_probe() -> Result<(), Box<dyn std::error::Error>> {
             v5_in.display()
         )
     })?;
-    verify_profile(&out_v6).map_err(|e| {
-        format!(
-            "capability self-test: verify after convert --to=v6 failed: {e}"
-        )
-    })?;
+    verify_profile(&out_v6)
+        .map_err(|e| format!("capability self-test: verify after convert --to=v6 failed: {e}"))?;
 
     if v6_in.is_file() {
         convert_path(&v6_in, &out_v5, ConvertTarget::V5).map_err(|e| {
@@ -744,9 +765,7 @@ fn exercise_convert_probe() -> Result<(), Box<dyn std::error::Error>> {
             )
         })?;
         verify_profile(&out_v5).map_err(|e| {
-            format!(
-                "capability self-test: verify after convert --to=v5 failed: {e}"
-            )
+            format!("capability self-test: verify after convert --to=v5 failed: {e}")
         })?;
     }
 
@@ -788,9 +807,8 @@ fn exercise_merge_tools_probe() -> Result<(), Box<dyn std::error::Error>> {
             v5_in.display()
         )
     })?;
-    verify_profile(&out_repack).map_err(|e| {
-        format!("capability self-test: verify after repack failed: {e}")
-    })?;
+    verify_profile(&out_repack)
+        .map_err(|e| format!("capability self-test: verify after repack failed: {e}"))?;
 
     if v6_in.is_file() {
         merge_paths(
@@ -800,9 +818,8 @@ fn exercise_merge_tools_probe() -> Result<(), Box<dyn std::error::Error>> {
         )
         .map_err(|e| format!("capability self-test: merge failed: {e}"))?;
         // Merged stream has two process sequences — still stream-complete if both ends present.
-        verify_profile(&out_merge).map_err(|e| {
-            format!("capability self-test: verify after merge failed: {e}")
-        })?;
+        verify_profile(&out_merge)
+            .map_err(|e| format!("capability self-test: verify after merge failed: {e}"))?;
     }
 
     // Salvage of a mid-zlib cut must recover + label (not verify-as-clean-complete).
@@ -814,9 +831,8 @@ fn exercise_merge_tools_probe() -> Result<(), Box<dyn std::error::Error>> {
     };
     let cut_path = tmp.join("cut.v5");
     fs::write(&cut_path, cut).map_err(|e| format!("write cut: {e}"))?;
-    let report = salvage_path(&cut_path, &out_salvage, ConvertTarget::V5).map_err(|e| {
-        format!("capability self-test: salvage failed: {e}")
-    })?;
+    let report = salvage_path(&cut_path, &out_salvage, ConvertTarget::V5)
+        .map_err(|e| format!("capability self-test: salvage failed: {e}"))?;
     if !report.salvage_labeled {
         return Err("capability self-test: salvage did not label incomplete".into());
     }
@@ -926,11 +942,7 @@ fn resolve_capability_probe(forced: Option<&str>) -> Option<PathBuf> {
         .join("../..")
         .join(DEFAULT_CAPABILITY_FIXTURE);
     if from_manifest.is_file() {
-        return Some(
-            from_manifest
-                .canonicalize()
-                .unwrap_or(from_manifest),
-        );
+        return Some(from_manifest.canonicalize().unwrap_or(from_manifest));
     }
     None
 }
@@ -1091,10 +1103,7 @@ fn render_aggregates_json(
         .sub_total("main::leaf")
         .map(|t| t.returns)
         .unwrap_or(0);
-    let mid_returns = model
-        .sub_total("main::mid")
-        .map(|t| t.returns)
-        .unwrap_or(0);
+    let mid_returns = model.sub_total("main::mid").map(|t| t.returns).unwrap_or(0);
     let mid_leaf_edge = model
         .call_edge("main::mid", "main::leaf")
         .map(|e| e.count)
@@ -1102,14 +1111,8 @@ fn render_aggregates_json(
     // JSON-BLOCKS-MVP: same greppable A4/A4b keys as Perl query --json.
     // blocks-calls1: line 1:5 calls = 780, block_line 1:4 calls = 810.
     // Absent locations → 0 (default-calls1 has no TIME_BLOCK → block 0).
-    let line_calls_1_5 = model
-        .line_total(1, 5)
-        .map(|t| t.calls)
-        .unwrap_or(0);
-    let block_line_calls_1_4 = model
-        .block_line_total(1, 4)
-        .map(|t| t.calls)
-        .unwrap_or(0);
+    let line_calls_1_5 = model.line_total(1, 5).map(|t| t.calls).unwrap_or(0);
+    let block_line_calls_1_4 = model.block_line_total(1, 4).map(|t| t.calls).unwrap_or(0);
 
     // JSON-NATIVE-STREAM-MVP: same keys as Perl query --json (QUERY-JSON-EXPAND).
     // Reasons come from ProfileModel::stream_incompleteness_reasons (COMPAT-010).
@@ -1152,10 +1155,7 @@ fn render_aggregates_json(
             .map(|s| json!(s))
             .unwrap_or(Value::Null)
     };
-    let file_1 = model
-        .file_name(1)
-        .map(|s| json!(s))
-        .unwrap_or(Value::Null);
+    let file_1 = model.file_name(1).map(|s| json!(s)).unwrap_or(Value::Null);
     // JSON-FILE-BASENAME-MVP: stable basename for fid 1 (absolute path is volatile).
     // ProfileModel::fid_basename only; null when fid/path absent.
     let file_1_basename = model
@@ -1199,7 +1199,10 @@ fn render_aggregates_json(
         json!(model.total_events.saturating_add(1)),
     );
     // JSON-NATIVE-STREAM-MVP: stream completeness + dump/model-derived PID/timing counts.
-    obj.insert("is_stream_complete".into(), json!(model.is_stream_complete()));
+    obj.insert(
+        "is_stream_complete".into(),
+        json!(model.is_stream_complete()),
+    );
     obj.insert(
         "incompleteness_reasons".into(),
         Value::Array(incompleteness_reasons),

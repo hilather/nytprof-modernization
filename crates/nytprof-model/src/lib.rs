@@ -18,12 +18,13 @@ mod merge_tools;
 mod v6_ingest;
 
 pub use convert::{
-    convert_and_models, convert_bytes, convert_path, encode_events, ConvertError, ConvertResult,
-    ConvertTarget,
+    convert_and_models, convert_bytes, convert_bytes_with, convert_path, convert_path_with,
+    encode_events, encode_events_with, ConvertError, ConvertOptions, ConvertResult, ConvertTarget,
 };
 pub use merge_tools::{
-    detect_convert_target, merge_bytes, merge_paths, repack_bytes, repack_path, salvage_bytes,
-    salvage_path, MergeToolsError, MergeToolsResult, SalvageReport,
+    detect_convert_target, merge_bytes, merge_bytes_with, merge_paths, merge_paths_with,
+    repack_bytes, repack_path, salvage_bytes, salvage_path, MergeMode, MergeToolsError,
+    MergeToolsResult, SalvageReport,
 };
 pub use v6_ingest::{decode_events_from_bytes, decode_events_from_path, owned_records_to_events};
 

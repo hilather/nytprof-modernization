@@ -64,6 +64,10 @@ make native-install              # → scripts/packaging/install_native.sh
 NYTPROF_NATIVE=1 perl Makefile.PL && make native-install
 # alias:
 make native
+
+# I03 cargo-free product report scripts + EngineDispatch (no cargo / no CC)
+make install-product-scripts     # → scripts/packaging/install_product_scripts.sh
+make i03-dist-scripts-smoke      # → scripts/packaging/i03_dist_scripts_smoke.sh
 ```
 
 ### Verification smoke
@@ -148,6 +152,10 @@ Enforced by `tools/oracle/env.sh`, `scripts/baseline/build_oracle.sh`, and `scri
 |-------|------------------|
 | **Pre-sink** | Historical: gate stayed green with no `collector/` tree; no hard C toolchain dep for R1-preview steps |
 | **COL-001..007 + COL-014 dual (test/dev) + COL-015 fork/PID MVP + fake-clock scaffold (landed)** | Offline gate step **10** runs `./scripts/packaging/collector_sink_smoke.sh`: isolation asserts always; `make -C collector test` (sink + lifecycle/seq + M4 mini + **batch/fast** + **v5 wire** + **v6 abs/codec/packing** + **COL-014 dual-sink test/dev-only OQ-4** + **COL-015 fork/PID** `test_fork_pid`) when CC present (`-lz -lzstd -llz4`); **honest skip** without C toolchain. Real v5 wire (COL-006) + v6 writer (COL-007) mini streams; dual fan-out is **test/dev-only** (not product `format=dual`); fork protocol + buffered preflush/discard + POSIX addpid stress green; full M4 oracle corpus under fake-clock remains residual (**complete TEST-003**); full fixtures dual residual (**TEST-008**); full oracle **forkdepth/addpid** residual (**TEST-018**); light microbench is **not** BENCH certification; flush-discount timing residual; I32 tick projection residual (OI-003-01) |
+| **G02 v5-only product archive (landed, scaffold)** | `make -C collector libnytp_sink_v5.a` is the D1-B product link (`-lz` only; no v6/dual objects). Full `libnytp_sink.a` remains the `make test` / dual_path-adjacent collector path (`-lz -lzstd -llz4`). Load-only `Devel::NYTProf::CollectorBootstrap` is **not** product attach. Dual-path stays **oracle-primary**. Smoke: [`g02_v5_product_link_smoke.sh`](https://github.com/hilather/nytprof-modernization/blob/main/scripts/packaging/g02_v5_product_link_smoke.sh) (not in `offline_gate.sh`) |
+| **G03a debugger load (landed)** | `make -C collector xs-nytprof` produces product `Devel::NYTProf` + `NYTProf.so` under `collector/build/xs-nytprof/`. Real `perl -d:NYTProf` **loads** (in-memory sink; no `nytprof.out` on trivial `-e`). Dual-path stays **oracle-primary**. Smoke: [`product_attach_smoke.sh`](https://github.com/hilather/nytprof-modernization/blob/main/scripts/packaging/product_attach_smoke.sh) (not in `offline_gate.sh`) |
+| **G03b stmt emit (landed, emit-MVP)** | Held v5 sink + `DB::enable_sink` / `nytp_emit_time_*` / `discount`. Fake-clock mini + overflow fail-closed. **Not** opcode attach / G04. Smoke: [`g03b_stmt_emit_smoke.sh`](https://github.com/hilather/nytprof-modernization/blob/main/scripts/packaging/g03b_stmt_emit_smoke.sh) (not in `offline_gate.sh`). `collection_default` stays **v5**. |
+| **G03e compress emit (landed, emit-MVP)** | Held v5 sink + `DB::emit_start_deflate` / `nytp_emit_start_deflate` (zlib after `z`; `-lz` only). Dump/verify inflate recovers a post-deflate event. **Residual:** mid-deflate fork. **Not** opcode attach / G04. Smoke: [`g03e_compress_emit_smoke.sh`](https://github.com/hilather/nytprof-modernization/blob/main/scripts/packaging/g03e_compress_emit_smoke.sh) (not in `offline_gate.sh`). `collection_default` stays **v5**. |
 | **Complete TEST-003** | Expand to oracle-aligned v5-via-sink stream equality on the agreed `fixtures/v5/*` corpus under fake-clock |
 | **Isolation** | Parent offline gate still must not put `crates/` (or `collector/` install) on oracle `PERL5LIB`; child smokes own isolation |
 | **Fixtures** | C writer / dual harness writes under `fixtures/v6/from-c/**` only; never mutates `baseline/6.15/archives/` |
@@ -183,7 +191,7 @@ make offline-gate
 | 8 | `./scripts/packaging/native_query_json_cross_smoke.sh` | **Optional when native:** NATIVE-QUERY-JSON-CROSS — native `report --json` vs Perl `query --json` shared fields (**15/3/15** + discount **818**); pure-Perl query alone is step 6 |
 | 9 | `./scripts/packaging/capability_selftest_smoke.sh` | **CI-CAPABILITY-GATE:** run when cargo **or** `prefix`/`target` native CLI (or `$NYTPROF_NATIVE_CLI`) present; **honest skip** otherwise (same condition as `packaging_gate`) |
 | 10 | `./scripts/packaging/collector_sink_smoke.sh` | **COL-001..007 + COL-014 dual (test/dev-only OQ-4)** — isolation always; `make -C collector test` when CC; honest skip without C |
-| 11 | `./tools/oracle/e3_c_writer_parity.sh` | **COL-007 product E3-EVENT** when cargo: C fixtures `fixtures/v6/from-c/**` + `e3_c_*`; E3-mixed residual; honest skip without cargo (fixture presence still checked) |
+| 11 | `./tools/oracle/e3_c_writer_parity.sh` | **COL-007 product E3-EVENT + E3-mixed MVP** when cargo: C fixtures incl. `mixed.nytprof` + `e3_c_*`; honest skip without cargo (fixture presence still checked). Not TEST-008 / COL-008 / CLI v6 collection default. |
 | 12 | `./scripts/packaging/e4_v5_v6_semantic_smoke.sh --full` | **E4 product CLI** when native: real CLIs on dual-sink v5+v6 pairs; honest skip otherwise; dual-sink fixture presence still required; full oracle dual residual (TEST-008) |
 
 Rules:
@@ -248,6 +256,44 @@ Oracle rebuild (Cargo-free forever):
 ```
 
 Native install MVP contract: [`docs/schemas/native-install-mvp-v0.md`](https://github.com/hilather/nytprof-modernization/blob/main/docs/schemas/native-install-mvp-v0.md).
+
+---
+
+## Three isolation profiles + smoke migration S0–S3
+
+**Status:** PR-G01 docs-landed. `collection_default` remains **v5**. G03a product `-d:NYTProf` **load**, G03b–G03e emit-MVP, G04 **attach-MVP** (live `-d:NYTProf` default-calls1 **15/3/15**), and G05 **options/`format=v6` tests** (D1-B fail-closed; D1-A `NYTPROF6`) are landed. G06 **fork/`addpid` MVP** is landed. **Residuals:** full 6.15 opcode/`entersub`, blocks-calls1 line5 **780**, mid-deflate continue-in-child, TEST-018.  
+**Binding:** [DROP_IN_DOD_v0.md](https://github.com/hilather/nytprof-modernization/blob/main/docs/contracts/DROP_IN_DOD_v0.md) D5; design [PRODUCT_COMPLETION_DROP_IN_v0.md](https://github.com/hilather/nytprof-modernization/blob/main/docs/PRODUCT_COMPLETION_DROP_IN_v0.md).
+
+### Three isolation profiles (D5)
+
+| Profile ID | Name | `PERL5LIB` / load path | Cargo? | Purpose |
+|------------|------|------------------------|--------|---------|
+| **P-ORACLE** | Oracle differential | `baseline/6.15/install` (+ optional `test-deps`) **only** | Never | Fixtures, dump compare, oracle `t` subset |
+| **P-PRODUCT-LEGACY** | Product legacy-only | Product install prefix (`site`/`prefix/lib`) — **XS + pure-Perl** | **Never** | **RSK-009 product collection proof** |
+| **P-PRODUCT-DUAL** | Product dual-path | Product prefix + discoverable `nytprof-cli` | Optional | Accelerated report/convert |
+
+**Rules:**
+
+1. Never put `crates/`, product install, or `collector/` on **P-ORACLE** `PERL5LIB`.
+2. Never use P-ORACLE as the ship/install path (ADR-0004).
+3. [`legacy_only_smoke.sh`](https://github.com/hilather/nytprof-modernization/blob/main/scripts/packaging/legacy_only_smoke.sh) **remains P-ORACLE forever**. New [`product_legacy_smoke.sh`](https://github.com/hilather/nytprof-modernization/blob/main/scripts/packaging/product_legacy_smoke.sh) proves **P-PRODUCT-LEGACY** attach without cargo (S2+).
+4. After BUILD-003, operator “legacy-only” means **P-PRODUCT-LEGACY**, not “install the oracle pin.”
+5. `collection_default` remains **v5** until an executed R4 flip (ADR-0008).
+
+### Smoke migration S0–S3
+
+| Phase | When | `dual_path_smoke.sh` behavior | New product smokes |
+|-------|------|------------------------------|--------------------|
+| **S0 — today / until product installable** | Pre-G03a / pre-I01 | **Unchanged:** always runs **P-ORACLE** via `legacy_only_smoke.sh`, then optional native if cargo | G01 adds `product_attach_smoke.sh` + `product_legacy_smoke.sh` as **honest skip** / fail-not-yet; **must not** rewrite dual_path primary half yet |
+| **S1 — documented profiles** | PR-G01 | Still S0 runtime behavior; this section describes three profiles | Skeletons only |
+| **S2 — product installable** | After G03a+I01 (product prefix installs XS) | Primary half **switches** to **P-PRODUCT-LEGACY**; still chains **P-ORACLE** `legacy_only_smoke` as a separate required step (oracle never dropped) | `product_*` exit 0 on product path |
+| **S3 — offline_gate expand** | With S2 | offline_gate: product steps required when product build available; **honest skip** when product XS not built | Same |
+
+**Hard rule:** Do **not** change `dual_path_smoke.sh` to require product XS before S2. Do **not** rewrite the dual_path primary half before S2. `legacy_only_smoke.sh` remains **P-ORACLE forever**.
+
+[`product_attach_smoke.sh`](https://github.com/hilather/nytprof-modernization/blob/main/scripts/packaging/product_attach_smoke.sh) is the **G03a load** smoke (real `perl -d:NYTProf` without `file=`; `phase: S0/S1`; `product_xs_attach: no`). [`g04_v5_parity_smoke.sh`](https://github.com/hilather/nytprof-modernization/blob/main/scripts/packaging/g04_v5_parity_smoke.sh) is the **G04 attach-MVP** smoke (live `-d:NYTProf` + `file=` + dump/report leaf **15** / mid **3** / edge **15**). [`g05_options_format_smoke.sh`](https://github.com/hilather/nytprof-modernization/blob/main/scripts/packaging/g05_options_format_smoke.sh) is the **G05 options/`format=v6`** smoke (unknown/`dual` fail-closed; D1-B `format=v6` fail-closed; D1-A `NYTPROF6`; v5 15/3/15). [`g06_fork_addpid_smoke.sh`](https://github.com/hilather/nytprof-modernization/blob/main/scripts/packaging/g06_fork_addpid_smoke.sh) is the **G06 fork/`addpid`** smoke (live `fork` + parent/`<file>.<pid>` `NYTProf 5`). [`g03b_stmt_emit_smoke.sh`](https://github.com/hilather/nytprof-modernization/blob/main/scripts/packaging/g03b_stmt_emit_smoke.sh) / [`g03c_sub_emit_smoke.sh`](https://github.com/hilather/nytprof-modernization/blob/main/scripts/packaging/g03c_sub_emit_smoke.sh) / [`g03d_meta_emit_smoke.sh`](https://github.com/hilather/nytprof-modernization/blob/main/scripts/packaging/g03d_meta_emit_smoke.sh) / [`g03e_compress_emit_smoke.sh`](https://github.com/hilather/nytprof-modernization/blob/main/scripts/packaging/g03e_compress_emit_smoke.sh) remain emit-MVP. [`product_legacy_smoke.sh`](https://github.com/hilather/nytprof-modernization/blob/main/scripts/packaging/product_legacy_smoke.sh) is the **I01 P-PRODUCT-LEGACY** smoke (cargo-free prefix install + live attach 15/3/15; honest skip without CC/XS). They are **not** wired into `dual_path_smoke.sh` or `offline_gate.sh` (S2 not claimed). Schema: [`product-attach-smoke-mvp-v0.md`](https://github.com/hilather/nytprof-modernization/blob/main/docs/schemas/product-attach-smoke-mvp-v0.md).
+
+G02 ([`g02_v5_product_link_smoke.sh`](https://github.com/hilather/nytprof-modernization/blob/main/scripts/packaging/g02_v5_product_link_smoke.sh)) proves the **v5-only archive + load-only XS**. I01 installs that debugger into a prefix without cargo. I02 [`i02_makemaker_native_smoke.sh`](https://github.com/hilather/nytprof-modernization/blob/main/scripts/packaging/i02_makemaker_native_smoke.sh) wires `NYTPROF_NATIVE=1`/`auto` through shipped `install_native.sh` (`=1` fail-closed without cargo). I03 [`install_product_scripts.sh`](https://github.com/hilather/nytprof-modernization/blob/main/scripts/packaging/install_product_scripts.sh) / [`i03_dist_scripts_smoke.sh`](https://github.com/hilather/nytprof-modernization/blob/main/scripts/packaging/i03_dist_scripts_smoke.sh) installs EngineDispatch + `nytprof-engine` / `nytprofhtml` / `nytprofcsv` into the same product prefix (`make install-product-scripts`; cargo-free `query --json --jsonl` **15/3/15**). J01 [`j01_cpan_hygiene_smoke.sh`](https://github.com/hilather/nytprof-modernization/blob/main/scripts/packaging/j01_cpan_hygiene_smoke.sh) makes root `Makefile.PL` emit **`Devel::NYTProf` ≥ 7.00** (`VERSION_FROM` the product `.pm`) and excludes `baseline/` `target/` `prefix/` from `make manifest`. J02 [`RELEASE_NOTES_CPAN_TRIAL_v0.md`](https://github.com/hilather/nytprof-modernization/blob/main/docs/RELEASE_NOTES_CPAN_TRIAL_v0.md) is **notes-ready** attach-preview (**not** uploaded to PAUSE). K01 [`perl-Devel-NYTProf.spec`](https://github.com/hilather/nytprof-modernization/blob/main/packaging/rpm/perl-Devel-NYTProf.spec) is the EL8 **D1-B** module RPM. K02 [`nytprof-cli.spec`](https://github.com/hilather/nytprof-modernization/blob/main/packaging/rpm/nytprof-cli.spec) is the **tools companion** (ADR-0010 ingest; **not** drop-in / not signed-pipeline complete). Dual-path remains oracle-primary (`collection_default` stays **v5**; S2 not claimed).
 
 ---
 

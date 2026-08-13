@@ -37,6 +37,7 @@ Close board **COL-007** for the **EVENT** product path by:
 | `packing_dict.nytprof` | packing + dict + ZLIB multi-chunk |
 | `mid_stream.nytprof` | packing + `begin_codec_region(ZLIB)` after TIME_LINE_RUN |
 | `mid_stream_dict.nytprof` | packing + dict + `begin_codec_region(ZSTD)` |
+| `mixed.nytprof` | EVENT sample + SOURCE + INDEX + SUMMARY (codec NONE kinds) |
 
 ## Acceptance
 
@@ -51,13 +52,14 @@ Close board **COL-007** for the **EVENT** product path by:
 | Mid-stream packing continuity | `e3_c_mid_stream_packing_continuity` |
 | Mid-stream + dict | `e3_c_mid_stream_dict_packing` |
 | Truncated C bytes fail closed | `e3_c_truncated_fail_closed` |
+| E3-mixed SOURCE/INDEX/SUMMARY C bytes | `e3_c_mixed_kinds_source_index_summary`; truncated `e3_c_mixed_truncated_fail_closed` |
 | Offline gate when cargo | `./tools/oracle/e3_c_writer_parity.sh` |
 
 ## Residuals / non-claims
 
 | Residual | Notes |
 |----------|--------|
-| **E3-mixed** | Multi-kind SOURCE/INDEX/SUMMARY product C fixtures **not** claimed |
+| **E3-mixed** | **done (MVP)** — `mixed.nytprof` C-produced; not TEST-008 / COL-008 / CLI v6 collection default |
 | Wire freeze FMT-002..010 | open after E3/E4 |
 | E4 v5↔v6 semantic enforcement | policy draft; automation open |
 | CLI v6 product default | residual |
@@ -69,6 +71,6 @@ Close board **COL-007** for the **EVENT** product path by:
 
 | Row | Status after this MVP |
 |-----|------------------------|
-| **COL-007** | **done** (E3-EVENT with C; E3-mixed residual) |
+| **COL-007** | **done** (E3-EVENT with C; E3-mixed **MVP**) |
 | **COL-008** | still **deferred** |
 | E3 harness stand-in | remains engineering only (not product evidence) |

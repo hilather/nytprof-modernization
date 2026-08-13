@@ -250,16 +250,10 @@ mod tests {
         let mut buf = vec![0x80u8; 10];
         // 10th byte still has continuation; no 11th → after loop TooLong
         // Actually: for i in 0..10 we read 10 bytes all with cont bit; never return Ok; TooLong.
-        assert_eq!(
-            decode_u64(&buf, 0),
-            Err(VarintError::TooLong { offset: 0 })
-        );
+        assert_eq!(decode_u64(&buf, 0), Err(VarintError::TooLong { offset: 0 }));
         // 11 bytes of 0x80: still TooLong at max width (strict stops at 10).
         buf.push(0x80);
-        assert_eq!(
-            decode_u64(&buf, 0),
-            Err(VarintError::TooLong { offset: 0 })
-        );
+        assert_eq!(decode_u64(&buf, 0), Err(VarintError::TooLong { offset: 0 }));
     }
 
     #[test]

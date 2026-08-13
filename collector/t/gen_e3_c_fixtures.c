@@ -11,6 +11,7 @@
  *   packing_dict.nytprof      — packing + FOOTER dict multi-chunk
  *   mid_stream.nytprof        — packing + mid-stream NONE→ZLIB region
  *   mid_stream_dict.nytprof   — packing + mid-stream + FOOTER dict
+ *   mixed.nytprof             — EVENT + SOURCE + INDEX + SUMMARY (E3-mixed)
  *
  * Usage:
  *   make -C collector gen-e3-fixtures OUTDIR=../fixtures/v6/from-c
@@ -240,6 +241,34 @@ static void write_mid_stream_dict(const char *outdir)
     nytp_sink_destroy(s);
 }
 
+static void write_mixed(const char *outdir)
+{
+    char path[1024];
+    nytp_sink *s;
+    path_join(path, sizeof(path), outdir, "mixed.nytprof");
+    s = nytp_v6_sink_create(path);
+    EXPECT(s != NULL, "create mixed");
+    emit_sample_events(s);
+    EXPECT(nytp_v6_sink_emit_source(s, 1, 5, nytp_sv_cstr("$x++ for 1 .. 50;")) ==
+               NYTP_OK,
+           "source");
+    EXPECT(nytp_v6_sink_emit_index(s, 1, 0, 32, nytp_sv_cstr("fid1")) == NYTP_OK,
+           "index");
+    EXPECT(nytp_v6_sink_emit_summary(s, 1, 15, 3, nytp_sv_cstr("leaf")) ==
+               NYTP_OK,
+           "summary");
+    EXPECT(nytp_sink_close(s) == NYTP_OK, "close mixed");
+    EXPECT(nytp_v6_sink_is_sealed(s), "sealed mixed");
+    EXPECT(nytp_v6_sink_source_chunk_count(s) == 1, "source chunk");
+    EXPECT(nytp_v6_sink_index_chunk_count(s) == 1, "index chunk");
+    EXPECT(nytp_v6_sink_summary_chunk_count(s) == 1, "summary chunk");
+    printf("wrote %s (%zu bytes, src=%u idx=%u sum=%u)\n", path,
+           nytp_v6_sink_wire_len(s), nytp_v6_sink_source_record_count(s),
+           nytp_v6_sink_index_record_count(s),
+           nytp_v6_sink_summary_record_count(s));
+    nytp_sink_destroy(s);
+}
+
 int main(int argc, char **argv)
 {
     const char *outdir =
@@ -256,6 +285,7 @@ int main(int argc, char **argv)
     write_packing_dict(outdir);
     write_mid_stream(outdir);
     write_mid_stream_dict(outdir);
+    write_mixed(outdir);
 
     if (failures) {
         fprintf(stderr, "gen_e3_c_fixtures: %d failure(s)\n", failures);

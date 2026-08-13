@@ -8,20 +8,14 @@
 //! Not dictionaries, not COL-007 C writer.
 
 use crate::chunk::{codec, encode_chunk_frame, kind, ChunkError};
-use crate::compressed_profile::{
-    encode_kind_chunk, is_supported_event_codec, OwnedEventRecord,
-};
+use crate::compressed_profile::{encode_kind_chunk, is_supported_event_codec, OwnedEventRecord};
 use crate::crc::compute_payload_crc;
-use crate::event_body::{
-    decode_event_body, encode_event_body, EventBodyError, EventRecordSpec,
-};
+use crate::event_body::{decode_event_body, encode_event_body, EventBodyError, EventRecordSpec};
 use crate::file_prefix::encode_file_prefix;
 use crate::footer_body::{
     decode_footer_body, encode_footer_body, FooterBodyError, FooterRecordSpec,
 };
-use crate::index_body::{
-    decode_index_body, encode_index_body, IndexBodyError, IndexRecordSpec,
-};
+use crate::index_body::{decode_index_body, encode_index_body, IndexBodyError, IndexRecordSpec};
 use crate::multi_chunk_event::partition_event_records;
 use crate::payload_codec::{decode_chunk_payload, PayloadCodecError};
 use crate::source_body::{
@@ -137,9 +131,7 @@ impl From<crate::compressed_profile::CompressedProfileError> for CompressedMixed
             C::IndexBody(b) => CompressedMixedError::IndexBody(b),
             C::SummaryBody(b) => CompressedMixedError::SummaryBody(b),
             C::Payload(p) => CompressedMixedError::Payload(p),
-            C::UnsupportedEventCodec { codec } => {
-                CompressedMixedError::UnsupportedCodec { codec }
-            }
+            C::UnsupportedEventCodec { codec } => CompressedMixedError::UnsupportedCodec { codec },
             C::UnexpectedKind { kind } => CompressedMixedError::UnexpectedKind { kind },
             C::InvalidFooter => CompressedMixedError::InvalidFooter,
             C::UnexpectedFooterCodec { codec } => {
@@ -209,7 +201,6 @@ impl KindCodecs {
             summary: codec,
         }
     }
-
 }
 
 /// Decoded compressed multi-kind mixed profile (owned logical records).
@@ -309,8 +300,7 @@ pub fn encode_compressed_mixed_profile_per_kind(
 
     if !events.is_empty() {
         let plain = encode_event_body(events);
-        let frame =
-            encode_kind_chunk(kind::EVENT, codecs.event, seq, events.len() as u32, &plain)?;
+        let frame = encode_kind_chunk(kind::EVENT, codecs.event, seq, events.len() as u32, &plain)?;
         out.extend_from_slice(&frame);
         seq += 1;
     }
@@ -606,22 +596,19 @@ pub fn encode_multi_chunk_summary_mixed_profile(
 
     for part in &event_parts {
         let plain = encode_event_body(part);
-        let frame =
-            encode_kind_chunk(kind::EVENT, codecs.event, seq, part.len() as u32, &plain)?;
+        let frame = encode_kind_chunk(kind::EVENT, codecs.event, seq, part.len() as u32, &plain)?;
         out.extend_from_slice(&frame);
         seq += 1;
     }
     for part in &source_parts {
         let plain = encode_source_body(part);
-        let frame =
-            encode_kind_chunk(kind::SOURCE, codecs.source, seq, part.len() as u32, &plain)?;
+        let frame = encode_kind_chunk(kind::SOURCE, codecs.source, seq, part.len() as u32, &plain)?;
         out.extend_from_slice(&frame);
         seq += 1;
     }
     for part in &index_parts {
         let plain = encode_index_body(part);
-        let frame =
-            encode_kind_chunk(kind::INDEX, codecs.index, seq, part.len() as u32, &plain)?;
+        let frame = encode_kind_chunk(kind::INDEX, codecs.index, seq, part.len() as u32, &plain)?;
         out.extend_from_slice(&frame);
         seq += 1;
     }
@@ -692,9 +679,7 @@ pub fn decode_compressed_mixed_profile(
                 || k == kind::SUMMARY =>
             {
                 if !is_supported_event_codec(frame.codec) {
-                    return Err(CompressedMixedError::UnsupportedCodec {
-                        codec: frame.codec,
-                    });
+                    return Err(CompressedMixedError::UnsupportedCodec { codec: frame.codec });
                 }
                 if !saw_compressible {
                     first_codec = frame.codec;
@@ -791,17 +776,17 @@ pub fn decode_compressed_mixed_profile(
             }
             k if k == kind::FOOTER => {
                 if frame.codec != codec::NONE {
-                    return Err(CompressedMixedError::UnexpectedFooterCodec {
-                        codec: frame.codec,
-                    });
+                    return Err(CompressedMixedError::UnexpectedFooterCodec { codec: frame.codec });
                 }
                 let plain = frame.payload; // FOOTER is identity / NONE
                 let (recs, body_n) = decode_footer_body(plain)?;
                 if body_n != plain.len() {
-                    return Err(CompressedMixedError::FooterBody(FooterBodyError::Truncated {
-                        need: plain.len(),
-                        got: body_n,
-                    }));
+                    return Err(CompressedMixedError::FooterBody(
+                        FooterBodyError::Truncated {
+                            need: plain.len(),
+                            got: body_n,
+                        },
+                    ));
                 }
                 for r in recs {
                     footer_records.push(OwnedFooterRecord {
@@ -1086,9 +1071,7 @@ mod tests {
         ));
         // Valid SOURCE after so stream has mixed shape if event somehow passed.
         let src = encode_source_body(&sample_sources());
-        enc.extend_from_slice(
-            &encode_kind_chunk(kind::SOURCE, codec::ZSTD, 1, 1, &src).unwrap(),
-        );
+        enc.extend_from_slice(&encode_kind_chunk(kind::SOURCE, codec::ZSTD, 1, 1, &src).unwrap());
         match decode_compressed_mixed_profile(&enc) {
             Err(CompressedMixedError::Payload(
                 PayloadCodecError::SizeMismatch { .. } | PayloadCodecError::Zstd { .. },
@@ -1353,9 +1336,7 @@ mod tests {
         ));
         // Different codec on SOURCE — multi-codec stream.
         let src = encode_source_body(&sample_sources());
-        enc.extend_from_slice(
-            &encode_kind_chunk(kind::SOURCE, codec::LZ4, 1, 1, &src).unwrap(),
-        );
+        enc.extend_from_slice(&encode_kind_chunk(kind::SOURCE, codec::LZ4, 1, 1, &src).unwrap());
         match decode_compressed_mixed_profile(&enc) {
             Err(CompressedMixedError::Payload(
                 PayloadCodecError::SizeMismatch { .. } | PayloadCodecError::Zstd { .. },
@@ -1972,9 +1953,7 @@ mod tests {
         let mut enc = encode_file_prefix(SUPPORTED_MAJOR, 0, 0, 0, 0, &[]);
         // EVENT first (valid).
         let ev = encode_event_body(&sample_events());
-        enc.extend_from_slice(
-            &encode_kind_chunk(kind::EVENT, codec::NONE, 0, 2, &ev).unwrap(),
-        );
+        enc.extend_from_slice(&encode_kind_chunk(kind::EVENT, codec::NONE, 0, 2, &ev).unwrap());
         enc.extend_from_slice(&encode_chunk_frame(
             kind::SOURCE,
             codec::ZSTD,
@@ -2346,9 +2325,7 @@ mod tests {
 
         let mut enc = encode_file_prefix(SUPPORTED_MAJOR, 0, 0, 0, 0, &[]);
         let ev = encode_event_body(&sample_events());
-        enc.extend_from_slice(
-            &encode_kind_chunk(kind::EVENT, codec::NONE, 0, 2, &ev).unwrap(),
-        );
+        enc.extend_from_slice(&encode_kind_chunk(kind::EVENT, codec::NONE, 0, 2, &ev).unwrap());
         enc.extend_from_slice(&encode_chunk_frame(
             kind::INDEX,
             codec::ZSTD,
@@ -2730,9 +2707,7 @@ mod tests {
 
         let mut enc = encode_file_prefix(SUPPORTED_MAJOR, 0, 0, 0, 0, &[]);
         let ev = encode_event_body(&sample_events());
-        enc.extend_from_slice(
-            &encode_kind_chunk(kind::EVENT, codec::NONE, 0, 2, &ev).unwrap(),
-        );
+        enc.extend_from_slice(&encode_kind_chunk(kind::EVENT, codec::NONE, 0, 2, &ev).unwrap());
         enc.extend_from_slice(&encode_chunk_frame(
             kind::SUMMARY,
             codec::ZSTD,

@@ -715,6 +715,60 @@ static void test_version_non_v6(void)
     nytp_sink_destroy(c);
 }
 
+static void test_mixed_source_index_summary(void)
+{
+    nytp_sink *s = nytp_v6_sink_create(NULL);
+    const uint8_t *wire;
+    size_t wlen = 0;
+    size_t pos;
+    int saw_event = 0, saw_source = 0, saw_index = 0, saw_summary = 0;
+
+    EXPECT(s != NULL, "create mixed");
+    EXPECT(nytp_emit_time_line(s, 5, 1, 10) == NYTP_OK, "event");
+    EXPECT(nytp_v6_sink_emit_source(s, 1, 5, nytp_sv_cstr("$x++")) == NYTP_OK,
+           "source");
+    EXPECT(nytp_v6_sink_emit_index(s, 1, 0, 8, nytp_sv_cstr("fid1")) == NYTP_OK,
+           "index");
+    EXPECT(nytp_v6_sink_emit_summary(s, 1, 15, 3, nytp_sv_cstr("leaf")) ==
+               NYTP_OK,
+           "summary");
+    EXPECT(nytp_sink_close(s) == NYTP_OK, "close mixed");
+    EXPECT(nytp_v6_sink_source_chunk_count(s) == 1, "src chunks");
+    EXPECT(nytp_v6_sink_index_chunk_count(s) == 1, "idx chunks");
+    EXPECT(nytp_v6_sink_summary_chunk_count(s) == 1, "sum chunks");
+    wire = nytp_v6_sink_wire(s, &wlen);
+    EXPECT(wire != NULL && wlen > 40 && memcmp(wire, "NYTPROF6", 8) == 0,
+           "NYTPROF6");
+    pos = 0;
+    while (pos + NYTPROF_V6_CHUNK_HEADER_LEN <= wlen) {
+        uint32_t sync = (uint32_t)wire[pos] | ((uint32_t)wire[pos + 1] << 8) |
+                        ((uint32_t)wire[pos + 2] << 16) |
+                        ((uint32_t)wire[pos + 3] << 24);
+        uint8_t kind;
+        uint32_t clen;
+        if (sync != NYTPROF_V6_CHUNK_SYNC) {
+            pos++;
+            continue;
+        }
+        kind = wire[pos + 4];
+        clen = (uint32_t)wire[pos + 32] | ((uint32_t)wire[pos + 33] << 8) |
+               ((uint32_t)wire[pos + 34] << 16) | ((uint32_t)wire[pos + 35] << 24);
+        if (kind == NYTPROF_V6_KIND_EVENT) {
+            saw_event = 1;
+        } else if (kind == NYTPROF_V6_KIND_SOURCE) {
+            saw_source = 1;
+        } else if (kind == NYTPROF_V6_KIND_INDEX) {
+            saw_index = 1;
+        } else if (kind == NYTPROF_V6_KIND_SUMMARY) {
+            saw_summary = 1;
+        }
+        pos += NYTPROF_V6_CHUNK_HEADER_LEN + clen;
+    }
+    EXPECT(saw_event && saw_source && saw_index && saw_summary,
+           "wire has EVENT+SOURCE+INDEX+SUMMARY");
+    nytp_sink_destroy(s);
+}
+
 int main(void)
 {
     test_lockfile_ids();
@@ -727,6 +781,7 @@ int main(void)
     test_mid_record_overflow_rollback();
     test_emit_after_seal_state();
     test_version_non_v6();
+    test_mixed_source_index_summary();
 
     if (failures) {
         fprintf(stderr, "test_v6_abs_wire: %d failure(s)\n", failures);

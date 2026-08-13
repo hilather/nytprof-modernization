@@ -57,6 +57,8 @@ Same scaled dual-sink pairs as E4-v0:
 
 **Not** full oracle `fixtures/v5/*` counts (DISCOUNT 818 / TL 916 residual).
 
+**E4-01 / E4-02 / E4-03:** `fixtures/e4/oracle-pair/{default_calls1,blocks_calls1,calls2_default}_{v5,v6}.nytprof` — smoke asserts pair presence + `NYTProf 5` / `NYTPROF6` and, when a native CLI exists, shipped `report --json` leaf/mid/edge equality. Not full JSON equality. Not A4 **780** / SUB_ENTRY **27** / `format=dual` / `--allow-lossy`.
+
 ## Tests
 
 | Evidence | Command |

@@ -15,7 +15,7 @@ use JSON::PP;
 use Devel::NYTProf::LegacyBridge qw(run_legacy_report);
 use Devel::NYTProf::JsonlData;
 
-our $VERSION = '0.005';
+our $VERSION = '0.006';
 
 use Exporter qw(import);
 our @EXPORT_OK = qw(
@@ -179,13 +179,16 @@ sub find_repo_root {
 
 ## Locate the native nytprof CLI binary or a cargo-run recipe.
 ##
-## Order (per docs/schemas/native-install-mvp-v0.md):
+## Order (per docs/schemas/native-install-mvp-v0.md + I03 prefix install):
 ## 0. Test hook: NYTPROF_FORCE_NO_NATIVE truthy → croak immediately
 ## 1. $ENV{NYTPROF_NATIVE_CLI} if set and executable
-## 2. $repo_root/prefix/bin/nytprof-cli or prefix/bin/nytprof-dump
+## 2. Sibling of this process script dir (FindBin): $PREFIX/bin/nytprof-cli
+##    when nytprof-engine is installed next to the native CLI (I03)
+## 3. $repo_root/bin/nytprof-cli or nytprof-dump (repo_root is the prefix)
+## 4. $repo_root/prefix/bin/nytprof-cli or prefix/bin/nytprof-dump
 ##    (stable install via scripts/packaging/install_native.sh)
-## 3. $repo_root/target/release/nytprof-dump then target/debug/nytprof-dump
-## 4. cargo run -q -p nytprof-cli -- when cargo is on PATH
+## 5. $repo_root/target/release/nytprof-dump then target/debug/nytprof-dump
+## 6. cargo run -q -p nytprof-cli -- when cargo is on PATH and Cargo.toml exists
 ##
 ## Test hook: if C<NYTPROF_FORCE_NO_NATIVE=1> (or any non-empty truthy value
 ## other than C<0>/C<false>/C<no>/C<off>), discovery fails immediately — used
@@ -213,6 +216,25 @@ sub find_native_cli {
         }
     }
 
+    # I03: sibling of installed nytprof-engine ($PREFIX/bin/nytprof-cli).
+    # FindBin is already initialized by perl/bin/nytprof-engine when installed.
+    if ( eval { require FindBin; 1 } && defined $FindBin::Bin && length $FindBin::Bin ) {
+        for my $name (qw(nytprof-cli nytprof-dump)) {
+            my $sib = File::Spec->catfile( $FindBin::Bin, $name );
+            if ( -x $sib || ( -f $sib && -r $sib ) ) {
+                return { mode => 'path', path => abs_path($sib) // $sib };
+            }
+        }
+    }
+
+    # When find_repo_root failed, nytprof-engine sets repo_root to $PREFIX.
+    for my $name (qw(nytprof-cli nytprof-dump)) {
+        my $p = File::Spec->catfile( $repo_root, 'bin', $name );
+        if ( -x $p || ( -f $p && -r $p ) ) {
+            return { mode => 'path', path => abs_path($p) // $p };
+        }
+    }
+
     for my $rel (
         qw(
           prefix/bin/nytprof-cli
@@ -230,14 +252,18 @@ sub find_native_cli {
 
     if ( my $cargo = _which('cargo') ) {
         my $manifest = File::Spec->catfile( $repo_root, 'Cargo.toml' );
-        return {
-            mode => 'cargo',
-            argv => [
-                $cargo, 'run', '-q',
-                '--manifest-path', $manifest,
-                '-p', 'nytprof-cli', '--',
-            ],
-        };
+        # Prefix install has no workspace Cargo.toml — do not claim cargo
+        # native (engine=auto would then fail instead of falling back).
+        if ( -f $manifest ) {
+            return {
+                mode => 'cargo',
+                argv => [
+                    $cargo, 'run', '-q',
+                    '--manifest-path', $manifest,
+                    '-p', 'nytprof-cli', '--',
+                ],
+            };
+        }
     }
 
     croak
@@ -378,8 +404,6 @@ sub run_legacy {
 ## Returns 0 on success; croaks on hard failure.
 sub run_query {
     my ( $repo_root, %opts ) = @_;
-    croak "run_query: repo_root required"
-      if !defined $repo_root || !length $repo_root;
 
     my $jsonl   = $opts{jsonl};
     my $profile = $opts{profile};
@@ -387,11 +411,14 @@ sub run_query {
 
     my $data;
     if ( defined $jsonl && length $jsonl ) {
+        # Cargo-free: golden JSONL does not need Cargo.toml / repo_root.
         croak "run_query: jsonl path not readable: $jsonl"
           unless -f $jsonl && -r $jsonl;
         $data = Devel::NYTProf::JsonlData->from_jsonl($jsonl);
     }
     elsif ( defined $profile && length $profile ) {
+        croak "run_query: repo_root required for profile dump"
+          if !defined $repo_root || !length $repo_root;
         croak "run_query: profile path not readable: $profile"
           unless -f $profile && -r $profile;
         my $cli = find_native_cli($repo_root);

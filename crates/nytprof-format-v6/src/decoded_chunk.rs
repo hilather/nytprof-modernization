@@ -7,9 +7,7 @@
 //! Does **not** change default `parse_chunk_frame` semantics.
 //! Not dictionaries, not COL-007 C writer, not CLI v6 default.
 
-use crate::chunk::{
-    parse_chunk_frame, ChunkError, ChunkFrame, CHUNK_HEADER_LEN,
-};
+use crate::chunk::{parse_chunk_frame, ChunkError, ChunkFrame, CHUNK_HEADER_LEN};
 use crate::crc::{verify_chunk_payload_crc, CrcError};
 use crate::payload_codec::{decode_chunk_payload, PayloadCodecError};
 
@@ -117,10 +115,7 @@ pub fn decode_chunk_frame_plain(
 /// `CHUNK_HEADER_LEN + compressed_len` for the first frame in `buf`.
 ///
 /// Pure byte-slice API — no I/O. Does not mutate default parse policy.
-pub fn decode_chunk(
-    buf: &[u8],
-    verify_crc: bool,
-) -> DecodedChunkResult<(DecodedChunk, usize)> {
+pub fn decode_chunk(buf: &[u8], verify_crc: bool) -> DecodedChunkResult<(DecodedChunk, usize)> {
     let frame = parse_chunk_frame(buf)?;
     let n = CHUNK_HEADER_LEN + frame.payload.len();
     let plain = decode_chunk_frame_plain(&frame, verify_crc)?;

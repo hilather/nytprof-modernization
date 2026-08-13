@@ -253,17 +253,7 @@ mod tests {
     use super::*;
 
     fn minimal_event_frame() -> Vec<u8> {
-        encode_chunk_frame(
-            kind::EVENT,
-            codec::NONE,
-            0,
-            0,
-            0,
-            0,
-            0,
-            &[],
-            0,
-        )
+        encode_chunk_frame(kind::EVENT, codec::NONE, 0, 0, 0, 0, 0, &[], 0)
     }
 
     #[test]
@@ -329,17 +319,7 @@ mod tests {
 
     #[test]
     fn truncated_payload_err() {
-        let mut bytes = encode_chunk_frame(
-            kind::EVENT,
-            codec::NONE,
-            0,
-            0,
-            0,
-            0,
-            4,
-            b"abcd",
-            0,
-        );
+        let mut bytes = encode_chunk_frame(kind::EVENT, codec::NONE, 0, 0, 0, 0, 4, b"abcd", 0);
         // Claim compressed_len=4 but drop payload bytes.
         bytes.truncate(CHUNK_HEADER_LEN + 2);
         // Fix compressed_len field to still say 4.

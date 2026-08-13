@@ -155,9 +155,31 @@ perl Makefile.PL && make offline-gate          # CI-OFFLINE-GATE wrapper
 # optional native via Make (requires cargo):
 #   make native-install
 #   NYTPROF_NATIVE=1 perl Makefile.PL && make
+# I03 cargo-free product scripts (no cargo):
+#   make install-product-scripts
+#   make i03-dist-scripts-smoke
 
 # Or run steps individually:
 ./scripts/packaging/legacy_only_smoke.sh
+# G03a load + G04 attach-parity smokes (not wired into dual_path or offline_gate):
+#   https://github.com/hilather/nytprof-modernization/blob/main/scripts/packaging/product_attach_smoke.sh
+#   https://github.com/hilather/nytprof-modernization/blob/main/scripts/packaging/product_legacy_smoke.sh
+./scripts/packaging/product_attach_smoke.sh    # OK: G03a load (no file=)
+./scripts/packaging/g03b_stmt_emit_smoke.sh    # OK: G03b nytp_emit_*; NOT-YET: G06
+./scripts/packaging/g03c_sub_emit_smoke.sh     # OK: G03c nytp_emit_sub_*; NOT-YET: G06
+./scripts/packaging/g03d_meta_emit_smoke.sh    # OK: G03d nytp_emit_* meta; NOT-YET: G06
+./scripts/packaging/g03e_compress_emit_smoke.sh # OK: G03e start-deflate; mid-deflate fork residual
+./scripts/packaging/g04_v5_parity_smoke.sh     # OK: G04 live -d:NYTProf 15/3/15
+./scripts/packaging/g05_options_format_smoke.sh # OK: G05 unknown/dual/D1-B v6 fail-closed; D1-A NYTPROF6
+./scripts/packaging/g06_fork_addpid_smoke.sh    # OK: G06 live fork+addpid parent + <file>.<pid> NYTProf 5
+./scripts/packaging/product_legacy_smoke.sh    # I01: cargo-free prefix install + live attach 15/3/15
+./scripts/packaging/install_product_xs.sh      # I01: install product Devel::NYTProf (no cargo)
+./scripts/packaging/i02_makemaker_native_smoke.sh # I02: NYTPROF_NATIVE=1 fail-closed; auto/0 cargo-free; CLI 15/3/15
+./scripts/packaging/install_product_scripts.sh # I03: cargo-free EngineDispatch + nytprofhtml/csv
+./scripts/packaging/i03_dist_scripts_smoke.sh  # I03: installed query --json --jsonl 15/3/15
+./scripts/packaging/g01_drop_in_docs_selftest.sh  # G01 regression: drives the real smokes + KD greps
+# G02 v5-only product archive + load-only XS (not attach; not in dual_path / offline_gate):
+./scripts/packaging/g02_v5_product_link_smoke.sh
 ./scripts/packaging/engine_select_smoke.sh     # requires cargo + crates/
 ./scripts/packaging/perl_engine_dispatch_smoke.sh  # Perl facade: native + invalid + legacy
 ./scripts/packaging/install_native.sh          # install nytprof-cli → prefix/bin

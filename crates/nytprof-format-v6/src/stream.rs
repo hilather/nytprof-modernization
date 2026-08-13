@@ -9,9 +9,7 @@
 use crate::chunk::{
     encode_chunk_frame, parse_chunk_frame, ChunkError, ChunkFrame, CHUNK_HEADER_LEN,
 };
-use crate::file_prefix::{
-    decode_file_prefix, encode_file_prefix, FilePrefix, FilePrefixError,
-};
+use crate::file_prefix::{decode_file_prefix, encode_file_prefix, FilePrefix, FilePrefixError};
 
 /// Fail-closed stream composition errors (prefix + chunk frames).
 #[derive(Debug, PartialEq, Eq)]
@@ -123,15 +121,18 @@ pub fn decode_prefix_chunk_stream(buf: &[u8]) -> StreamResult<(PrefixChunkStream
     let mut chunks = Vec::new();
     while pos < buf.len() {
         let frame = parse_chunk_frame(&buf[pos..])?;
-        let frame_len = CHUNK_HEADER_LEN
-            .checked_add(frame.payload.len())
-            .ok_or(StreamError::Chunk(ChunkError::OversizeCompressed {
-                len: frame.compressed_len,
+        let frame_len =
+            CHUNK_HEADER_LEN
+                .checked_add(frame.payload.len())
+                .ok_or(StreamError::Chunk(ChunkError::OversizeCompressed {
+                    len: frame.compressed_len,
+                }))?;
+        pos = pos
+            .checked_add(frame_len)
+            .ok_or(StreamError::Chunk(ChunkError::Truncated {
+                need: frame_len,
+                got: buf.len().saturating_sub(pos),
             }))?;
-        pos = pos.checked_add(frame_len).ok_or(StreamError::Chunk(ChunkError::Truncated {
-            need: frame_len,
-            got: buf.len().saturating_sub(pos),
-        }))?;
         chunks.push(frame);
     }
     Ok((PrefixChunkStream { prefix, chunks }, pos))
@@ -142,8 +143,8 @@ mod tests {
     use super::*;
     use crate::chunk::{codec, kind, CHUNK_SYNC};
     use crate::tlv::type_id;
-    use crate::{FilePrefixError, HEADER_LEN_FULL, MAGIC, SUPPORTED_MAJOR};
     use crate::Error as HeaderError;
+    use crate::{FilePrefixError, HEADER_LEN_FULL, MAGIC, SUPPORTED_MAJOR};
 
     fn empty_prefix_args() -> (u16, u16, u64, u64, u32) {
         (SUPPORTED_MAJOR, 0, 0, 0, 0)
@@ -189,8 +190,7 @@ mod tests {
         }];
         let enc = encode_prefix_chunk_stream(SUPPORTED_MAJOR, 1, 0, 0, 0, &items, &specs);
         // Length must be prefix + one frame (no hardcoded golden detached from encode).
-        let prefix_only =
-            encode_file_prefix(SUPPORTED_MAJOR, 1, 0, 0, 0, &items);
+        let prefix_only = encode_file_prefix(SUPPORTED_MAJOR, 1, 0, 0, 0, &items);
         let one_frame = encode_chunk_frame(
             kind::EVENT,
             codec::NONE,
@@ -214,10 +214,7 @@ mod tests {
         assert_eq!(stream.chunks[0].codec, codec::NONE);
         assert_eq!(stream.chunks[0].sequence, 1);
         assert_eq!(stream.chunks[0].payload, payload);
-        assert_eq!(
-            stream.chunks[0].compressed_len,
-            payload.len() as u32
-        );
+        assert_eq!(stream.chunks[0].compressed_len, payload.len() as u32);
 
         // Two-chunk stream.
         let specs2 = [
@@ -269,8 +266,7 @@ mod tests {
             payload,
             payload_checksum: 0,
         }];
-        let mut enc =
-            encode_prefix_chunk_stream(SUPPORTED_MAJOR, 0, 0, 0, 0, &[], &specs);
+        let mut enc = encode_prefix_chunk_stream(SUPPORTED_MAJOR, 0, 0, 0, 0, &[], &specs);
         // Chop into the middle of the chunk payload (keep full prefix).
         let prefix_n = encode_file_prefix(SUPPORTED_MAJOR, 0, 0, 0, 0, &[]).len();
         assert!(enc.len() > prefix_n + CHUNK_HEADER_LEN + 4);

@@ -25,7 +25,7 @@ fail() { printf 'ERROR: %s\n' "$*" >&2; exit 1; }
 banner() { printf '\n=== %s ===\n' "$*"; }
 note() { printf 'NOTE: %s\n' "$*"; }
 
-banner "e3_c_writer_parity (COL-007 product E3-EVENT with C bytes)"
+banner "e3_c_writer_parity (COL-007 product E3-EVENT + E3-mixed C bytes)"
 
 # Isolation: never put crates/ or collector/ on oracle PERL5LIB.
 assert_no_bad_perl5lib() {
@@ -53,6 +53,10 @@ MATRIX=(
   mid_stream_dict.nytprof
 )
 
+MIXED=(
+  mixed.nytprof
+)
+
 # Optional regenerate from C sink (product bytes must stay C-produced).
 if [[ "${NYTPROF_REGEN_E3_C:-0}" == "1" ]]; then
   banner "regenerate C fixtures (NYTPROF_REGEN_E3_C=1)"
@@ -64,7 +68,7 @@ fi
 
 banner "committed C fixture matrix present"
 [[ -d "$FIXTURE_DIR" ]] || fail "missing $FIXTURE_DIR (run make -C collector gen-e3-fixtures)"
-for f in "${MATRIX[@]}"; do
+for f in "${MATRIX[@]}" "${MIXED[@]}"; do
   path="$FIXTURE_DIR/$f"
   [[ -f "$path" ]] || fail "missing C fixture $path"
   [[ -s "$path" ]] || fail "empty C fixture $path"
@@ -96,6 +100,7 @@ if command -v cargo >/dev/null 2>&1; then
   banner "product E3 cargo tests (e3_c_*)"
   cargo test -q -p nytprof-format-v6 e3_c_ -- --nocapture
   ok "cargo test -p nytprof-format-v6 e3_c_"
+  ok "E3-mixed SOURCE/INDEX/SUMMARY decoded from C mixed.nytprof (e3_c_mixed_*)"
 else
   note "skip cargo E3 decode (no cargo) — fixture presence still checked"
   # Without cargo we cannot run product E3 equality; fail closed if this is
@@ -108,9 +113,9 @@ else
 fi
 
 note "E3-EVENT ready with C (absolute/packing/dict/mid-stream matrix)"
-note "E3-mixed residual: SOURCE/INDEX/SUMMARY multi-kind product C fixtures not claimed"
-note "Not wire freeze; not CLI v6 default; not E4 enforcement; COL-008 deferred"
+note "E3-mixed MVP: SOURCE/INDEX/SUMMARY product C fixture mixed.nytprof"
+note "Not TEST-008; not COL-008; not CLI v6 collection default; not S2; not R3/R4 flip"
 
 banner "e3_c_writer_parity PASSED"
-ok "COL-007 product E3-EVENT with real C bytes"
+ok "COL-007 product E3-EVENT + E3-mixed with real C bytes"
 exit 0

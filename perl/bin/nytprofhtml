@@ -1,0 +1,11 @@
+#!/usr/bin/env perl
+# Familiar 6.15-style name → sibling nytprof-engine html (I03).
+# Not the oracle nytprofhtml (no full 6.15 DOM / Reader / Data).
+use strict;
+use warnings;
+use FindBin;
+use File::Spec;
+
+my $engine = File::Spec->catfile( $FindBin::Bin, 'nytprof-engine' );
+exec $^X, $engine, 'html', @ARGV
+  or die "nytprofhtml: cannot exec $engine: $!\n";

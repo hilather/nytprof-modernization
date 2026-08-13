@@ -4,7 +4,7 @@
 **Status:** implemented (PR-C02)  
 **Plan tasks:** TOOL-007 (salvage), TOOL-009 (merge scoped), RUST-013 (stream-concat MVP)  
 **Depends on:** strict convert encoders (PR-C01), product dual decode, absolute v6 EVENT encode  
-**Not:** full `nytprofmerge` aggregate-sum parity, SEC-003 multi-chunk mid-corruption matrix, packing/string-dict v6 output, lossy convert
+**Not:** full `nytprofmerge` option / eval-fold / overflow parity (L02 aggregate-sum MVP is opt-in), SEC-003 multi-chunk mid-corruption matrix, packing/string-dict v6 output
 
 ## Goal
 
@@ -19,7 +19,7 @@ Operators get **unambiguous recovery semantics** for v5/v6 profiles:
 ## CLI
 
 ```text
-nytprof-cli merge --to=v5|v6 -o <output> <input> [<input>...]
+nytprof-cli merge --to=v5|v6 [--aggregate-sum] -o <output> <input> [<input>...]
 nytprof-cli repack [--to=v5|v6] <input> -o <output>
 nytprof-cli salvage [--to=v5|v6] <input> -o <output>
 ```
@@ -27,6 +27,7 @@ nytprof-cli salvage [--to=v5|v6] <input> -o <output>
 | Flag | merge | repack | salvage |
 |------|-------|--------|---------|
 | `--to=v5\|v6` | **required** | optional (default: input family) | optional (default: input family) |
+| `--aggregate-sum` | opt-in same-filename A4/A5 sum (L02) | n/a | n/a |
 | `-o` / `--output` | **required** | **required** | **required** |
 | inputs | ≥1 path | 1 path | 1 path |
 
@@ -53,7 +54,7 @@ Exit **≠ 0** on decode/encode failure (merge/repack) or zero recoverable event
 6. `seq` renumbered 0..n-1.
 7. Encode via strict convert path (`encode_events` → absolute v6 EVENT or v5).
 
-**Not** legacy `nytprofmerge` same-run line-total sum (residual).
+Default is **not** legacy `nytprofmerge` same-run line-total sum. Opt-in `--aggregate-sum` / `MergeMode::AggregateSum` is **L02 MVP** ([`merge-aggregate-sum-mvp-v0.md`](https://github.com/hilather/nytprof-modernization/blob/main/docs/schemas/merge-aggregate-sum-mvp-v0.md)). Full option parity remains residual.
 
 ### repack
 
@@ -79,7 +80,7 @@ Exit **≠ 0** on decode/encode failure (merge/repack) or zero recoverable event
 
 ```text
 nytprof_model::{
-  merge_bytes, merge_paths,
+  merge_bytes, merge_paths, merge_bytes_with, merge_paths_with, MergeMode,
   repack_bytes, repack_path,
   salvage_bytes, salvage_path, SalvageReport,
   detect_convert_target,
@@ -114,10 +115,10 @@ Live probe (when dual-sink m4 fixtures present): repack v5→v6 + verify; merge 
 
 | Residual | Notes |
 |----------|--------|
-| Full `nytprofmerge` aggregate-sum / option parity | Not this MVP (stream-concat + fid remap only) |
+| Full `nytprofmerge` option / eval-fold / overflow parity | L02 opt-in aggregate-sum MVP landed; concat remains default |
 | SEC-003 multi-chunk mid-corruption resume matrix | Progressive v5 + v6 trailing strip; full fuzz corpus later (PR-C03) |
 | Packing / string-dict v6 output | Absolute EVENT / v5 only (via convert encoders) |
-| Lossy convert | Not shipped |
+| Lossy convert | L01 `--allow-lossy` is opt-in on convert; merge still uses strict encode |
 | Automatic salvage as default verify/report | **Forbidden** (COMPAT-010); salvage is explicit CLI |
 | Oracle wall-NV PID refuse on v5→v6 encode paths | Same as convert residual when targeting v6 from fractional wall times |
 

@@ -26,6 +26,22 @@ fn run(args: &[&str]) -> (i32, String, String) {
     (code, stdout, stderr)
 }
 
+fn json_u64(blob: &str, key: &str) -> u64 {
+    let needle = format!("\"{key}\"");
+    for part in blob.split(&needle).skip(1) {
+        let rest = part.trim_start();
+        let rest = rest.strip_prefix(':').unwrap_or(rest).trim_start();
+        let num: String = rest
+            .chars()
+            .take_while(|c| c.is_ascii_digit())
+            .collect();
+        if let Ok(v) = num.parse::<u64>() {
+            return v;
+        }
+    }
+    panic!("missing numeric {key} in JSON:\n{blob}");
+}
+
 fn tmp_dir() -> PathBuf {
     let dir = std::env::temp_dir().join(format!(
         "nytprof-mrs-cli-{}-{}",
@@ -105,6 +121,96 @@ fn merge_mixed_v5_v6_to_v6() {
     assert_eq!(code, 0, "mixed merge\n{stdout}\n{stderr}");
     let bytes = std::fs::read(&out).unwrap();
     assert!(bytes.starts_with(b"NYTPROF6"));
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn merge_aggregate_sum_default_calls1_v6_sums_line_calls() {
+    let input = dual("default_calls1", "v6");
+    assert!(input.is_file(), "missing {}", input.display());
+    let dir = tmp_dir();
+    let concat_out = dir.join("concat.v6");
+    let sum_out = dir.join("sum.v6");
+
+    let (c0, one_json, one_err) = run(&["report", "--json", input.to_str().unwrap()]);
+    assert_eq!(c0, 0, "report one\n{one_json}\n{one_err}");
+    let one_line = json_u64(&one_json, "line_calls_1_5");
+    let one_leaf = json_u64(&one_json, "leaf_returns");
+    assert!(one_line >= 1, "expected line_calls_1_5 on default_calls1: {one_json}");
+
+    let (code, stdout, stderr) = run(&[
+        "merge",
+        "--to=v6",
+        "-o",
+        concat_out.to_str().unwrap(),
+        input.to_str().unwrap(),
+        input.to_str().unwrap(),
+    ]);
+    assert_eq!(code, 0, "concat merge\n{stdout}\n{stderr}");
+    assert!(
+        stdout.lines().any(|l| l.starts_with("OK: merge")),
+        "missing OK: merge\n{stdout}"
+    );
+    assert!(
+        !stdout.contains("--aggregate-sum"),
+        "default merge must stay stream-concat\n{stdout}"
+    );
+
+    let (cc, concat_json, cerr) = run(&["report", "--json", concat_out.to_str().unwrap()]);
+    assert_eq!(cc, 0, "report concat\n{concat_json}\n{cerr}");
+    assert_eq!(
+        json_u64(&concat_json, "line_calls_1_5"),
+        one_line,
+        "concat must not sum fid 1 line 5"
+    );
+
+    let (scode, sstdout, sstderr) = run(&[
+        "merge",
+        "--to=v6",
+        "--aggregate-sum",
+        "-o",
+        sum_out.to_str().unwrap(),
+        input.to_str().unwrap(),
+        input.to_str().unwrap(),
+    ]);
+    assert_eq!(scode, 0, "aggregate-sum merge\n{sstdout}\n{sstderr}");
+    assert!(
+        sstdout.lines().any(|l| l.starts_with("OK: merge") && l.contains("--aggregate-sum")),
+        "missing OK: merge --aggregate-sum\n{sstdout}"
+    );
+    let (sc, sum_json, serr) = run(&["report", "--json", sum_out.to_str().unwrap()]);
+    assert_eq!(sc, 0, "report sum\n{sum_json}\n{serr}");
+    assert_eq!(
+        json_u64(&sum_json, "line_calls_1_5"),
+        one_line.saturating_mul(2),
+        "aggregate-sum must combine line_calls_1_5"
+    );
+    assert_eq!(
+        json_u64(&sum_json, "leaf_returns"),
+        one_leaf.saturating_mul(2)
+    );
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn merge_aggregate_sum_refuses_corrupt_member() {
+    let good = dual("default_calls1", "v6");
+    assert!(good.is_file());
+    let dir = tmp_dir();
+    let bad = dir.join("bad.nytprof");
+    std::fs::write(&bad, b"not-a-profile").unwrap();
+    let out = dir.join("out.v6");
+    let (code, stdout, _stderr) = run(&[
+        "merge",
+        "--to=v6",
+        "--aggregate-sum",
+        "-o",
+        out.to_str().unwrap(),
+        good.to_str().unwrap(),
+        bad.to_str().unwrap(),
+    ]);
+    assert_ne!(code, 0, "corrupt member must fail\n{stdout}");
+    assert!(!stdout.lines().any(|l| l.starts_with("OK: merge")));
     let _ = std::fs::remove_dir_all(&dir);
 }
 
@@ -216,5 +322,9 @@ fn help_mentions_merge_repack_salvage() {
     assert!(
         text.contains("incomplete") || text.contains("verified"),
         "help should mention recovery semantics"
+    );
+    assert!(
+        text.contains("--aggregate-sum"),
+        "help missing --aggregate-sum"
     );
 }

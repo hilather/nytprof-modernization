@@ -26,7 +26,7 @@ This runbook is the single operator entry for **offline developer preview** of t
 - performance certification or public perf claims;
 - a CPAN upload or full **BUILD-003** XS dual-build certification;
 - full **RUST-010** beyond open/query/close MVP, or full **COMPAT-007 / pure-XS** Data materialization (thin product Data/ReadStream MVP is shipped under **PERL-XS-DATA-READSTREAM-MVP**);
-- full oracle **`nytprofhtml` DOM** / tablesorter / flame / Graphviz parity (A01/A02 MVP HTML only; A03 flame open; WAIVE classes residual);
+- full oracle **`nytprofhtml` DOM** / tablesorter / flame / Graphviz parity (A01/A02 MVP HTML only; Shared JS/tablesorter **WAIVE** for GA-candidate — **PR-M01**; A03 flame open; other WAIVE classes residual);
 - **v6** wire freeze, CLI v6 default, or **COL-007** C v6 writer;
 - performance certification or public perf SLOs (**A09 default = WAIVE**);
 - permission to flip product defaults (`engine=auto` as R3 product default, format defaults — charter R3/R4).
@@ -66,7 +66,7 @@ Policy: [BUILD_SUPPORT_POLICY.md](https://github.com/hilather/nytprof-modernizat
 | 8 | `./scripts/packaging/native_query_json_cross_smoke.sh` | **Optional when native** (**NATIVE-QUERY-JSON-CROSS** / **CROSS-EXPAND** / **CROSS-BLOCKS** / **CROSS-META** / **CROSS-TIMEBLOCK** / **CROSS-COUNTS** / **CROSS-TOTAL**: native `report --json` ↔ Perl `query --json` **15/3/15** + discount **818** + `sub_entry_events` **0** when both expose; calls2 **27**; blocks-calls1 **780**/**810**; `time_block_events` **0**/**916** when both expose; event counts **27/3/13/632/31** + `file_1_basename` when both expose; default-calls1 stream/PID + A9/A8 + greppable meta when both expose) |
 | 9 | `./scripts/packaging/capability_selftest_smoke.sh` | Run when cargo **or** `prefix`/`target` native CLI (or `$NYTPROF_NATIVE_CLI`); **honest skip** otherwise (**CI-CAPABILITY-GATE**) |
 | 10 | `./scripts/packaging/collector_sink_smoke.sh` | **COL-001..007 + COL-014 dual (test/dev-only OQ-4)** — isolation always; `make -C collector test` when CC; honest skip without C. |
-| 11 | `./tools/oracle/e3_c_writer_parity.sh` | **COL-007 product E3-EVENT** (when cargo): C fixtures `fixtures/v6/from-c/**` + `e3_c_*`; E3-mixed residual; honest skip without cargo (fixture presence still checked). |
+| 11 | `./tools/oracle/e3_c_writer_parity.sh` | **COL-007 product E3-EVENT + E3-mixed MVP** (when cargo): C fixtures `fixtures/v6/from-c/**` incl. `mixed.nytprof` + `e3_c_*` / `e3_c_mixed_*`; honest skip without cargo (fixture presence + NYTPROF6 still checked). **Not** TEST-008 / COL-008 / CLI v6 collection default. |
 | 12 | `./scripts/packaging/e4_v5_v6_semantic_smoke.sh --full` | When native CLI available (**E4 product CLI** on dual-sink pairs); honest skip otherwise; dual-sink fixture presence still required; full oracle dual residual (TEST-008) |
 
 Not part of this gate (document only): broader `./scripts/packaging/packaging_gate.sh`, `./scripts/packaging/makemaker_dual_path_smoke.sh`. Multi-OS matrix entry is separate: `./scripts/ci/matrix_gate.sh` + GHA **BUILD-006-MVP** (not full **BUILD-006**).
@@ -376,10 +376,44 @@ Stream bridge: [perl-jsonl-readstream-mvp-v0.md](https://github.com/hilather/nyt
 | [R3_DEFAULT_FLIP.md](https://github.com/hilather/nytprof-modernization/blob/main/docs/R3_DEFAULT_FLIP.md) | R3 flip execution + rollback checklist (gated on accepted field report) |
 | [0009-r5-legacy-retirement-governance.md](https://github.com/hilather/nytprof-modernization/blob/main/docs/adrs/0009-r5-legacy-retirement-governance.md) | **ADR-0009** R5 retirement governance (PR-F01; **no** component retired) |
 | [R5_RETIREMENT_REVIEW.md](https://github.com/hilather/nytprof-modernization/blob/main/docs/R5_RETIREMENT_REVIEW.md) | R5 per-component review + retirement checklist (never automatic) |
+| [DROP_IN_DOD_v0.md](https://github.com/hilather/nytprof-modernization/blob/main/docs/contracts/DROP_IN_DOD_v0.md) | Drop-in D1–D6 contract (**docs-landed**; attach not ready) |
+| [product-xs-graft-annex-v0.md](https://github.com/hilather/nytprof-modernization/blob/main/docs/schemas/product-xs-graft-annex-v0.md) | Graft annex A–C (A.6 archive + bootstrap landed; A.4 G03a–G03e emit + G04 attach-MVP landed; A.5 fake-clock mini landed; mid-deflate fork / G05 / G06 residual) |
+| [PRODUCT_COMPLETION_DROP_IN_v0.md](https://github.com/hilather/nytprof-modernization/blob/main/docs/PRODUCT_COMPLETION_DROP_IN_v0.md) | Approved rev-4 drop-in design (PR-G01) |
 
 ---
 
 ## 7. Explicit residual honesty
+
+### 7.0 Drop-in contracts (PR-G01 docs-landed + PR-G02 scaffold + PR-G03a–e emit + PR-G04 attach-MVP)
+
+G01 landed the drop-in DoD, graft annex, and three isolation profiles. G02 landed the **v5-only product archive** and a **load-only** bootstrap XS. G03a landed product `perl -d:NYTProf` **load** (in-memory sink; no `nytprof.out` on trivial `-e`). G03b–G03e landed **emit-MVP**. G04 landed **attach-MVP**: live `perl -d:NYTProf` with `NYTPROF file=` on default-calls1-shaped work; shipped dump/report of those bytes shows leaf **15** / mid **3** / mid→leaf **15** (Perl `DB::sub`/`DB::DB`, not full 6.15 opcode/`entersub`). G05 landed **options/`format=v6` tests**: unknown + `format=dual` fail-closed; D1-B `format=v6` fail-closed (`v6_collect` rebuild text, no `NYTPROF6`); D1-A `xs-nytprof-v6` writes `NYTPROF6`; default/`format=v5` still 15/3/15. Dual-path remains **oracle-primary** (`legacy_only_smoke.sh` first half). `collection_default` stays **v5**. G06 landed **fork/`addpid` MVP**: live `fork` + `addpid=1` writes parent `NYTProf 5` and `<file>.<childpid>` `NYTProf 5` ([g06_fork_addpid_smoke.sh](https://github.com/hilather/nytprof-modernization/blob/main/scripts/packaging/g06_fork_addpid_smoke.sh)). Dual-path remains **oracle-primary**. `collection_default` stays **v5**. **Residuals:** mid-deflate continue-in-child, TEST-018, `sigexit`, blocks-calls1 line5 **780**.
+
+| Item | Honesty |
+|------|---------|
+| `DROP-IN-DOD-V0` | **docs-landed** — [DROP_IN_DOD_v0.md](https://github.com/hilather/nytprof-modernization/blob/main/docs/contracts/DROP_IN_DOD_v0.md) |
+| Graft annex | A.6 **G02 landed**; A.4 G03a **load** + G03b **stmt emit** + G03c **sub emit** + G03d **meta/finalize** + G03e **compress landed**; A.5 fake-clock mini landed; mid-deflate fork residual — [product-xs-graft-annex-v0.md](https://github.com/hilather/nytprof-modernization/blob/main/docs/schemas/product-xs-graft-annex-v0.md) |
+| `G02-V5-PRODUCT-LINK` | **done (scaffold)** — `libnytp_sink_v5.a` + CollectorBootstrap; [g02_v5_product_link_smoke.sh](https://github.com/hilather/nytprof-modernization/blob/main/scripts/packaging/g02_v5_product_link_smoke.sh) |
+| `G03A-LOAD-ONLY` | **done** — product `-d:NYTProf` loads; no `nytprof.out` on trivial `-e` |
+| `G03B-STMT-EMIT` | **done** — `nytp_emit_*` statement path + fake-clock mini; [g03b_stmt_emit_smoke.sh](https://github.com/hilather/nytprof-modernization/blob/main/scripts/packaging/g03b_stmt_emit_smoke.sh) |
+| `G03C-SUB-EMIT` | **done** — `nytp_emit_sub_*` call path; dump SUB_ENTRY / SUB_RETURN; [g03c_sub_emit_smoke.sh](https://github.com/hilather/nytprof-modernization/blob/main/scripts/packaging/g03c_sub_emit_smoke.sh) |
+| `G03D-META-EMIT` | **done** — `nytp_emit_*` meta/finalize; dump ATTRIBUTE / OPTION / NEW_FID / SRC_LINE / SUB_INFO / PID_START / PID_END; [g03d_meta_emit_smoke.sh](https://github.com/hilather/nytprof-modernization/blob/main/scripts/packaging/g03d_meta_emit_smoke.sh) |
+| `G03E-COMPRESS-EMIT` | **done** — `nytp_emit_start_deflate`; dump/verify inflate recovers a post-deflate event; mid-deflate fork residual; [g03e_compress_emit_smoke.sh](https://github.com/hilather/nytprof-modernization/blob/main/scripts/packaging/g03e_compress_emit_smoke.sh) |
+| `PRODUCT-XS-ATTACH-MVP` / collection attach | **done (MVP)** — [g04_v5_parity_smoke.sh](https://github.com/hilather/nytprof-modernization/blob/main/scripts/packaging/g04_v5_parity_smoke.sh) leaf **15** / mid **3** / edge **15**; not full opcode |
+| `PRODUCT-FORK-ADDPID-MVP` | **done (MVP)** — [g06_fork_addpid_smoke.sh](https://github.com/hilather/nytprof-modernization/blob/main/scripts/packaging/g06_fork_addpid_smoke.sh) parent + `<file>.<pid>` `NYTProf 5`; not TEST-018 / mid-deflate-in-child |
+| `product_attach_smoke.sh` | G03a load via real `-d:NYTProf` (no `file=`); not in `offline_gate.sh` |
+| `product_legacy_smoke.sh` | **I01 done (MVP)** — cargo-free prefix install + live attach 15/3/15; not in `offline_gate.sh`; S2 dual_path not claimed |
+| `I02-MAKEMAKER-NATIVE` | **done (MVP)** — [i02_makemaker_native_smoke.sh](https://github.com/hilather/nytprof-modernization/blob/main/scripts/packaging/i02_makemaker_native_smoke.sh): `NYTPROF_NATIVE=1` fail-closed without cargo; `auto`/`=0` cargo-free; cargo-present `nytprof-cli` 15/3/15 |
+| `I03-DIST-SCRIPTS` | **done (MVP)** — [install_product_scripts.sh](https://github.com/hilather/nytprof-modernization/blob/main/scripts/packaging/install_product_scripts.sh) + [i03_dist_scripts_smoke.sh](https://github.com/hilather/nytprof-modernization/blob/main/scripts/packaging/i03_dist_scripts_smoke.sh): cargo-free EngineDispatch + `nytprofhtml`/`nytprofcsv`; installed `query --json --jsonl` 15/3/15. **Not** 6.15 nytprofhtml DOM / S2 |
+| `J01-CPAN-HYGIENE` | **done (MVP)** — [j01_cpan_hygiene_smoke.sh](https://github.com/hilather/nytprof-modernization/blob/main/scripts/packaging/j01_cpan_hygiene_smoke.sh): `Makefile.PL` MYMETA `Devel-NYTProf` **7.00**; MANIFEST excludes `baseline/` `target/` `prefix/`. **Not** TRIAL/PAUSE |
+| `MIG01-MIGRATION-GUIDE` | **done (docs)** — [MIGRATION_DROP_IN_v0.md](https://github.com/hilather/nytprof-modernization/blob/main/docs/MIGRATION_DROP_IN_v0.md) |
+| `K03-PREBUILT-CLI-ADR` | **done (docs)** — [ADR-0010](https://github.com/hilather/nytprof-modernization/blob/main/docs/adrs/0010-signed-ci-prebuilt-native-cli.md); `EL8-RPM-TOOLS` residual |
+| `M01-HTML-JS-WAIVE` | **done (docs)** — Shared JS/tablesorter **WAIVE** for GA-candidate; jquery not shipped |
+| `CPAN-TRIAL-READY` | **done (notes-ready / MVP)** — [RELEASE_NOTES_CPAN_TRIAL_v0.md](https://github.com/hilather/nytprof-modernization/blob/main/docs/RELEASE_NOTES_CPAN_TRIAL_v0.md); **not** PAUSE uploaded |
+| `EL8-RPM-MODULE` | **done (MVP)** — [perl-Devel-NYTProf.spec](https://github.com/hilather/nytprof-modernization/blob/main/packaging/rpm/perl-Devel-NYTProf.spec) D1-B; **not** mock-certified / tools RPM |
+| `EL8-RPM-TOOLS` | **done (MVP)** — [nytprof-cli.spec](https://github.com/hilather/nytprof-modernization/blob/main/packaging/rpm/nytprof-cli.spec) companion; **not** signed-pipeline complete |
+| `P01-GA-CANDIDATE` | **done (MVP)** — [RELEASE_NOTES_GA_CANDIDATE_v0.md](https://github.com/hilather/nytprof-modernization/blob/main/docs/RELEASE_NOTES_GA_CANDIDATE_v0.md); Rocky default **D1-B only**; **not** SEC-012 complete / R3–R4 |
+| `P02-SEC-CUT` | **done (MVP / checklist / job)** — [SEC_012_RELEASE_REVIEW_CHECKLIST_v0.md](https://github.com/hilather/nytprof-modernization/blob/main/docs/contracts/SEC_012_RELEASE_REVIEW_CHECKLIST_v0.md); [sec002_continuous_fuzz_mvp.sh](https://github.com/hilather/nytprof-modernization/blob/main/scripts/ci/sec002_continuous_fuzz_mvp.sh) wraps `selftest_security_fuzz.sh`; **not** independent sign-off / GA marketing / S2 |
+| `BUILD-003-FULL` | **residual** |
 
 ### 7.1 Full R1 MVP product cut (PR-A10)
 
@@ -390,7 +424,7 @@ Per [ADR-0003](https://github.com/hilather/nytprof-modernization/blob/main/docs/
 | **FFI (OQ-2 / A05)** | **closed (MVP)** — `crates/nytprof-ffi` open/query/close | full RUST-010 (batch APIs, BUILD-007, production dylib install, ABI freeze) |
 | **XS Data/ReadStream (OQ-2 / A06)** | **closed (MVP)** — binary via native dump → Jsonl* | COMPAT-007 bless-array; pure-XS wire decode |
 | **HTML A01/A02** | **closed (MVP)** — shared CSS/structure; `index-subs-excl.html` | full oracle DOM |
-| **HTML Shared JS** | **OPEN residual (CLOSE path)** — A01 CSS-only; tablesorter/jquery not shipped | Shared JS/tablesorter as native-ready |
+| **HTML Shared JS** | **WAIVE** — **PR-M01** / Q4 user-final; A01 CSS-only; tablesorter/jquery **not** shipped (not a remaining CLOSE requirement) | Shared JS/tablesorter as native-ready |
 | **HTML A03 flame** | **residual open** | native flame SVG / site flame inputs as ready |
 | **HTML WAIVE classes** | **waived** (residual-honest) | Graphviz, treemap, block/sub pages, oracle naming as native-ready |
 | **Multi-OS (A07)** | **closed (MVP)** — GHA Linux + macOS | full multi-Perl/rustc/Windows certification |
@@ -438,7 +472,7 @@ Do **not** over-claim preview surfaces as complete product residual-table close.
 | **No product default flip** | Native remains opt-in; Perl `engine=auto` is facade behavior, not charter R3 product default. |
 | **Convert / merge / salvage (R2-stable tooling)** | Capability `convert`/`merge`/`repack`/`salvage` **true** on integrated R2-stable stack (PR-C01/C02). |
 | **FFI / XS Data residual** | **FFI MVP (PR-A05 / `FFI-CDYLIB-MVP`):** `crates/nytprof-ffi` cdylib open/query/close C ABI over `ProfileModel` is shipped ([`docs/schemas/ffi-cdylib-mvp-v0.md`](https://github.com/hilather/nytprof-modernization/blob/main/docs/schemas/ffi-cdylib-mvp-v0.md)); panic-safe; dual-path still works **without** loading the dylib. **XS Data/ReadStream MVP (PR-A06 / `PERL-XS-DATA-READSTREAM-MVP`):** product `Devel::NYTProf::Data` + `::ReadStream` open **binary** profiles via native dump → JsonlData/JsonlReadStream ([`docs/schemas/perl-xs-data-readstream-mvp-v0.md`](https://github.com/hilather/nytprof-modernization/blob/main/docs/schemas/perl-xs-data-readstream-mvp-v0.md)); smoke `./scripts/packaging/perl_xs_data_readstream_smoke.sh`; `claims_compat007_shapes=0`. **Still residual:** full RUST-010; full PERL-004 pure-XS; full PERL-005 COMPAT-007. Preview primary = CLI subprocess + pure-Perl Jsonl* + product thin binary facades. |
-| **No full nytprofhtml DOM** | Native HTML is MVP summary / multi-file site (A01 CSS + A02 excl index) — not oracle DOM, Shared JS/tablesorter (**OPEN CLOSE residual**), flame SVG (A03 open), Graphviz. See HTML residual inventory + **ADR-0003** per-class map. |
+| **No full nytprofhtml DOM** | Native HTML is MVP summary / multi-file site (A01 CSS + A02 excl index) — not oracle DOM, Shared JS/tablesorter (**WAIVE** for GA-candidate — **PR-M01** / Q4; not shipped), flame SVG (A03 open), Graphviz. See HTML residual inventory + **ADR-0003** per-class map (M01 amendment). |
 | **No v6 / COL-007** | No v6 wire freeze; C v6 writer (**COL-007**) deferred; COL-008 non-baseline. Collector remains 6.15 oracle / v5. Provisional `nytprof-format-v6` preflight only — **not** product writer / CLI v6 default. |
 | **No performance claims** | Public SLOs **WAIVED** (`docs/BENCH_NOTES.md`, `tools/bench/light_bench.sh` only). |
 | **No full MakeMaker XS CPAN dual-build** | **BUILD-MAKEMAKER-OPT** + **BUILD-003-DEPTH** partial only — **not** BUILD-003 full. |
@@ -493,7 +527,7 @@ R2-stable is the Phase C certification cut on the **integrated** stack (PR-C01..
 | v6 offline CLI (E5) opt-in read/report | **yes** |
 | Strict convert + merge/repack/salvage | **yes** (capability true) |
 | COL-015 fork/PID MVP | **yes** (stress suite; oracle TEST-018 residual) |
-| SEC-FUZZ offline package | **yes** (not full SEC-002 continuous) |
+| SEC-FUZZ offline package | **yes** (P02 SEC-002 **job MVP**; not cargo-fuzz/AFL) |
 | P1/P2 public performance SLOs | **waived** (methodology + light harness only) |
 | Collection / engine defaults (R3/R4) | **runtime not claimed** (`collection_default: v5`; R4 policy ADR-0008 / flip checklist only) |
 | E3-mixed / full oracle E4 | **residual** |
@@ -762,8 +796,8 @@ Also on blocks-calls1 when asserted: leaf returns **15**, mid returns **3** (sam
 | `FMT-V6-EVENT-BODY-SRC-LINE-NEW-FID-PROVISIONAL` | **done** | SRC_LINE + NEW_FID provisional event-body opcodes. Not full catalog freeze. Default `parse_chunk_frame` stays non-inflating. **Before full COL-007.** |
 | `FMT-V6-EVENT-BODY-SRC-LINE-NEW-FID-MVP` | **done** | Event-body SRC_LINE/NEW_FID + always-inflate EVENT/mixed tests. **Before full COL-007.** |
 | `FMT-V6-EVENT-BODY-PID-START-END-PROVISIONAL` | **done** | PID_START + PID_END provisional event-body opcodes. Not full catalog freeze / COL-015. Default `parse_chunk_frame` stays non-inflating. **Before full COL-007.** |
-| **No full continuous fuzz / SEC-012** | Offline package **SEC-FUZZ-HARDENING-MVP** (PR-C03) covers deterministic v5+v6 batteries + batch/fork threat catalogue — **not** SEC-002 continuous fuzz jobs, sanitizer matrices, or independent SEC-012 release sign-off. Contract: [`SECURITY_FUZZ_HARDENING_PACKAGE_v0.md`](https://github.com/hilather/nytprof-modernization/blob/main/docs/contracts/SECURITY_FUZZ_HARDENING_PACKAGE_v0.md). |
-| 12 | `./tools/oracle/selftest_security_fuzz.sh` | **SEC-FUZZ-HARDENING-MVP** (when cargo): v5+v6 decode-fuzz batteries + optional collector batch/fork unit suite; honest skip without cargo. **Not** full SEC-002 continuous fuzz; COL-015 residual. |
+| **No independent SEC-012 / no full continuous fuzz** | P02 landed a **checklist** ([`SEC_012_RELEASE_REVIEW_CHECKLIST_v0.md`](https://github.com/hilather/nytprof-modernization/blob/main/docs/contracts/SEC_012_RELEASE_REVIEW_CHECKLIST_v0.md)) and a **job MVP** (`scripts/ci/sec002_continuous_fuzz_mvp.sh` + `.github/workflows/sec002-fuzz-mvp.yml`) that wraps shipped `selftest_security_fuzz.sh` / `decode_fuzz`. **Not** independent sign-off, **not** cargo-fuzz/AFL/sanitizer matrix, **not** GA marketing. Offline package: [`SECURITY_FUZZ_HARDENING_PACKAGE_v0.md`](https://github.com/hilather/nytprof-modernization/blob/main/docs/contracts/SECURITY_FUZZ_HARDENING_PACKAGE_v0.md). |
+| — | `./scripts/ci/sec002_continuous_fuzz_mvp.sh` | **P02 SEC-002 job MVP** (not offline_gate step 12; that step is E4). Wrapper: honest `SKIP:` without cargo. When cargo present, `exec`s shipped `./tools/oracle/selftest_security_fuzz.sh` (`decode_fuzz`; cargo-required if invoked directly). **Not** full SEC-002 cargo-fuzz; COL-015 residual. |
 | `FMT-V6-EVENT-BODY-PID-START-END-MVP` | **done** | Event-body PID_START/PID_END + always-inflate EVENT/mixed tests. **Before full COL-007.** |
 | `FMT-V6-EVENT-BODY-SUB-CALLERS-DISCOUNT-PROVISIONAL` | **done** | SUB_CALLERS + DISCOUNT provisional event-body opcodes. Not full catalog freeze / DISCOUNT accounting freeze. Default `parse_chunk_frame` stays non-inflating. **Before full COL-007.** |
 | `FMT-V6-EVENT-BODY-SUB-CALLERS-DISCOUNT-MVP` | **done** | Event-body SUB_CALLERS/DISCOUNT + always-inflate EVENT/mixed tests. **Before full COL-007.** |

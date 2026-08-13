@@ -366,10 +366,7 @@ pub enum EventRecord<'a> {
         text: StringBlob<'a>,
     },
     /// `opcode::NEW_FID` — fid / filename.
-    NewFid {
-        fid: u64,
-        filename: StringBlob<'a>,
-    },
+    NewFid { fid: u64, filename: StringBlob<'a> },
     /// `opcode::PID_START` — pid / ppid / start_time.
     PidStart {
         pid: u64,
@@ -547,26 +544,41 @@ pub enum EventRecordSpec<'a> {
 pub enum EventBodyError {
     Varint(VarintError),
     String(StringError),
-    Truncated { need: usize, got: usize },
-    Oversize { len: usize },
+    Truncated {
+        need: usize,
+        got: usize,
+    },
+    Oversize {
+        len: usize,
+    },
     /// Opcode 0 is reserved.
     ReservedOpcode,
     /// Unknown opcode with `FLAG_OPCODE_REQUIRED` set.
-    UnknownRequiredOpcode { opcode: u64 },
+    UnknownRequiredOpcode {
+        opcode: u64,
+    },
     /// Unknown optional opcode without [`FLAG_BODY_LENGTH`] — cannot skip safely.
-    UnknownOpcode { opcode: u64 },
+    UnknownOpcode {
+        opcode: u64,
+    },
     /// Length-framed skip body exceeds [`MAX_SKIP_BODY_BYTES`].
-    OversizeSkipBody { len: usize },
+    OversizeSkipBody {
+        len: usize,
+    },
     /// Site-delta reconstruction left the absolute domain of `u64`.
     InvalidSiteDelta,
     /// TIME_LINE_RUN declared length is zero (no expansion target).
     EmptyTimeLineRun,
     /// TIME_LINE_RUN declared length exceeds [`MAX_TIME_LINE_RUN_LEN`].
-    OversizeTimeLineRun { len: usize },
+    OversizeTimeLineRun {
+        len: usize,
+    },
     /// TIME_BLOCK_RUN declared length is zero (no expansion target).
     EmptyTimeBlockRun,
     /// TIME_BLOCK_RUN declared length exceeds [`MAX_TIME_BLOCK_RUN_LEN`].
-    OversizeTimeBlockRun { len: usize },
+    OversizeTimeBlockRun {
+        len: usize,
+    },
 }
 
 impl std::fmt::Display for EventBodyError {
@@ -809,11 +821,7 @@ fn encode_record_into(out: &mut Vec<u8>, rec: &EventRecordSpec<'_>) {
         } => {
             out.extend_from_slice(&encode_u64(opcode::ATTRIBUTE));
             out.push(0); // flags
-            out.extend_from_slice(&encode_string_blob(
-                *key_string_id,
-                *key_string_flags,
-                key,
-            ));
+            out.extend_from_slice(&encode_string_blob(*key_string_id, *key_string_flags, key));
             out.extend_from_slice(&encode_string_blob(
                 *value_string_id,
                 *value_string_flags,
@@ -830,11 +838,7 @@ fn encode_record_into(out: &mut Vec<u8>, rec: &EventRecordSpec<'_>) {
         } => {
             out.extend_from_slice(&encode_u64(opcode::OPTION));
             out.push(0); // flags
-            out.extend_from_slice(&encode_string_blob(
-                *key_string_id,
-                *key_string_flags,
-                key,
-            ));
+            out.extend_from_slice(&encode_string_blob(*key_string_id, *key_string_flags, key));
             out.extend_from_slice(&encode_string_blob(
                 *value_string_id,
                 *value_string_flags,
@@ -1807,10 +1811,7 @@ mod tests {
         // Craft opcode 0 + flags 0 manually via encode_u64.
         let mut bad = encode_u64(opcode::RESERVED);
         bad.push(0);
-        assert_eq!(
-            decode_event_body(&bad),
-            Err(EventBodyError::ReservedOpcode)
-        );
+        assert_eq!(decode_event_body(&bad), Err(EventBodyError::ReservedOpcode));
     }
 
     #[test]
@@ -1872,16 +1873,16 @@ mod tests {
 
     #[test]
     fn unknown_optional_empty_length_framed_skip_ok() {
-        let mut body = encode_event_body(&[EventRecordSpec::Version {
-            major: 6,
-            minor: 0,
-        }]);
+        let mut body = encode_event_body(&[EventRecordSpec::Version { major: 6, minor: 0 }]);
         body.extend_from_slice(&encode_unknown_optional_skip_record(100, b"").unwrap());
         body.extend_from_slice(&encode_event_body(&[EventRecordSpec::Discount]));
         let (recs, n) = decode_event_body(&body).unwrap();
         assert_eq!(n, body.len());
         assert_eq!(recs.len(), 2);
-        assert!(matches!(recs[0], EventRecord::Version { major: 6, minor: 0 }));
+        assert!(matches!(
+            recs[0],
+            EventRecord::Version { major: 6, minor: 0 }
+        ));
         assert!(matches!(recs[1], EventRecord::Discount));
     }
 
@@ -2129,10 +2130,7 @@ mod tests {
     #[test]
     fn version_roundtrip() {
         let specs = [
-            EventRecordSpec::Version {
-                major: 5,
-                minor: 0,
-            },
+            EventRecordSpec::Version { major: 5, minor: 0 },
             EventRecordSpec::StartDeflate,
             EventRecordSpec::TimeLine {
                 fid: 1,
@@ -2172,10 +2170,7 @@ mod tests {
     /// Preflight only — not OI-001-03 seq-number freeze / mid-stream codec switch.
     fn dual_output_sequence_specs() -> [EventRecordSpec<'static>; 9] {
         [
-            EventRecordSpec::Version {
-                major: 5,
-                minor: 0,
-            },
+            EventRecordSpec::Version { major: 5, minor: 0 },
             EventRecordSpec::Comment {
                 string_id: 0,
                 string_flags: FLAG_UTF8,
@@ -2291,7 +2286,10 @@ mod tests {
             }
         };
         let ranks: Vec<u8> = recs.iter().map(op_rank).collect();
-        assert!(ranks.windows(2).all(|w| w[0] <= w[1]), "order ranks {ranks:?}");
+        assert!(
+            ranks.windows(2).all(|w| w[0] <= w[1]),
+            "order ranks {ranks:?}"
+        );
         assert_eq!(ranks[0], 0);
         assert!(ranks.iter().any(|&r| r == 1), "meta present");
         assert!(ranks.iter().any(|&r| r == 2), "START_DEFLATE present");
@@ -2335,10 +2333,7 @@ mod tests {
     #[test]
     fn dual_output_sequence_unknown_opcode_still_fail_closed() {
         // Append reserved/unknown after a valid dual-output prefix.
-        let mut enc = encode_event_body(&[EventRecordSpec::Version {
-            major: 5,
-            minor: 0,
-        }]);
+        let mut enc = encode_event_body(&[EventRecordSpec::Version { major: 5, minor: 0 }]);
         enc.extend_from_slice(&encode_u64(99));
         enc.push(FLAG_OPCODE_REQUIRED);
         match decode_event_body(&enc) {
@@ -2638,7 +2633,10 @@ mod tests {
     /// Uses a minimal parser (no serde) so tests drive real fixture files.
     fn collect_attr_option_keys_from_jsonl(
         path: &std::path::Path,
-    ) -> (std::collections::BTreeSet<Vec<u8>>, std::collections::BTreeSet<Vec<u8>>) {
+    ) -> (
+        std::collections::BTreeSet<Vec<u8>>,
+        std::collections::BTreeSet<Vec<u8>>,
+    ) {
         let text = std::fs::read_to_string(path)
             .unwrap_or_else(|e| panic!("read {}: {e}", path.display()));
         let mut attrs = std::collections::BTreeSet::new();
@@ -2693,16 +2691,9 @@ mod tests {
         let mut all_opt = std::collections::BTreeSet::new();
         for name in fixtures {
             let path = fixture_readstream(name);
-            assert!(
-                path.is_file(),
-                "missing golden fixture {}",
-                path.display()
-            );
+            assert!(path.is_file(), "missing golden fixture {}", path.display());
             let (attrs, opts) = collect_attr_option_keys_from_jsonl(&path);
-            assert!(
-                !attrs.is_empty(),
-                "{name}: expected ATTRIBUTE keys in dump"
-            );
+            assert!(!attrs.is_empty(), "{name}: expected ATTRIBUTE keys in dump");
             assert!(!opts.is_empty(), "{name}: expected OPTION keys in dump");
             for k in &attrs {
                 assert!(
@@ -2750,10 +2741,7 @@ mod tests {
         for s in &specs {
             match s {
                 EventRecordSpec::Attribute { key, .. } => {
-                    assert!(
-                        known_key::is_known_attribute_key(key),
-                        "ATTRIBUTE {key:?}"
-                    );
+                    assert!(known_key::is_known_attribute_key(key), "ATTRIBUTE {key:?}");
                 }
                 EventRecordSpec::Option { key, .. } => {
                     assert!(known_key::is_known_option_key(key), "OPTION {key:?}");
@@ -2770,9 +2758,7 @@ mod tests {
                 (
                     EventRecord::Attribute { key, value },
                     EventRecordSpec::Attribute {
-                        key: sk,
-                        value: sv,
-                        ..
+                        key: sk, value: sv, ..
                     },
                 ) => {
                     assert_eq!(key.data, *sk);
@@ -2782,9 +2768,7 @@ mod tests {
                 (
                     EventRecord::Option { key, value },
                     EventRecordSpec::Option {
-                        key: sk,
-                        value: sv,
-                        ..
+                        key: sk, value: sv, ..
                     },
                 ) => {
                     assert_eq!(key.data, *sk);
@@ -3546,11 +3530,7 @@ mod tests {
         for (i, exp) in expect.iter().enumerate() {
             match &recs[i] {
                 EventRecord::TimeLine { fid, line, ticks } => {
-                    assert_eq!(
-                        (*fid, *line, *ticks),
-                        *exp,
-                        "TIME_LINE[{i}] mismatch"
-                    );
+                    assert_eq!((*fid, *line, *ticks), *exp, "TIME_LINE[{i}] mismatch");
                 }
                 other => panic!("TIME_LINE[{i}] expected TimeLine, got {other:?}"),
             }
@@ -3595,10 +3575,7 @@ mod tests {
         );
         let (recs, n) = decode_event_body(&enc).expect("decode TIME_LINE_RUN");
         assert_eq!(n, enc.len());
-        assert_time_line_seq(
-            &recs,
-            &[(1, 5, 10), (1, 5, 20), (1, 5, 7), (1, 5, 99)],
-        );
+        assert_time_line_seq(&recs, &[(1, 5, 10), (1, 5, 20), (1, 5, 7), (1, 5, 99)]);
         // Dual decode stability.
         let (recs2, n2) = decode_event_body(&enc).unwrap();
         assert_eq!(n2, n);
@@ -3921,10 +3898,7 @@ mod tests {
             } => assert_eq!((*fid, *line, *block_line, *ticks), (1, 1, 1, 1)),
             other => panic!("[0] {other:?}"),
         }
-        assert_time_block_seq(
-            &recs[1..4],
-            &[(2, 10, 4, 3), (2, 10, 4, 5), (2, 10, 4, 8)],
-        );
+        assert_time_block_seq(&recs[1..4], &[(2, 10, 4, 3), (2, 10, 4, 5), (2, 10, 4, 8)]);
         match &recs[4] {
             EventRecord::TimeLine { fid, line, ticks } => {
                 assert_eq!((*fid, *line, *ticks), (3, 20, 42));
@@ -4207,10 +4181,7 @@ mod tests {
     /// Multi-record stream mixing dual-output meta, site-delta sites, and a run.
     fn site_delta_and_seq_compose_specs() -> Vec<EventRecordSpec<'static>> {
         vec![
-            EventRecordSpec::Version {
-                major: 5,
-                minor: 0,
-            },
+            EventRecordSpec::Version { major: 5, minor: 0 },
             EventRecordSpec::Comment {
                 string_id: 0,
                 string_flags: 0,
@@ -4253,10 +4224,7 @@ mod tests {
         ]
     }
 
-    fn assert_site_delta_and_seq_compose(
-        recs: &[EventRecord<'_>],
-        sequences: &[Option<u64>],
-    ) {
+    fn assert_site_delta_and_seq_compose(recs: &[EventRecord<'_>], sequences: &[Option<u64>]) {
         // VERSION, Comment, PidStart, TL, TL, TB, SubEntry, 2 expanded TL, PidEnd = 10
         assert_eq!(recs.len(), 10);
         assert_eq!(sequences.len(), 10);
@@ -4456,10 +4424,7 @@ mod tests {
         let (decoded, n2) = decode_event_body_full(&enc_compose).expect("compose decode");
         assert_eq!(n2, enc_compose.len());
         assert_eq!(decoded.records.len(), 4);
-        assert_eq!(
-            decoded.sequences,
-            vec![Some(0), Some(1), Some(2), Some(3)]
-        );
+        assert_eq!(decoded.sequences, vec![Some(0), Some(1), Some(2), Some(3)]);
         match &decoded.records[3] {
             EventRecord::TimeLine { fid, line, ticks } => {
                 assert_eq!((*fid, *line, *ticks), (2, 51, 9));
@@ -4521,10 +4486,7 @@ mod tests {
     #[test]
     fn multi_chunk_packing_plains_join_equals_single_chunk_compose() {
         let specs = [
-            EventRecordSpec::Version {
-                major: 5,
-                minor: 0,
-            },
+            EventRecordSpec::Version { major: 5, minor: 0 },
             EventRecordSpec::TimeLine {
                 fid: 1,
                 line: 10,
@@ -4555,7 +4517,11 @@ mod tests {
         let single = encode_event_body_with_site_deltas_and_seq(&specs).expect("single");
         // max 2 records per chunk → ≥2 partitions
         let parts = crate::multi_chunk_event::partition_event_records(&specs, 2);
-        assert!(parts.len() >= 2, "expected multi-chunk partition, got {}", parts.len());
+        assert!(
+            parts.len() >= 2,
+            "expected multi-chunk partition, got {}",
+            parts.len()
+        );
         let mut state = PackingEncodeState::new();
         let mut joined = Vec::new();
         for part in &parts {
@@ -4639,7 +4605,11 @@ mod tests {
         ];
         let single = encode_event_body_with_site_deltas_and_seq(&specs).expect("single");
         let parts = crate::multi_chunk_event::partition_event_records(&specs, 2);
-        assert!(parts.len() >= 3, "expected ≥3 partitions, got {}", parts.len());
+        assert!(
+            parts.len() >= 3,
+            "expected ≥3 partitions, got {}",
+            parts.len()
+        );
         // Run in part0; post-run site-delta must be in a later partition.
         assert!(
             matches!(parts[0].last(), Some(EventRecordSpec::TimeLineRun { .. })),

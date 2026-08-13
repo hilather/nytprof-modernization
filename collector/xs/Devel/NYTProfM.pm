@@ -1,0 +1,266 @@
+# SPDX-License-Identifier: Artistic-1.0-Perl OR GPL-1.0-or-later
+#
+# PR-G03a — Product debugger entry for `perl -d:NYTProfM` (load holds
+# an in-memory v5 sink; no nytprof.out on trivial -e).
+# PR-G03b — DB::enable_sink / emit_time_line / emit_time_block /
+# emit_discount / finish_profiler / run_m4_mini_sample call shipped
+# nytp_emit_* (single writer).
+# PR-G03c — DB::emit_sub_entry / emit_sub_return call nytp_emit_sub_*
+# (same held sink).
+# PR-G03d — DB::emit_attribute / emit_option / emit_new_fid / emit_src_line /
+# emit_sub_info / emit_pid_start / emit_pid_end call nytp_emit_* (same
+# held sink).
+# PR-G03e — DB::emit_start_deflate / is_deflating call nytp_emit_start_deflate
+# / nytp_v5_sink_is_deflating (same held sink). Mid-deflate fork residual.
+# PR-G04  — When NYTPROF contains file=<path>, enable the file sink, set
+# $^P 0x01 (DB::sub) and 0x02 (DB::DB) so live calls emit SUB_RETURN +
+# SUB_CALLERS and statements emit TIME_LINE through shipped nytp_emit_*.
+# Default (no file=) stays in-memory — G03a trivial -e writes no nytprof.out.
+# PR-G05  — Parse all NYTPROF keys: unknown and format=dual fail-closed;
+# format=v6 fail-closed on D1-B (v6_collect message); D1-A enable_sink_v6.
+# PR-G06  — addpid=1 installs CORE::GLOBAL::fork → nytp_fork_* + addpid
+# child reinit (`<file>.<pid>`). Mid-deflate continue-in-child residual.
+# Not full 6.15 opcode/entersub attach.
+# Shape follows 6.15 Devel::NYTProf.pm: package Devel::NYTProfM then DB,
+# require Core, init_profiler().
+
+package Devel::NYTProfM;
+
+our $VERSION = '6.15';    # match baseline/6.15 pin; keep in sync with Devel::NYTProfM::Core
+
+package    # hide the package from the PAUSE indexer
+    DB;
+
+# Enable specific perl debugger flags (others may be set later).
+# Set the flags that influence compilation ASAP so we get full details
+# (sub line ranges etc) of modules loaded as a side effect of loading
+# Devel::NYTProfM::Core (ie XSLoader, strict, Exporter etc.)
+# See "perldoc perlvar" for details of the $^P ($PERLDB) flags.
+# 0x01 is sub enter/exit (DB::sub), *not* single-step (that is 0x20) and
+# *not* line-by-line (0x02 / DB::DB). G03a–G03e omit 0x01; G04 sets it
+# only when NYTPROF file= is present.
+$^P = 0x010     # record line range of sub definition
+    | 0x100     # informative "file" names for evals
+    | 0x200;    # informative names for anonymous subroutines
+
+require Devel::NYTProfM::Core;    # loads XS and provides DB::init_profiler
+
+# Greppable load stamp after successful Core/XS load.
+# PRODUCT_XS_ATTACH is 0 until NYTPROF file= enables the live DB::sub hook.
+# PRODUCT_STMT_EMIT marks G03b nytp_emit_* wrappers (not opcode TIME_*).
+# PRODUCT_SUB_EMIT marks G03c nytp_emit_sub_* wrappers.
+# PRODUCT_META_EMIT marks G03d nytp_emit_* meta/finalize wrappers.
+# PRODUCT_COMPRESS_EMIT marks G03e nytp_emit_start_deflate.
+$Devel::NYTProfM::PRODUCT_XS_LOAD       = 1;
+$Devel::NYTProfM::PRODUCT_XS_ATTACH     = 0;
+$Devel::NYTProfM::PRODUCT_STMT_EMIT     = 1;
+$Devel::NYTProfM::PRODUCT_SUB_EMIT      = 1;
+$Devel::NYTProfM::PRODUCT_META_EMIT     = 1;
+$Devel::NYTProfM::PRODUCT_COMPRESS_EMIT = 1;
+$Devel::NYTProfM::PRODUCT_V6_COLLECT    = DB::product_v6_collect() ? 1 : 0;
+$Devel::NYTProfM::PRODUCT_OPTIONS_PARSE = 1;
+$Devel::NYTProfM::PRODUCT_ADDPID        = 0;
+$Devel::NYTProfM::PRODUCT_FORK_HOOK     = 0;
+
+our @product_sub_stack;
+our $product_in_hook = 0;
+
+# G04 statement hook (enabled only with NYTPROF file= + $^P 0x02).
+# Emits TIME_LINE through the shipped nytp_emit_time_line wrapper so
+# shipped report/verify accept the stream (fail-closed on zero TIME_*).
+# Not 6.15 opcode statement profiler / blocks-780.
+sub DB {
+    return unless $Devel::NYTProfM::PRODUCT_XS_ATTACH;
+    return if $product_in_hook;
+    my ( undef, undef, $line ) = caller;
+    $product_in_hook = 1;
+    eval { DB::emit_time_line( 1, 1, $line || 1 ); 1 };
+    $product_in_hook = 0;
+}
+
+# 6.15 options[] + string options + product format=. Unknown keys croak.
+my %PRODUCT_NYTPROF_KNOWN = map { $_ => 1 } qw(
+  file format start end compress stmts blocks subs calls leave slowops
+  usecputime clock trace findcaller forkdepth addpid nameevals nameanonsubs
+  evals sigexit posix_exit perldb use_db_sub expand log optimize optimise
+  savesrc endatexit libcexit addtimestamp
+);
+
+# Parse NYTPROF the way 6.15 Core.pm does: colon-separated, backslash-escapes.
+# Empty / absent file= → no product profile file (G03a: no nytprof.out default).
+sub _product_parse_nytprof {
+    my %opts;
+    my $env = $ENV{NYTPROF};
+    return \%opts unless defined $env && length $env;
+    for my $optval ( $env =~ /((?:[^\\:]+|\\.)+)/g ) {
+        $optval =~ s/\\(.)/$1/g;
+        my ( $opt, $val ) = split /=/, $optval, 2;
+        if ( !defined $opt || $opt eq '' || !defined $val ) {
+            die "malformed NYTPROF option: $optval\n";
+        }
+        if ( !$PRODUCT_NYTPROF_KNOWN{$opt} ) {
+            die "unknown NYTPROF option: $opt\n";
+        }
+        $opts{$opt} = $val;
+    }
+    return \%opts;
+}
+
+sub _product_nytprof_file {
+    my $opts = _product_parse_nytprof();
+    my $p    = $opts->{file};
+    return $p if defined $p && length $p;
+    return;
+}
+
+sub _product_skip_sub {
+    my ($name) = @_;
+    return 1 unless defined $name && length $name;
+    return 1 if ref $name;
+    return 1 if $name =~ /^(?:DB::|Devel::NYTProfM::|CORE::GLOBAL::fork)/;
+    return 0;
+}
+
+# Smallest G04 hook: Perl DB::sub + $^P 0x01. Emits SUB_RETURN (A5) and
+# SUB_CALLERS (A7) through shipped DB::emit_* → nytp_emit_*. Not 6.15
+# entersub / opcode TIME_* / XSUB / goto.
+sub sub {
+    my $called = $DB::sub;
+    if (  !$Devel::NYTProfM::PRODUCT_XS_ATTACH
+        || $product_in_hook
+        || _product_skip_sub($called) )
+    {
+        goto &$called;
+    }
+
+    my $caller =
+      @product_sub_stack ? $product_sub_stack[-1] : 'main::RUNTIME';
+    push @product_sub_stack, $called;
+
+    my $wa = wantarray;
+    my ( @ret, $scalar, $ok );
+    $ok = eval {
+        if ($wa) {
+            @ret = &$called;
+        }
+        elsif ( defined $wa ) {
+            $scalar = &$called;
+        }
+        else {
+            &$called;
+        }
+        1;
+    };
+    my $err = $@;
+    pop @product_sub_stack;
+
+    $product_in_hook = 1;
+    my $depth = @product_sub_stack + 1;
+    eval {
+        DB::emit_sub_return( $depth, 0.0, 0.0, $called );
+        DB::emit_sub_callers( 1, 1, 1, 0.0, 0.0, 0.0, 0, $called, $caller );
+        1;
+    };
+    $product_in_hook = 0;
+
+    die $err if !$ok;
+    return @ret    if $wa;
+    return $scalar if defined $wa;
+    return;
+}
+
+# G06: smallest live fork hook — CORE::GLOBAL::fork around shipped
+# nytp_fork_prepare / resume_parent / resume_child + addpid reinit.
+sub _product_fork {
+    unless (  $Devel::NYTProfM::PRODUCT_XS_ATTACH
+        && $Devel::NYTProfM::PRODUCT_ADDPID )
+    {
+        return CORE::fork();
+    }
+    local $product_in_hook = 1;
+    my $st = DB::fork_prepare();
+    die "DB::fork_prepare status=$st\n" if $st != 0;
+    my $pid = CORE::fork();
+    if ( !defined $pid ) {
+        DB::fork_resume_parent();
+        return undef;
+    }
+    if ($pid) {
+        $st = DB::fork_resume_parent();
+        die "DB::fork_resume_parent status=$st\n" if $st != 0;
+        return $pid;
+    }
+    $st = DB::fork_resume_child($$);
+    die "DB::fork_resume_child status=$st\n" if $st != 0;
+    return 0;
+}
+
+sub _product_install_fork_hook {
+    return if $Devel::NYTProfM::PRODUCT_FORK_HOOK;
+    no warnings 'redefine';
+    *CORE::GLOBAL::fork = \&_product_fork;
+    $Devel::NYTProfM::PRODUCT_FORK_HOOK = 1;
+}
+
+# G05: parse NYTPROF before opening a file so unknown / dual / D1-B
+# format=v6 croak without writing a profile.
+{
+    my $opts = _product_parse_nytprof();
+    my $fmt  = exists $opts->{format} ? lc( $opts->{format} ) : 'v5';
+    if ( $fmt eq 'dual' ) {
+        die "format=dual is rejected\n";
+    }
+    if ( $fmt eq 'v6' && !$Devel::NYTProfM::PRODUCT_V6_COLLECT ) {
+        die "format=v6 requires v6-enabled build "
+          . "(install v6_collect package or rebuild with --with v6_collect)\n";
+    }
+    if ( $fmt ne 'v5' && $fmt ne 'v6' ) {
+        die "unknown NYTPROF option: format\n"
+          unless exists $opts->{format};
+        die "unknown format=$opts->{format} (want v5|v6)\n";
+    }
+    $Devel::NYTProfM::PRODUCT_FORMAT = $fmt;
+    my $addpid = $opts->{addpid};
+    $Devel::NYTProfM::PRODUCT_ADDPID =
+      ( defined $addpid && $addpid ne '' && $addpid ne '0' ) ? 1 : 0;
+}
+
+init_profiler();    # G03a: hold in-memory v5 sink — never writes nytprof.out
+
+# G04: explicit NYTPROF file= switches the held sink to a real file and
+# enables DB::sub collection. Absent file= keeps G03a fileless default.
+# G05: format=v6 + D1-A uses enable_sink_v6 (NYTPROF6); format=v5 stays v5.
+{
+    my $path = _product_nytprof_file();
+    if ( defined $path && length $path ) {
+        my $fmt = $Devel::NYTProfM::PRODUCT_FORMAT || 'v5';
+        my $st;
+        if ( $fmt eq 'v6' ) {
+            $st = enable_sink_v6($path);
+            if ( $st != 0 ) {
+                die "DB::enable_sink_v6($path) status=$st\n";
+            }
+        }
+        else {
+            $st = enable_sink($path);
+            if ( $st != 0 ) {
+                die "DB::enable_sink($path) status=$st\n";
+            }
+        }
+        $Devel::NYTProfM::PRODUCT_XS_ATTACH = 1;
+        $^P |= 0x01;    # sub enter/exit → DB::sub
+        $^P |= 0x02;    # line-by-line (dbstate already compiled when $^P != 0)
+        $^P |= 0x20;    # start with single-step on
+        $DB::single = 1;    # pp_dbstate calls DB::DB only when this is true
+        if ( $Devel::NYTProfM::PRODUCT_ADDPID ) {
+            _product_install_fork_hook();
+        }
+    }
+}
+
+END {
+    # Close the held sink (file or in-memory). Second call is a no-op.
+    finish_profiler();
+}
+
+1;

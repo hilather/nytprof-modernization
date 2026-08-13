@@ -1,7 +1,7 @@
 # E4-v0 model-level semantic equality MVP (v0)
 
 **Board ID:** `E4-V0-MODEL-SEMANTIC-MVP`  
-**Status:** implemented (PR-B10) — **not** full oracle dual equality; product CLI path: **E4-PRODUCT-CLI-SMOKE-MVP** (PR-B12b)  
+**Status:** implemented (PR-B10) + **E4-01/E4-02/E4-03 (MVP)** oracle-pair counts — **not** full TEST-008 corpus; product CLI path: **E4-PRODUCT-CLI-SMOKE-MVP** (PR-B12b)  
 **Depends on:** COL-014 dual-sink (PR-B10a, test/dev-only OQ-4); product v6→ProfileModel ingest (PR-B11a); E4 policy  
 **Evidence:** `cargo test -p nytprof-model e4_v0_`; `./scripts/packaging/e4_v5_v6_semantic_smoke.sh --model-only`
 
@@ -43,6 +43,8 @@ Committed under [`fixtures/e4/dual-sink/`](https://github.com/hilather/nytprof-m
 
 Produced by COL-014 `test_dual_sink` (integer-tick SUB_RETURN/SUB_CALLERS). **Not** full oracle counts.
 
+**E4-01 / E4-02 / E4-03** (beyond dual-sink): [`fixtures/e4/oracle-pair/`](https://github.com/hilather/nytprof-modernization/blob/main/fixtures/e4/oracle-pair/) — oracle default-calls1 + blocks-calls1 + calls2-default v5 + product `format=v6` on the same workloads. Shipped `from_path` compares leaf/mid/edge counts only (`e4_v0_oracle_pair_*`). Truncated pair bytes fail closed. **Not** full `e4_v0_aggregates_equal` on these pairs. **Not** A4 **780** / TIME_BLOCK / SUB_ENTRY **27** on the product v6 half.
+
 ## API
 
 | Symbol | Location |
@@ -62,7 +64,7 @@ Honest skip when cargo missing (fixture presence still checked). Full CLI produc
 
 ## Non-claims / residuals
 
-- Not full `fixtures/v5/*` oracle dual equality (TEST-003 / TEST-008)
+- Not full `fixtures/v5/*` oracle dual equality (TEST-003 / TEST-008 corpus). E4-01/E4-02/E4-03 are **count-surface MVP** only.
 - E4 product smoke: see [`e4-product-cli-smoke-mvp-v0.md`](https://github.com/hilather/nytprof-modernization/blob/main/docs/schemas/e4-product-cli-smoke-mvp-v0.md)
 - Not wire freeze / CLI v6 default / product `format=dual`
 - Dual-sink remains **test/dev-only** (OQ-4)

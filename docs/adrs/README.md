@@ -15,6 +15,7 @@ Queue: [`docs/plan/18_OPEN_QUESTIONS_AND_ADR_QUEUE.md`](https://github.com/hilat
 | [0007](https://github.com/hilather/nytprof-modernization/blob/main/docs/adrs/0007-production-v6-writer-backend-c-baseline.md) | Production v6 writer backend: reaffirm C baseline (COL-009) | **accepted** — R2-preview cut PR-B13; COL-008 remains deferred |
 | [0008](https://github.com/hilather/nytprof-modernization/blob/main/docs/adrs/0008-r4-v6-output-default-promotion.md) | R4 `format=v6` product collection/output default promotion (gated) | **accepted (policy)**; **flip not executed** (**PR-E02** / ADR-Q025) |
 | [0009](https://github.com/hilather/nytprof-modernization/blob/main/docs/adrs/0009-r5-legacy-retirement-governance.md) | R5 legacy retirement governance (per-component; never automatic) | **accepted (policy)**; **no component retired** (**PR-F01** / ADR-Q026) |
+| [0010](https://github.com/hilather/nytprof-modernization/blob/main/docs/adrs/0010-signed-ci-prebuilt-native-cli.md) | Signed CI prebuilt `nytprof-cli` for EL8 tools RPM (KD-13) | **accepted (policy)**; pipeline / K02 **not implemented** (**PR-K03** / ADR-Q016 EL8 slice) |
 
 **Numbering map (coordinate across parallel PRs):**
 
@@ -29,6 +30,7 @@ Queue: [`docs/plan/18_OPEN_QUESTIONS_AND_ADR_QUEUE.md`](https://github.com/hilat
 | **0007** | Production v6 writer backend (C baseline / COL-009) | Track B — PR-B13 |
 | **0008** | R4 `format=v6` collection/output default promotion | Track E — PR-E02 |
 | **0009** | R5 legacy retirement governance (umbrella) | Track F — PR-F01 |
+| **0010** | Signed CI prebuilt `nytprof-cli` (EL8 tools) | Product-completion K-track — **PR-K03** (hard-gates K02) |
 
 ### Related (not ADRs)
 

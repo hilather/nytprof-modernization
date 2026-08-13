@@ -12,6 +12,9 @@ use crate::event_body::{
     decode_event_body, encode_event_body, EventBodyError, EventRecord, EventRecordSpec,
 };
 use crate::file_prefix::FilePrefix;
+use crate::footer_body::{
+    decode_footer_body, encode_footer_body, FooterBodyError, FooterRecord, FooterRecordSpec,
+};
 use crate::source_body::{
     decode_source_body, encode_source_body, SourceBodyError, SourceRecord, SourceRecordSpec,
 };
@@ -19,9 +22,6 @@ use crate::stream::{
     decode_prefix_chunk_stream, encode_prefix_chunk_stream, ChunkSpec, StreamError,
 };
 use crate::string::{decode_string_blob, encode_string_blob, StringBlob, StringError};
-use crate::footer_body::{
-    decode_footer_body, encode_footer_body, FooterBodyError, FooterRecord, FooterRecordSpec,
-};
 use crate::summary_body::{
     decode_summary_body, encode_summary_body, SummaryBodyError, SummaryRecord, SummaryRecordSpec,
 };
@@ -394,9 +394,7 @@ pub fn encode_mixed_kind_profile(
 /// FOOTER payload is decoded via `decode_footer_body` (empty body → empty records).
 /// Fail-closed on bad magic, truncated mid-chunk, bad sync, truncated body,
 /// unexpected kind/codec, or FOOTER not last.
-pub fn decode_mixed_kind_profile(
-    buf: &[u8],
-) -> MixedProfileResult<(MixedKindProfile<'_>, usize)> {
+pub fn decode_mixed_kind_profile(buf: &[u8]) -> MixedProfileResult<(MixedKindProfile<'_>, usize)> {
     let (stream, n) = decode_prefix_chunk_stream(buf)?;
     let mut event_records = Vec::new();
     let mut source_records = Vec::new();
@@ -416,9 +414,7 @@ pub fn decode_mixed_kind_profile(
             return Err(MixedProfileError::InvalidFooter);
         }
         if frame.codec != codec::NONE {
-            return Err(MixedProfileError::UnexpectedCodec {
-                codec: frame.codec,
-            });
+            return Err(MixedProfileError::UnexpectedCodec { codec: frame.codec });
         }
         match frame.kind {
             k if k == kind::EVENT => {
@@ -457,10 +453,12 @@ pub fn decode_mixed_kind_profile(
             k if k == kind::SUMMARY => {
                 let (recs, body_n) = decode_summary_body(frame.payload)?;
                 if body_n != frame.payload.len() {
-                    return Err(MixedProfileError::SummaryBody(SummaryBodyError::Truncated {
-                        need: frame.payload.len(),
-                        got: body_n,
-                    }));
+                    return Err(MixedProfileError::SummaryBody(
+                        SummaryBodyError::Truncated {
+                            need: frame.payload.len(),
+                            got: body_n,
+                        },
+                    ));
                 }
                 summary_records.extend(recs);
                 summary_chunk_count += 1;
@@ -508,12 +506,12 @@ mod tests {
     use super::*;
     use crate::chunk::{encode_chunk_frame, CHUNK_HEADER_LEN};
     use crate::encode_file_prefix;
+    use crate::footer_body::{encode_footer_body, FooterRecordSpec};
     use crate::stream::StreamError;
     use crate::string::FLAG_UTF8;
-    use crate::footer_body::{encode_footer_body, FooterRecordSpec};
     use crate::summary_body::{encode_summary_body, SummaryRecordSpec};
-    use crate::{FilePrefixError, MAGIC, SUPPORTED_MAJOR};
     use crate::Error as HeaderError;
+    use crate::{FilePrefixError, MAGIC, SUPPORTED_MAJOR};
 
     #[test]
     fn empty_index_body_roundtrip() {

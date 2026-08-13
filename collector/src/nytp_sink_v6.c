@@ -76,6 +76,22 @@ typedef struct v6_impl {
     uint64_t dict_next_id; /* next non-zero id (starts at 1) */
     size_t dict_total_bytes;
     int has_footer_dict; /* set after final FOOTER seal */
+    /* E3-mixed kind bodies (codec NONE), sealed after EVENT / before FOOTER. */
+    uint8_t *src_body;
+    size_t src_body_len;
+    size_t src_body_cap;
+    uint32_t src_count;
+    uint32_t source_chunk_count;
+    uint8_t *idx_body;
+    size_t idx_body_len;
+    size_t idx_body_cap;
+    uint32_t idx_count;
+    uint32_t index_chunk_count;
+    uint8_t *sum_body;
+    size_t sum_body_len;
+    size_t sum_body_cap;
+    uint32_t sum_count;
+    uint32_t summary_chunk_count;
     int sealed; /* final profile seal (close) */
     int file_written;
     int header_ok;
@@ -457,6 +473,55 @@ static nytp_status body_string_blob(v6_impl *vi, uint64_t string_id,
         return NYTP_OK;
     }
     return body_append(vi, sv.ptr, sv.len);
+}
+
+static nytp_status kind_buf_append(uint8_t **buf, size_t *len, size_t *cap,
+                                   const uint8_t *p, size_t n)
+{
+    nytp_status st = buf_reserve(buf, len, cap, n);
+    if (st != NYTP_OK) {
+        return st;
+    }
+    if (n && p) {
+        memcpy(*buf + *len, p, n);
+    }
+    *len += n;
+    return NYTP_OK;
+}
+
+static nytp_status kind_uleb(uint8_t **buf, size_t *len, size_t *cap,
+                             uint64_t value)
+{
+    uint8_t tmp[10];
+    size_t n = uleb_encode(value, tmp);
+    return kind_buf_append(buf, len, cap, tmp, n);
+}
+
+static nytp_status kind_string_blob(uint8_t **buf, size_t *len, size_t *cap,
+                                    nytp_string_view sv)
+{
+    nytp_status st = check_str_view(sv);
+    uint8_t flags;
+    if (st != NYTP_OK) {
+        return st;
+    }
+    flags = sv.is_utf8 ? (uint8_t)NYTPROF_V6_FLAG_UTF8 : 0u;
+    st = kind_uleb(buf, len, cap, 0);
+    if (st != NYTP_OK) {
+        return st;
+    }
+    st = kind_uleb(buf, len, cap, (uint64_t)sv.len);
+    if (st != NYTP_OK) {
+        return st;
+    }
+    st = kind_buf_append(buf, len, cap, &flags, 1);
+    if (st != NYTP_OK) {
+        return st;
+    }
+    if (sv.len == 0) {
+        return NYTP_OK;
+    }
+    return kind_buf_append(buf, len, cap, (const uint8_t *)sv.ptr, sv.len);
 }
 
 static uint8_t utf8_flag(nytp_string_view sv)
@@ -1050,6 +1115,59 @@ static nytp_status encode_footer_string_dict(v6_impl *vi)
     return NYTP_OK;
 }
 
+static nytp_status seal_kind_body(v6_impl *vi, uint8_t kind, uint8_t *payload,
+                                  size_t payload_len, uint32_t rec_count,
+                                  uint32_t *chunk_count_out)
+{
+    uint32_t checksum;
+    nytp_status st;
+    if (payload_len == 0) {
+        return NYTP_OK;
+    }
+    if (payload_len > NYTPROF_V6_MAX_CHUNK_PAYLOAD) {
+        return NYTP_ERR_OVERFLOW;
+    }
+    checksum = v6_crc32_ieee(payload, payload_len);
+    st = encode_chunk_frame(vi, kind, (uint8_t)NYTPROF_V6_CODEC_NONE, 0,
+                            vi->next_chunk_seq, 0, rec_count,
+                            (uint32_t)payload_len, payload, payload_len,
+                            checksum);
+    if (st != NYTP_OK) {
+        return st;
+    }
+    vi->next_chunk_seq++;
+    if (chunk_count_out) {
+        (*chunk_count_out)++;
+    }
+    return NYTP_OK;
+}
+
+static nytp_status seal_mixed_kind_chunks(v6_impl *vi)
+{
+    nytp_status st;
+    st = seal_kind_body(vi, (uint8_t)NYTPROF_V6_KIND_SOURCE, vi->src_body,
+                        vi->src_body_len, vi->src_count,
+                        &vi->source_chunk_count);
+    if (st != NYTP_OK) {
+        return st;
+    }
+    vi->src_body_len = 0;
+    st = seal_kind_body(vi, (uint8_t)NYTPROF_V6_KIND_INDEX, vi->idx_body,
+                        vi->idx_body_len, vi->idx_count, &vi->index_chunk_count);
+    if (st != NYTP_OK) {
+        return st;
+    }
+    vi->idx_body_len = 0;
+    st = seal_kind_body(vi, (uint8_t)NYTPROF_V6_KIND_SUMMARY, vi->sum_body,
+                        vi->sum_body_len, vi->sum_count,
+                        &vi->summary_chunk_count);
+    if (st != NYTP_OK) {
+        return st;
+    }
+    vi->sum_body_len = 0;
+    return NYTP_OK;
+}
+
 /*
  * Final seal: open EVENT region + optional FOOTER dict; mark sealed.
  * Sticky FAILED: discard open body, no FOOTER product claim.
@@ -1074,6 +1192,14 @@ static nytp_status seal_event_chunk(v6_impl *vi, const nytp_sink *sink)
         return st;
     }
     wire_mark = vi->wire_len; /* after EVENT region(s) */
+    st = seal_mixed_kind_chunks(vi);
+    if (st != NYTP_OK) {
+        if (vi->wire_len > wire_mark) {
+            vi->wire_len = wire_mark;
+        }
+        return st;
+    }
+    wire_mark = vi->wire_len;
     if (vi->enable_string_dict) {
         st = encode_footer_string_dict(vi);
         if (st != NYTP_OK) {
@@ -1160,6 +1286,9 @@ static void v6_destroy(nytp_sink *sink)
         free(vi->path);
         free(vi->wire);
         free(vi->body);
+        free(vi->src_body);
+        free(vi->idx_body);
+        free(vi->sum_body);
         free(vi->rec_off);
         if (vi->dict) {
             for (i = 0; i < vi->dict_len; i++) {
@@ -2196,6 +2325,15 @@ nytp_status nytp_v6_sink_fork_child_reinit(nytp_sink *sink, const char *new_path
     vi->total_event_records = 0;
     vi->event_chunk_count = 0;
     vi->next_chunk_seq = 0;
+    vi->src_body_len = 0;
+    vi->idx_body_len = 0;
+    vi->sum_body_len = 0;
+    vi->src_count = 0;
+    vi->idx_count = 0;
+    vi->sum_count = 0;
+    vi->source_chunk_count = 0;
+    vi->index_chunk_count = 0;
+    vi->summary_chunk_count = 0;
     vi->sealed = 0;
     vi->has_footer_dict = 0;
     vi->header_ok = 0;
@@ -2520,5 +2658,173 @@ nytp_status nytp_v6_sink_emit_time_line_run(nytp_sink *sink, nytp_fid fid,
     /* COL-003: expand run to N logical TIME_LINE seq commits. */
     v6_commit_logical_n(sink, NYTP_EVT_TIME_LINE, (uint64_t)n_ticks);
     return NYTP_OK;
+}
+
+static nytp_status mixed_emit_ok(nytp_sink *sink, v6_impl **out)
+{
+    if (!nytp_v6_sink_is_v6(sink) || !sink->impl) {
+        return NYTP_ERR_NULL;
+    }
+    *out = (v6_impl *)sink->impl;
+    if ((*out)->sealed) {
+        return NYTP_ERR_STATE;
+    }
+    if (sink->state != NYTP_SINK_OPEN && sink->state != NYTP_SINK_ACTIVE) {
+        return NYTP_ERR_STATE;
+    }
+    return NYTP_OK;
+}
+
+nytp_status nytp_v6_sink_emit_source(nytp_sink *sink, nytp_fid fid,
+                                     nytp_line line, nytp_string_view text)
+{
+    v6_impl *vi;
+    size_t mark;
+    nytp_status st = mixed_emit_ok(sink, &vi);
+    if (st != NYTP_OK) {
+        return st;
+    }
+    mark = vi->src_body_len;
+    st = kind_uleb(&vi->src_body, &vi->src_body_len, &vi->src_body_cap,
+                   (uint64_t)fid);
+    if (st != NYTP_OK) {
+        vi->src_body_len = mark;
+        return st;
+    }
+    st = kind_uleb(&vi->src_body, &vi->src_body_len, &vi->src_body_cap,
+                   (uint64_t)line);
+    if (st != NYTP_OK) {
+        vi->src_body_len = mark;
+        return st;
+    }
+    st = kind_string_blob(&vi->src_body, &vi->src_body_len, &vi->src_body_cap,
+                          text);
+    if (st != NYTP_OK) {
+        vi->src_body_len = mark;
+        return st;
+    }
+    vi->src_count++;
+    return NYTP_OK;
+}
+
+nytp_status nytp_v6_sink_emit_index(nytp_sink *sink, uint64_t key_id,
+                                    uint64_t file_offset, uint64_t length,
+                                    nytp_string_view label)
+{
+    v6_impl *vi;
+    size_t mark;
+    nytp_status st = mixed_emit_ok(sink, &vi);
+    if (st != NYTP_OK) {
+        return st;
+    }
+    mark = vi->idx_body_len;
+    st = kind_uleb(&vi->idx_body, &vi->idx_body_len, &vi->idx_body_cap, key_id);
+    if (st != NYTP_OK) {
+        vi->idx_body_len = mark;
+        return st;
+    }
+    st = kind_uleb(&vi->idx_body, &vi->idx_body_len, &vi->idx_body_cap,
+                   file_offset);
+    if (st != NYTP_OK) {
+        vi->idx_body_len = mark;
+        return st;
+    }
+    st = kind_uleb(&vi->idx_body, &vi->idx_body_len, &vi->idx_body_cap, length);
+    if (st != NYTP_OK) {
+        vi->idx_body_len = mark;
+        return st;
+    }
+    st = kind_string_blob(&vi->idx_body, &vi->idx_body_len, &vi->idx_body_cap,
+                          label);
+    if (st != NYTP_OK) {
+        vi->idx_body_len = mark;
+        return st;
+    }
+    vi->idx_count++;
+    return NYTP_OK;
+}
+
+nytp_status nytp_v6_sink_emit_summary(nytp_sink *sink, uint64_t key_id,
+                                      uint64_t count, uint64_t value,
+                                      nytp_string_view label)
+{
+    v6_impl *vi;
+    size_t mark;
+    nytp_status st = mixed_emit_ok(sink, &vi);
+    if (st != NYTP_OK) {
+        return st;
+    }
+    mark = vi->sum_body_len;
+    st = kind_uleb(&vi->sum_body, &vi->sum_body_len, &vi->sum_body_cap, key_id);
+    if (st != NYTP_OK) {
+        vi->sum_body_len = mark;
+        return st;
+    }
+    st = kind_uleb(&vi->sum_body, &vi->sum_body_len, &vi->sum_body_cap, count);
+    if (st != NYTP_OK) {
+        vi->sum_body_len = mark;
+        return st;
+    }
+    st = kind_uleb(&vi->sum_body, &vi->sum_body_len, &vi->sum_body_cap, value);
+    if (st != NYTP_OK) {
+        vi->sum_body_len = mark;
+        return st;
+    }
+    st = kind_string_blob(&vi->sum_body, &vi->sum_body_len, &vi->sum_body_cap,
+                          label);
+    if (st != NYTP_OK) {
+        vi->sum_body_len = mark;
+        return st;
+    }
+    vi->sum_count++;
+    return NYTP_OK;
+}
+
+uint32_t nytp_v6_sink_source_record_count(const nytp_sink *sink)
+{
+    if (!nytp_v6_sink_is_v6(sink) || !sink->impl) {
+        return 0;
+    }
+    return ((const v6_impl *)sink->impl)->src_count;
+}
+
+uint32_t nytp_v6_sink_index_record_count(const nytp_sink *sink)
+{
+    if (!nytp_v6_sink_is_v6(sink) || !sink->impl) {
+        return 0;
+    }
+    return ((const v6_impl *)sink->impl)->idx_count;
+}
+
+uint32_t nytp_v6_sink_summary_record_count(const nytp_sink *sink)
+{
+    if (!nytp_v6_sink_is_v6(sink) || !sink->impl) {
+        return 0;
+    }
+    return ((const v6_impl *)sink->impl)->sum_count;
+}
+
+uint32_t nytp_v6_sink_source_chunk_count(const nytp_sink *sink)
+{
+    if (!nytp_v6_sink_is_v6(sink) || !sink->impl) {
+        return 0;
+    }
+    return ((const v6_impl *)sink->impl)->source_chunk_count;
+}
+
+uint32_t nytp_v6_sink_index_chunk_count(const nytp_sink *sink)
+{
+    if (!nytp_v6_sink_is_v6(sink) || !sink->impl) {
+        return 0;
+    }
+    return ((const v6_impl *)sink->impl)->index_chunk_count;
+}
+
+uint32_t nytp_v6_sink_summary_chunk_count(const nytp_sink *sink)
+{
+    if (!nytp_v6_sink_is_v6(sink) || !sink->impl) {
+        return 0;
+    }
+    return ((const v6_impl *)sink->impl)->summary_chunk_count;
 }
 

@@ -19,6 +19,7 @@ must never re-encode via Rust stand-in writers (`e3_standin_*`).
 | `packing_dict.nytprof` | packing + FOOTER dict multi-chunk | COMMENT + TIME_LINE×2 + COMMENT |
 | `mid_stream.nytprof` | packing mid-stream NONE→ZLIB | TIME_LINE + TIME_LINE_RUN + START_DEFLATE + post site-delta |
 | `mid_stream_dict.nytprof` | packing mid-stream NONE→ZSTD + FOOTER dict | mid-stream + resolved comments |
+| `mixed.nytprof` | EVENT + SOURCE + INDEX + SUMMARY | E3-mixed MVP (`e3_c_mixed_*`) |
 
 ## Regenerate
 
@@ -36,7 +37,7 @@ Committed binaries keep `cargo test` green without regenerating.
 
 | Residual | Notes |
 |----------|--------|
-| **E3-mixed** | SOURCE/INDEX/SUMMARY multi-kind product C fixtures not claimed here |
+| **E3-mixed** | **done (MVP)** — `mixed.nytprof`; not TEST-008 / COL-008 / CLI v6 collection default |
 | Wire freeze FMT-002..010 | **done** (ADR-0006 / PR-B11) |
 | CLI v6 default | residual |
 | E4-v0 model enforcement | ready on dual-sink pairs (PR-B10); full oracle residual |

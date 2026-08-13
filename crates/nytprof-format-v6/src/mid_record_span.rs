@@ -21,9 +21,7 @@ use crate::compressed_profile::{
 use crate::crc::compute_payload_crc;
 use crate::event_body::{decode_event_body, encode_event_body, EventBodyError, EventRecordSpec};
 use crate::file_prefix::encode_file_prefix;
-use crate::index_body::{
-    decode_index_body, encode_index_body, IndexBodyError, IndexRecordSpec,
-};
+use crate::index_body::{decode_index_body, encode_index_body, IndexBodyError, IndexRecordSpec};
 use crate::payload_codec::decode_chunk_payload;
 use crate::source_body::{
     decode_source_body, encode_source_body, SourceBodyError, SourceRecordSpec,
@@ -93,15 +91,12 @@ pub fn encode_mid_record_span_event_profile(
     footer: Option<&[u8]>,
 ) -> MidRecordSpanResult<Vec<u8>> {
     if events.is_empty() {
-        return Err(CompressedProfileError::EventBody(EventBodyError::Truncated {
-            need: 1,
-            got: 0,
-        }));
+        return Err(CompressedProfileError::EventBody(
+            EventBodyError::Truncated { need: 1, got: 0 },
+        ));
     }
     if !is_supported_event_codec(event_codec) {
-        return Err(CompressedProfileError::UnsupportedEventCodec {
-            codec: event_codec,
-        });
+        return Err(CompressedProfileError::UnsupportedEventCodec { codec: event_codec });
     }
 
     let plain = encode_event_body(events);
@@ -207,18 +202,22 @@ pub fn decode_mid_record_span_event_profile(
 
     if event_chunk_count < 2 {
         // Mid-record span MVP requires ≥2 EVENT pieces.
-        return Err(CompressedProfileError::EventBody(EventBodyError::Truncated {
-            need: 2,
-            got: event_chunk_count,
-        }));
+        return Err(CompressedProfileError::EventBody(
+            EventBodyError::Truncated {
+                need: 2,
+                got: event_chunk_count,
+            },
+        ));
     }
 
     let (body_recs, body_n) = decode_event_body(&plain)?;
     if body_n != plain.len() {
-        return Err(CompressedProfileError::EventBody(EventBodyError::Truncated {
-            need: plain.len(),
-            got: body_n,
-        }));
+        return Err(CompressedProfileError::EventBody(
+            EventBodyError::Truncated {
+                need: plain.len(),
+                got: body_n,
+            },
+        ));
     }
 
     let mut records = Vec::with_capacity(body_recs.len());
@@ -484,9 +483,7 @@ pub fn encode_mid_record_span_index_profile(
         ));
     }
     if !is_supported_event_codec(index_codec) {
-        return Err(CompressedProfileError::UnsupportedEventCodec {
-            codec: index_codec,
-        });
+        return Err(CompressedProfileError::UnsupportedEventCodec { codec: index_codec });
     }
 
     let plain = encode_index_body(indexes);
@@ -702,8 +699,13 @@ pub fn encode_mid_record_span_summary_profile(
         tlv_items,
     );
 
-    let frame0 =
-        encode_kind_chunk(kind::SUMMARY, summary_codec, 0, summaries.len() as u32, head)?;
+    let frame0 = encode_kind_chunk(
+        kind::SUMMARY,
+        summary_codec,
+        0,
+        summaries.len() as u32,
+        head,
+    )?;
     out.extend_from_slice(&frame0);
     let frame1 = encode_kind_chunk(kind::SUMMARY, summary_codec, 1, 0, tail)?;
     out.extend_from_slice(&frame1);

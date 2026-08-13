@@ -16,7 +16,8 @@ use nytprof_format_v6::chunk::codec;
 use nytprof_format_v6::compressed_profile::OwnedEventRecord;
 use nytprof_format_v6::event_body::EventRecordSpec;
 use nytprof_format_v6::{
-    e3_assert_logical_equal, e3_decode_writer_bytes, e3_standin_write_absolute,
+    e3_assert_logical_equal, e3_decode_mixed_writer_bytes, e3_decode_writer_bytes,
+    e3_standin_write_absolute, OwnedIndexRecord, OwnedSourceRecord, OwnedSummaryRecord,
 };
 
 fn from_c_fixture(name: &str) -> PathBuf {
@@ -92,11 +93,7 @@ fn e3_c_absolute_event_logical_equal() {
     assert!(e3.dict.is_none());
     assert_eq!(e3.profile.event_chunk_count, 1);
     let expected = expected_sample_records();
-    assert_e3_matches(
-        &e3,
-        &expected,
-        &expected_absolute_sequences(expected.len()),
-    );
+    assert_e3_matches(&e3, &expected, &expected_absolute_sequences(expected.len()));
     // Anti-stand-in: product C bytes must not be identical to Rust stand-in
     // absolute encode of the same logical sample (independent encoder).
     let specs = [
@@ -136,11 +133,7 @@ fn e3_c_packing_multi_chunk_logical_equal() {
     assert_profile_consumed(&e3, &wire);
     assert!(e3.profile.event_chunk_count >= 2);
     let expected = expected_sample_records();
-    assert_e3_matches(
-        &e3,
-        &expected,
-        &expected_packing_sequences(expected.len()),
-    );
+    assert_e3_matches(&e3, &expected, &expected_packing_sequences(expected.len()));
 }
 
 /// Product E3 packing multi-chunk (LZ4): same logical sample as packing.nytprof.
@@ -160,11 +153,7 @@ fn e3_c_packing_lz4_multi_chunk_logical_equal() {
         e3.profile.event_chunk_codecs
     );
     let expected = expected_sample_records();
-    assert_e3_matches(
-        &e3,
-        &expected,
-        &expected_packing_sequences(expected.len()),
-    );
+    assert_e3_matches(&e3, &expected, &expected_packing_sequences(expected.len()));
 }
 
 /// Product E3 FOOTER string-dict: C dict sink → resolved ATTRIBUTE/COMMENT.
@@ -193,11 +182,7 @@ fn e3_c_dict_footer_resolve() {
         },
     ];
     // Absolute + dict path: no packing FLAG_HAS_SEQ → None sequences.
-    assert_e3_matches(
-        &e3,
-        &expected,
-        &expected_absolute_sequences(expected.len()),
-    );
+    assert_e3_matches(&e3, &expected, &expected_absolute_sequences(expected.len()));
 }
 
 /// Product E3 packing + FOOTER dict multi-chunk.
@@ -226,11 +211,7 @@ fn e3_c_packing_dict_multi_chunk() {
             text: b"# pack-dict-end".to_vec(),
         },
     ];
-    assert_e3_matches(
-        &e3,
-        &expected,
-        &expected_packing_sequences(expected.len()),
-    );
+    assert_e3_matches(&e3, &expected, &expected_packing_sequences(expected.len()));
 }
 
 /// Product E3 mid-stream packing continuity (NONE→ZLIB + TIME_LINE_RUN site-delta).
@@ -279,11 +260,7 @@ fn e3_c_mid_stream_packing_continuity() {
             ticks: 3,
         },
     ];
-    assert_e3_matches(
-        &e3,
-        &expected,
-        &expected_packing_sequences(expected.len()),
-    );
+    assert_e3_matches(&e3, &expected, &expected_packing_sequences(expected.len()));
 }
 
 /// Product E3 mid-stream packing + FOOTER dict (NONE→ZSTD).
@@ -334,11 +311,7 @@ fn e3_c_mid_stream_dict_packing() {
             text: b"# ms-e3-c-dict-end".to_vec(),
         },
     ];
-    assert_e3_matches(
-        &e3,
-        &expected,
-        &expected_packing_sequences(expected.len()),
-    );
+    assert_e3_matches(&e3, &expected, &expected_packing_sequences(expected.len()));
 }
 
 /// Product E3 fail-closed: truncated C absolute fixture.
@@ -363,6 +336,7 @@ fn e3_c_fixture_matrix_present() {
         "packing_dict.nytprof",
         "mid_stream.nytprof",
         "mid_stream_dict.nytprof",
+        "mixed.nytprof",
     ] {
         let b = load_c_bytes(name);
         assert!(
@@ -373,3 +347,62 @@ fn e3_c_fixture_matrix_present() {
     }
 }
 
+/// Product E3-mixed: C SOURCE + INDEX + SUMMARY kinds on the shipped mixed path.
+#[test]
+fn e3_c_mixed_kinds_source_index_summary() {
+    let wire = load_c_bytes("mixed.nytprof");
+    let (prof, n) = e3_decode_mixed_writer_bytes(&wire, true).expect("E3-C mixed decode");
+    assert_eq!(n, wire.len(), "must consume full C mixed wire");
+    assert!(prof.event_chunk_count >= 1);
+    assert_eq!(prof.source_chunk_count, 1);
+    assert_eq!(prof.index_chunk_count, 1);
+    assert_eq!(prof.summary_chunk_count, 1);
+    let expected = expected_sample_records();
+    assert_eq!(prof.event_records, expected);
+    assert_eq!(
+        prof.event_sequences,
+        expected_absolute_sequences(expected.len())
+    );
+    assert_eq!(
+        prof.source_records,
+        vec![OwnedSourceRecord {
+            fid: 1,
+            line: 5,
+            text: b"$x++ for 1 .. 50;".to_vec(),
+        }]
+    );
+    assert_eq!(
+        prof.index_records,
+        vec![OwnedIndexRecord {
+            key_id: 1,
+            file_offset: 0,
+            length: 32,
+            label: b"fid1".to_vec(),
+        }]
+    );
+    assert_eq!(
+        prof.summary_records,
+        vec![OwnedSummaryRecord {
+            key_id: 1,
+            count: 15,
+            value: 3,
+            label: b"leaf".to_vec(),
+        }]
+    );
+    // EVENT-only E3 path must fail closed on mixed kinds (do not silently drop).
+    match e3_decode_writer_bytes(&wire, true, false) {
+        Err(_) => {}
+        Ok(_) => panic!("EVENT-only e3_decode_writer_bytes must not accept SOURCE/INDEX/SUMMARY"),
+    }
+}
+
+/// Product E3-mixed fail-closed: truncated C mixed fixture.
+#[test]
+fn e3_c_mixed_truncated_fail_closed() {
+    let wire = load_c_bytes("mixed.nytprof");
+    let truncated = &wire[..wire.len().saturating_sub(8).max(8)];
+    match e3_decode_mixed_writer_bytes(truncated, true) {
+        Err(_) => {}
+        Ok(_) => panic!("truncated mixed C bytes must fail closed"),
+    }
+}

@@ -14,11 +14,14 @@
 //!
 //! # Residuals
 //!
-//! - Not full `nytprofmerge` aggregate-sum parity (stream-concat + fid remap MVP)
+//! - Stream-concat remains the **default**. Opt-in [`MergeMode::AggregateSum`]
+//!   remaps later-stream `NEW_FID` names onto the first stream so line/sub
+//!   totals combine (L02 MVP). Not full `nytprofmerge` option parity.
 //! - Not full SEC-003 multi-chunk mid-corruption resume matrix
 //! - Not packing/string-dict v6 output (uses convert strict encoders)
 //! - Not lossy convert modes
 
+use std::collections::{HashMap, HashSet};
 use std::path::Path;
 
 use nytprof_format_v6::{
@@ -50,6 +53,16 @@ pub enum MergeToolsError {
 }
 
 pub type MergeToolsResult<T> = std::result::Result<T, MergeToolsError>;
+
+/// How [`merge_bytes_with`] combines fully-decoded inputs.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum MergeMode {
+    /// Default: concatenate streams; later fids offset (independent files).
+    #[default]
+    StreamConcat,
+    /// Remap later `NEW_FID` filenames onto the first stream so A4/A5 totals sum.
+    AggregateSum,
+}
 
 // ---------------------------------------------------------------------------
 // Repack
@@ -105,9 +118,17 @@ pub fn detect_convert_target(input: &[u8]) -> MergeToolsResult<ConvertTarget> {
 /// 5. Process (`PID_*`) boundaries are preserved as independent sequences.
 /// 6. `seq` is renumbered 0..n-1 on the merged stream.
 ///
-/// This is **not** legacy `nytprofmerge` aggregate-sum of same-run line totals;
-/// it is ordered multi-profile stream merge for tooling / mixed v5+v6 inputs.
+/// Default merge is **stream-concat** (fid remap). See [`merge_bytes_with`].
 pub fn merge_bytes(inputs: &[&[u8]], target: ConvertTarget) -> MergeToolsResult<Vec<u8>> {
+    merge_bytes_with(inputs, target, MergeMode::StreamConcat)
+}
+
+/// Merge fully-decoded inputs using `mode`.
+pub fn merge_bytes_with(
+    inputs: &[&[u8]],
+    target: ConvertTarget,
+    mode: MergeMode,
+) -> MergeToolsResult<Vec<u8>> {
     if inputs.is_empty() {
         return Err(MergeToolsError::Tool {
             detail: "merge requires at least one input".into(),
@@ -131,15 +152,28 @@ pub fn merge_bytes(inputs: &[&[u8]], target: ConvertTarget) -> MergeToolsResult<
         decoded.push(evs);
     }
 
-    let merged = merge_event_streams(&decoded)?;
+    let merged = match mode {
+        MergeMode::StreamConcat => merge_event_streams(&decoded)?,
+        MergeMode::AggregateSum => merge_event_streams_aggregate_sum(&decoded)?,
+    };
     Ok(encode_events(&merged, target)?)
 }
 
-/// Merge profile paths into `output_path`.
+/// Merge profile paths into `output_path` (stream-concat default).
 pub fn merge_paths(
     input_paths: &[impl AsRef<Path>],
     output_path: impl AsRef<Path>,
     target: ConvertTarget,
+) -> MergeToolsResult<()> {
+    merge_paths_with(input_paths, output_path, target, MergeMode::StreamConcat)
+}
+
+/// Merge profile paths with an explicit [`MergeMode`].
+pub fn merge_paths_with(
+    input_paths: &[impl AsRef<Path>],
+    output_path: impl AsRef<Path>,
+    target: ConvertTarget,
+    mode: MergeMode,
 ) -> MergeToolsResult<()> {
     if input_paths.is_empty() {
         return Err(MergeToolsError::Tool {
@@ -156,7 +190,7 @@ pub fn merge_paths(
         owned.push(b);
     }
     let refs: Vec<&[u8]> = owned.iter().map(|v| v.as_slice()).collect();
-    let out = merge_bytes(&refs, target)?;
+    let out = merge_bytes_with(&refs, target, mode)?;
     write_out(output_path, &out)
 }
 
@@ -213,6 +247,111 @@ fn merge_event_streams(streams: &[Vec<Event>]) -> MergeToolsResult<Vec<Event>> {
     Ok(out)
 }
 
+/// Aggregate-sum: later `NEW_FID` names remap onto the first stream's fid so
+/// A4 line totals and A5/A7 sub/edge totals combine for the same filename.
+/// Distinct filenames still get a fresh fid (no collision). Process streams
+/// stay independent. Not full `nytprofmerge` option parity.
+fn merge_event_streams_aggregate_sum(streams: &[Vec<Event>]) -> MergeToolsResult<Vec<Event>> {
+    let mut out: Vec<Event> = Vec::new();
+    let mut name_to_fid: HashMap<String, u64> = HashMap::new();
+    let mut next_fid: u64 = 1;
+    let mut first_stream = true;
+
+    for (si, stream) in streams.iter().enumerate() {
+        if first_stream {
+            for ev in stream {
+                match ev.tag.as_str() {
+                    tags::END => continue,
+                    tags::NEW_FID => {
+                        let fid = arg_as_u64(ev.args.first()).ok_or_else(|| {
+                            MergeToolsError::Tool {
+                                detail: format!("seq {}: NEW_FID fid not an integer", ev.seq),
+                            }
+                        })?;
+                        let name = new_fid_filename(ev).ok_or_else(|| MergeToolsError::Tool {
+                            detail: format!("seq {}: NEW_FID missing filename", ev.seq),
+                        })?;
+                        name_to_fid.entry(name).or_insert(fid);
+                        next_fid = next_fid.max(fid.saturating_add(1));
+                        out.push(ev.clone());
+                    }
+                    _ => out.push(ev.clone()),
+                }
+            }
+            first_stream = false;
+            continue;
+        }
+
+        out.push(Event::new(
+            0,
+            tags::COMMENT,
+            vec![json!(format!(
+                "# nytprof-merge: begin input {si} (aggregate-sum)\n"
+            ))],
+        ));
+
+        let mut old_to_new: HashMap<u64, u64> = HashMap::new();
+        let mut skip_new_fid: HashSet<u64> = HashSet::new();
+        for ev in stream {
+            if ev.tag != tags::NEW_FID {
+                continue;
+            }
+            let old_fid = arg_as_u64(ev.args.first()).ok_or_else(|| MergeToolsError::Tool {
+                detail: format!("input[{si}] seq {}: NEW_FID fid not an integer", ev.seq),
+            })?;
+            let name = new_fid_filename(ev).ok_or_else(|| MergeToolsError::Tool {
+                detail: format!("input[{si}] seq {}: NEW_FID missing filename", ev.seq),
+            })?;
+            if let Some(&existing) = name_to_fid.get(&name) {
+                old_to_new.insert(old_fid, existing);
+                skip_new_fid.insert(old_fid);
+            } else {
+                let assigned = next_fid;
+                next_fid = next_fid.saturating_add(1);
+                old_to_new.insert(old_fid, assigned);
+                name_to_fid.insert(name, assigned);
+            }
+        }
+
+        for ev in stream {
+            match ev.tag.as_str() {
+                tags::END => continue,
+                tags::VERSION | tags::START_DEFLATE => continue,
+                tags::NEW_FID => {
+                    let old_fid = arg_as_u64(ev.args.first()).ok_or_else(|| {
+                        MergeToolsError::Tool {
+                            detail: format!("input[{si}] seq {}: NEW_FID fid not an integer", ev.seq),
+                        }
+                    })?;
+                    if skip_new_fid.contains(&old_fid) {
+                        continue;
+                    }
+                    out.push(remap_event_fids_mapped(ev, &old_to_new)?);
+                }
+                _ => out.push(remap_event_fids_mapped(ev, &old_to_new)?),
+            }
+        }
+    }
+
+    for (i, ev) in out.iter_mut().enumerate() {
+        ev.seq = i as u64;
+    }
+    Ok(out)
+}
+
+fn new_fid_filename(ev: &Event) -> Option<String> {
+    // Canonical long form: fid, eval_fid, eval_line, flags, size, mtime, name
+    if ev.args.len() >= 7 {
+        if let Some(s) = ev.args.get(6).and_then(|v| v.as_str()) {
+            return Some(s.to_string());
+        }
+    }
+    ev.args
+        .iter()
+        .rev()
+        .find_map(|v| v.as_str().map(str::to_string))
+}
+
 fn event_declared_fid(ev: &Event) -> Option<u64> {
     match ev.tag.as_str() {
         tags::NEW_FID => arg_as_u64(ev.args.first()),
@@ -250,6 +389,50 @@ fn remap_event_fids(ev: &Event, fid_base: u64) -> MergeToolsResult<Event> {
         _ => {}
     }
     Ok(Event::new(ev.seq, ev.tag.clone(), args))
+}
+
+fn remap_event_fids_mapped(
+    ev: &Event,
+    map: &HashMap<u64, u64>,
+) -> MergeToolsResult<Event> {
+    if map.is_empty() {
+        return Ok(ev.clone());
+    }
+    let mut args = ev.args.clone();
+    match ev.tag.as_str() {
+        tags::NEW_FID => {
+            apply_fid_map(&mut args, 0, map, ev)?;
+            if args.len() >= 7 && arg_as_u64(args.get(1)).unwrap_or(0) != 0 {
+                apply_fid_map(&mut args, 1, map, ev)?;
+            }
+        }
+        tags::TIME_LINE | tags::TIME_BLOCK => {
+            apply_fid_map(&mut args, 1, map, ev)?;
+        }
+        tags::SUB_ENTRY | tags::SUB_INFO | tags::SUB_CALLERS | tags::SRC_LINE => {
+            apply_fid_map(&mut args, 0, map, ev)?;
+        }
+        _ => {}
+    }
+    Ok(Event::new(ev.seq, ev.tag.clone(), args))
+}
+
+fn apply_fid_map(
+    args: &mut [Value],
+    idx: usize,
+    map: &HashMap<u64, u64>,
+    ev: &Event,
+) -> MergeToolsResult<()> {
+    let v = arg_as_u64(args.get(idx)).ok_or_else(|| MergeToolsError::Tool {
+        detail: format!(
+            "seq {}: {} arg[{idx}] not an integer fid for remap",
+            ev.seq, ev.tag
+        ),
+    })?;
+    if let Some(&mapped) = map.get(&v) {
+        args[idx] = json!(mapped);
+    }
+    Ok(())
 }
 
 fn add_u64_arg(
@@ -820,6 +1003,200 @@ mod tests {
         assert_eq!(time_fids.len(), 2);
         assert_eq!(time_fids[0], fids[0]);
         assert_eq!(time_fids[1], fids[1]);
+    }
+
+    #[test]
+    fn merge_aggregate_sum_same_filename_sums_line_totals() {
+        let s1 = vec![
+            Event::new(0, tags::VERSION, vec![json!(6), json!(0)]),
+            Event::new(
+                1,
+                tags::NEW_FID,
+                vec![
+                    json!(1),
+                    json!(0),
+                    json!(0),
+                    json!(0),
+                    json!(0),
+                    json!(0),
+                    json!("same.pl"),
+                ],
+            ),
+            Event::new(2, tags::TIME_LINE, vec![json!(10), json!(1), json!(5)]),
+            Event::new(
+                3,
+                tags::SUB_RETURN,
+                vec![json!(1), json!(1.0), json!(1.0), json!("main::leaf")],
+            ),
+            Event::new(4, tags::PID_START, vec![json!(1), json!(0), json!(0)]),
+            Event::new(5, tags::PID_END, vec![json!(1), json!(1)]),
+        ];
+        let s2 = vec![
+            Event::new(0, tags::VERSION, vec![json!(6), json!(0)]),
+            Event::new(
+                1,
+                tags::NEW_FID,
+                vec![
+                    json!(1),
+                    json!(0),
+                    json!(0),
+                    json!(0),
+                    json!(0),
+                    json!(0),
+                    json!("same.pl"),
+                ],
+            ),
+            Event::new(2, tags::TIME_LINE, vec![json!(20), json!(1), json!(5)]),
+            Event::new(
+                3,
+                tags::SUB_RETURN,
+                vec![json!(1), json!(1.0), json!(1.0), json!("main::leaf")],
+            ),
+            Event::new(4, tags::PID_START, vec![json!(2), json!(0), json!(0)]),
+            Event::new(5, tags::PID_END, vec![json!(2), json!(1)]),
+        ];
+        let e1 = encode_events(&s1, ConvertTarget::V6).unwrap();
+        let e2 = encode_events(&s2, ConvertTarget::V6).unwrap();
+
+        let concat = merge_bytes(&[&e1, &e2], ConvertTarget::V6).expect("concat");
+        let concat_m = ProfileModel::from_bytes(&concat).expect("concat model");
+        assert_eq!(
+            concat_m.line_total(1, 5).map(|t| t.calls),
+            Some(1),
+            "stream-concat must keep fid 1 line 5 as first stream only"
+        );
+        assert_eq!(concat_m.sub_total("main::leaf").map(|t| t.returns), Some(2));
+
+        let summed = merge_bytes_with(&[&e1, &e2], ConvertTarget::V6, MergeMode::AggregateSum)
+            .expect("aggregate-sum");
+        let sum_m = ProfileModel::from_bytes(&summed).expect("sum model");
+        assert_eq!(
+            sum_m.line_total(1, 5).map(|t| t.calls),
+            Some(2),
+            "aggregate-sum must collapse same filename onto fid 1"
+        );
+        assert_eq!(sum_m.sub_total("main::leaf").map(|t| t.returns), Some(2));
+        let fids: Vec<u64> = decode_events_from_bytes(&summed)
+            .unwrap()
+            .iter()
+            .filter(|e| e.tag == tags::NEW_FID)
+            .filter_map(|e| e.args.first().and_then(|v| v.as_u64()))
+            .collect();
+        assert_eq!(fids, vec![1], "duplicate NEW_FID same name must be skipped");
+    }
+
+    #[test]
+    fn merge_aggregate_sum_distinct_filenames_still_offset() {
+        let s1 = vec![
+            Event::new(0, tags::VERSION, vec![json!(6), json!(0)]),
+            Event::new(
+                1,
+                tags::NEW_FID,
+                vec![
+                    json!(1),
+                    json!(0),
+                    json!(0),
+                    json!(0),
+                    json!(0),
+                    json!(0),
+                    json!("a.pl"),
+                ],
+            ),
+            Event::new(2, tags::TIME_LINE, vec![json!(10), json!(1), json!(1)]),
+            Event::new(3, tags::PID_START, vec![json!(1), json!(0), json!(0)]),
+            Event::new(4, tags::PID_END, vec![json!(1), json!(1)]),
+        ];
+        let s2 = vec![
+            Event::new(0, tags::VERSION, vec![json!(6), json!(0)]),
+            Event::new(
+                1,
+                tags::NEW_FID,
+                vec![
+                    json!(1),
+                    json!(0),
+                    json!(0),
+                    json!(0),
+                    json!(0),
+                    json!(0),
+                    json!("b.pl"),
+                ],
+            ),
+            Event::new(2, tags::TIME_LINE, vec![json!(20), json!(1), json!(2)]),
+            Event::new(3, tags::PID_START, vec![json!(2), json!(0), json!(0)]),
+            Event::new(4, tags::PID_END, vec![json!(2), json!(1)]),
+        ];
+        let e1 = encode_events(&s1, ConvertTarget::V6).unwrap();
+        let e2 = encode_events(&s2, ConvertTarget::V6).unwrap();
+        let out = merge_bytes_with(&[&e1, &e2], ConvertTarget::V6, MergeMode::AggregateSum)
+            .expect("sum distinct");
+        let events = decode_events_from_bytes(&out).expect("decode");
+        let fids: Vec<u64> = events
+            .iter()
+            .filter(|e| e.tag == tags::NEW_FID)
+            .filter_map(|e| e.args.first().and_then(|v| v.as_u64()))
+            .collect();
+        assert_eq!(fids.len(), 2);
+        assert_ne!(fids[0], fids[1]);
+        let model = ProfileModel::from_bytes(&out).unwrap();
+        assert_eq!(model.line_total(1, 1).map(|t| t.calls), Some(1));
+    }
+
+    #[test]
+    fn merge_aggregate_sum_dual_sink_default_calls1_doubles_line_and_leaf() {
+        let path = dual("default_calls1", "v6");
+        if !path.is_file() {
+            return;
+        }
+        let bytes = std::fs::read(&path).unwrap();
+        let one = ProfileModel::from_bytes(&bytes).expect("one");
+        let one_line = one.line_total(1, 5).map(|t| t.calls).unwrap_or(0);
+        let one_leaf = one.sub_total("main::leaf").map(|t| t.returns).unwrap_or(0);
+        assert!(one_line >= 1, "default_calls1 v6 must have line_total(1,5)");
+        assert!(one_leaf >= 1, "default_calls1 v6 must have main::leaf");
+
+        let concat = merge_bytes(&[&bytes, &bytes], ConvertTarget::V6).expect("concat");
+        let concat_m = ProfileModel::from_bytes(&concat).expect("concat model");
+        assert_eq!(
+            concat_m.line_total(1, 5).map(|t| t.calls),
+            Some(one_line),
+            "concat must not sum same-fid line totals"
+        );
+
+        let summed = merge_bytes_with(
+            &[&bytes, &bytes],
+            ConvertTarget::V6,
+            MergeMode::AggregateSum,
+        )
+        .expect("aggregate-sum dual-sink");
+        let sum_m = ProfileModel::from_bytes(&summed).expect("sum model");
+        assert_eq!(
+            sum_m.line_total(1, 5).map(|t| t.calls),
+            Some(one_line.saturating_mul(2))
+        );
+        assert_eq!(
+            sum_m.sub_total("main::leaf").map(|t| t.returns),
+            Some(one_leaf.saturating_mul(2))
+        );
+    }
+
+    #[test]
+    fn merge_aggregate_sum_refuses_corrupt_member() {
+        let path = dual("default_calls1", "v6");
+        if !path.is_file() {
+            return;
+        }
+        let good = std::fs::read(&path).unwrap();
+        let err = merge_bytes_with(
+            &[&good, b"not a profile".as_slice()],
+            ConvertTarget::V6,
+            MergeMode::AggregateSum,
+        )
+        .expect_err("corrupt member");
+        let msg = err.to_string();
+        assert!(
+            msg.contains("input[1]") || msg.contains("decode") || msg.contains("unknown"),
+            "got: {msg}"
+        );
     }
 
     #[test]

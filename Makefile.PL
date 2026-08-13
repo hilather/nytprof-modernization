@@ -10,8 +10,8 @@
 #
 # Controls:
 #   NYTPROF_NATIVE=0     legacy-only (default) — no Cargo on the critical path
-#   NYTPROF_NATIVE=1     require cargo for configure; enable native targets as default all
-#   NYTPROF_NATIVE=auto  enable native targets when cargo is present; else legacy
+#   NYTPROF_NATIVE=1     require cargo for configure; make all → native-install (I02)
+#   NYTPROF_NATIVE=auto  make all → native-install when cargo present; cargo-free if absent
 #
 # Typical use (from repo root):
 #   perl Makefile.PL                 # default: legacy
@@ -88,12 +88,12 @@ else {    # auto
     }
 }
 
-print "nytprof-modernization packaging entry (BUILD-MAKEMAKER-OPT)\n";
+print "NYTProfM / Devel::NYTProfM packaging entry (J01 hygiene; BUILD-MAKEMAKER-OPT)\n";
 print "  mode: $native_note\n";
-print "  honesty: candidate facade — NOT full Devel::NYTProf XS / CPAN dual-build (BUILD-003)\n";
+print "  honesty: NAME/VERSION from product module — NOT full XS CPAN dual-build (BUILD-003); CPAN-TRIAL residual\n";
 print "  isolation: never put crates/ on oracle PERL5LIB\n";
 print "  scripts: $pack\n";
-print "  targets: legacy-smoke dual-path-smoke offline-gate native-install native\n";
+print "  targets: legacy-smoke dual-path-smoke offline-gate native-install native install-product-xs product-legacy-smoke install-product-scripts i03-dist-scripts-smoke j01-cpan-hygiene-smoke j02-cpan-trial-notes-smoke\n";
 if ( $native_mode eq 'off' ) {
     print "  default make all/test → legacy path (no cargo)\n";
 }
@@ -101,7 +101,7 @@ elsif ( $native_mode eq 'on' ) {
     print "  default make all → native-install (cargo required)\n";
 }
 else {
-    print "  default make all → legacy path; make native-install available\n";
+    print "  default make all → native-install (NYTPROF_NATIVE=auto + cargo)\n";
 }
 
 # Write a tiny stamp the generated Makefile can quote (also aids smoke checks).
@@ -113,25 +113,34 @@ my $stamp = File::Spec->catfile( $repo_root, 'nytprof-packaging.mode' );
     print {$fh} "cargo_present=" . ( $cargo_present ? '1' : '0' ) . "\n";
     print {$fh} "packaging_entry=BUILD-MAKEMAKER-OPT\n";
     print {$fh} "not_full_xs_cpan=1\n";
+    print {$fh} "packaging_i02=1\n";
+    print {$fh} "packaging_i03=1\n";
+    print {$fh} "packaging_j01=1\n";
+    print {$fh} "packaging_j02=1\n";
+    print {$fh} "full_build003=0\n";
+    print {$fh} "cpan_trial_ready=0\n";
+    print {$fh} "cpan_trial_notes=1\n";
+    print {$fh} "cpan_trial_uploaded=0\n";
     close $fh;
 }
 
 # Expose mode to postamble BEFORE WriteMakefile (postamble runs during configure).
 $main::NYTPROF_PACK_NATIVE_MODE = $native_mode;
 
-# Thin WriteMakefile: no XS, no oracle sources, no claim to ship full NYTProf.
-# PM is empty — this entry only exposes packaging targets via postamble.
+# J01: advertised dist identity is the coordinated CPAN name + product $VERSION
+# from the real debugger module (not PackagingEntry / 0.001). PM stays empty —
+# this entry still only exposes packaging targets; not BUILD-003-FULL / not TRIAL.
+my $product_pm = 'collector/xs/Devel/NYTProfM.pm';
 WriteMakefile(
-    NAME             => 'NYTProf::Modernization::PackagingEntry',
-    VERSION          => '0.001',
-    ABSTRACT         => 'Candidate MakeMaker dual-path packaging entry (not full Devel::NYTProf XS)',
+    NAME             => 'Devel::NYTProfM',
+    DISTNAME         => 'NYTProfM',
+    VERSION_FROM     => $product_pm,
+    ABSTRACT         => 'NYTProfM product packaging entry (J01 hygiene; not full XS CPAN / not TRIAL)',
     AUTHOR           => 'nytprof-modernization contributors',
     LICENSE          => 'perl',
     MIN_PERL_VERSION => '5.008001',
-    # No installable dist payload yet — packaging facade only.
     PM               => {},
     EXE_FILES        => [],
-    # Avoid pulling real NYTProf into PREREQ for this candidate entry.
     PREREQ_PM        => {},
     NO_META          => 0,
     NORECURS         => 1,
@@ -146,9 +155,12 @@ WriteMakefile(
             },
         },
         x_nytprof_modernization => {
-            board_id           => 'BUILD-MAKEMAKER-OPT',
+            board_id           => 'CPAN-TRIAL-READY',
             packaging_entry    => 1,
             full_xs_cpan       => 0,
+            cpan_trial_ready   => 0,
+            cpan_trial_notes   => 1,
+            cpan_trial_uploaded => 0,
             nytprof_native_env => $native_env,
             native_mode        => $native_mode,
             policy             => 'docs/BUILD_SUPPORT_POLICY.md',
@@ -175,6 +187,16 @@ sub MY::postamble {
     my $offline_sh   = 'scripts/ci/offline_gate.sh';
     my $install_sh   = 'scripts/packaging/install_native.sh';
     my $native_sm_sh = 'scripts/packaging/native_install_smoke.sh';
+    my $prod_xs_sh   = 'scripts/packaging/install_product_xs.sh';
+    my $prod_leg_sh  = 'scripts/packaging/product_legacy_smoke.sh';
+    my $prod_scr_sh  = 'scripts/packaging/install_product_scripts.sh';
+    my $i03_sm_sh    = 'scripts/packaging/i03_dist_scripts_smoke.sh';
+    my $j01_sm_sh    = 'scripts/packaging/j01_cpan_hygiene_smoke.sh';
+    my $j02_sm_sh    = 'scripts/packaging/j02_cpan_trial_notes_smoke.sh';
+    my $k01_sm_sh    = 'scripts/packaging/k01_el8_module_rpm_smoke.sh';
+    my $k02_sm_sh    = 'scripts/packaging/k02_el8_tools_rpm_smoke.sh';
+    my $p01_sm_sh    = 'scripts/packaging/p01_ga_candidate_smoke.sh';
+    my $p02_sm_sh    = 'scripts/packaging/p02_sec_cut_smoke.sh';
 
     # Make recipes require real TAB characters. Build lines with "\t" (not
     # backslash-t inside a heredoc, which would stay literal).
@@ -187,6 +209,12 @@ sub MY::postamble {
     if ( $mode eq 'on' ) {
         $all_body = $lines->(
             '$(NOECHO) $(ECHO) packaging entry: native required - running native-install',
+            '$(MAKE) native-install',
+        );
+    }
+    elsif ( $mode eq 'optional' ) {
+        $all_body = $lines->(
+            '$(NOECHO) $(ECHO) packaging entry: NYTPROF_NATIVE=auto + cargo - installing nytprof-cli',
             '$(MAKE) native-install',
         );
     }
@@ -206,6 +234,16 @@ sub MY::postamble {
         '$(NOECHO) $(ECHO) "  make collector-sink-smoke  # COL-001 overlay (CC? honest skip)"',
         '$(NOECHO) $(ECHO) "  make native-install    # requires cargo"',
         '$(NOECHO) $(ECHO) "  make native            # alias for native-install"',
+        '$(NOECHO) $(ECHO) "  make install-product-xs  # I01 cargo-free product Devel::NYTProfM XS"',
+        '$(NOECHO) $(ECHO) "  make product-legacy-smoke # I01 P-PRODUCT-LEGACY install+attach"',
+        '$(NOECHO) $(ECHO) "  make install-product-scripts # I03 cargo-free EngineDispatch + nytprofhtml/csv"',
+        '$(NOECHO) $(ECHO) "  make i03-dist-scripts-smoke  # I03 prefix scripts + query 15/3/15"',
+        '$(NOECHO) $(ECHO) "  make j01-cpan-hygiene-smoke  # J01 META NYTProfM 6.15"',
+        '$(NOECHO) $(ECHO) "  make j02-cpan-trial-notes-smoke # J02 TRIAL notes-ready (not PAUSE)"',
+        '$(NOECHO) $(ECHO) "  make k01-el8-module-rpm-smoke # K01 EL8 D1-B module spec"',
+        '$(NOECHO) $(ECHO) "  make k02-el8-tools-rpm-smoke  # K02 EL8 nytprof-cli companion spec"',
+        '$(NOECHO) $(ECHO) "  make p01-ga-candidate-smoke   # P01 GA-candidate honesty"',
+        '$(NOECHO) $(ECHO) "  make p02-sec-cut-smoke        # P02 SEC-012 checklist + SEC-002 job MVP"',
         '$(NOECHO) $(ECHO) "  make test              # legacy-smoke (cargo-free)"',
         '$(NOECHO) $(ECHO) "  NYTPROF_NATIVE=0|1|auto perl Makefile.PL"',
     );
@@ -236,6 +274,46 @@ sub MY::postamble {
         '$(NOECHO) $(ECHO) "=== make native-smoke -> ' . $native_sm_sh . ' ==="',
         'bash ' . $native_sm_sh,
     );
+    my $prod_xs_body = $lines->(
+        '$(NOECHO) $(ECHO) "=== make install-product-xs -> ' . $prod_xs_sh . ' ==="',
+        'bash ' . $prod_xs_sh,
+    );
+    my $prod_leg_body = $lines->(
+        '$(NOECHO) $(ECHO) "=== make product-legacy-smoke -> ' . $prod_leg_sh . ' ==="',
+        'bash ' . $prod_leg_sh,
+    );
+    my $prod_scr_body = $lines->(
+        '$(NOECHO) $(ECHO) "=== make install-product-scripts -> ' . $prod_scr_sh . ' ==="',
+        'bash ' . $prod_scr_sh,
+    );
+    my $i03_sm_body = $lines->(
+        '$(NOECHO) $(ECHO) "=== make i03-dist-scripts-smoke -> ' . $i03_sm_sh . ' ==="',
+        'bash ' . $i03_sm_sh,
+    );
+    my $j01_sm_body = $lines->(
+        '$(NOECHO) $(ECHO) "=== make j01-cpan-hygiene-smoke -> ' . $j01_sm_sh . ' ==="',
+        'bash ' . $j01_sm_sh,
+    );
+    my $j02_sm_body = $lines->(
+        '$(NOECHO) $(ECHO) "=== make j02-cpan-trial-notes-smoke -> ' . $j02_sm_sh . ' ==="',
+        'bash ' . $j02_sm_sh,
+    );
+    my $k01_sm_body = $lines->(
+        '$(NOECHO) $(ECHO) "=== make k01-el8-module-rpm-smoke -> ' . $k01_sm_sh . ' ==="',
+        'bash ' . $k01_sm_sh,
+    );
+    my $k02_sm_body = $lines->(
+        '$(NOECHO) $(ECHO) "=== make k02-el8-tools-rpm-smoke -> ' . $k02_sm_sh . ' ==="',
+        'bash ' . $k02_sm_sh,
+    );
+    my $p01_sm_body = $lines->(
+        '$(NOECHO) $(ECHO) "=== make p01-ga-candidate-smoke -> ' . $p01_sm_sh . ' ==="',
+        'bash ' . $p01_sm_sh,
+    );
+    my $p02_sm_body = $lines->(
+        '$(NOECHO) $(ECHO) "=== make p02-sec-cut-smoke -> ' . $p02_sm_sh . ' ==="',
+        'bash ' . $p02_sm_sh,
+    );
 
     return <<"MAKE_FRAG";
 
@@ -244,7 +322,7 @@ sub MY::postamble {
 # Never put crates/ on oracle PERL5LIB; child smokes own isolation.
 # ---------------------------------------------------------------------------
 
-.PHONY: legacy-smoke dual-path-smoke offline-gate collector-sink-smoke native-install native native-smoke packaging-help packaging-all
+.PHONY: legacy-smoke dual-path-smoke offline-gate collector-sink-smoke native-install native native-smoke packaging-help packaging-all install-product-xs product-legacy-smoke install-product-scripts i03-dist-scripts-smoke j01-cpan-hygiene-smoke j02-cpan-trial-notes-smoke k01-el8-module-rpm-smoke k02-el8-tools-rpm-smoke p01-ga-candidate-smoke p02-sec-cut-smoke
 
 # Hook default `all` so `perl Makefile.PL && make` is meaningful.
 all :: packaging-all
@@ -267,5 +345,25 @@ native: native-install
 
 native-smoke: native-install
 $native_smoke_body
+install-product-xs:
+$prod_xs_body
+product-legacy-smoke:
+$prod_leg_body
+install-product-scripts:
+$prod_scr_body
+i03-dist-scripts-smoke:
+$i03_sm_body
+j01-cpan-hygiene-smoke:
+$j01_sm_body
+j02-cpan-trial-notes-smoke:
+$j02_sm_body
+k01-el8-module-rpm-smoke:
+$k01_sm_body
+k02-el8-tools-rpm-smoke:
+$k02_sm_body
+p01-ga-candidate-smoke:
+$p01_sm_body
+p02-sec-cut-smoke:
+$p02_sm_body
 MAKE_FRAG
 }

@@ -1,0 +1,75 @@
+# SEC-002 continuous-fuzz job MVP (P02).
+#
+# Invokes shipped tools/oracle/selftest_security_fuzz.sh (decode_fuzz
+# batteries) via scripts/ci/sec002_continuous_fuzz_mvp.sh.
+# Honest SKIP without cargo. Never crates/ on oracle PERL5LIB.
+#
+# Not cargo-fuzz / AFL / scheduled deep corpus.
+# Not SEC-012 independent sign-off / GA marketing.
+#
+# Board: P02-SEC-CUT / SEC-002-CONTINUOUS-FUZZ-MVP
+name: SEC-002 fuzz MVP
+
+on:
+  push:
+    branches:
+      - main
+      - 'execute-plan/**'
+      - 'release/**'
+    tags:
+      - 'v*'
+  pull_request:
+  workflow_dispatch:
+  # Same deterministic battery on a weekly cadence (continuous MVP).
+  # Not a deep corpus or sanitizer matrix.
+  schedule:
+    - cron: '17 4 * * 1'
+
+concurrency:
+  group: sec002-fuzz-mvp-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  sec002-fuzz-mvp:
+    name: sec002-fuzz-mvp (linux)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Install Linux decode/collector deps
+        run: |
+          set -euo pipefail
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            build-essential \
+            zlib1g-dev \
+            libzstd-dev \
+            liblz4-dev \
+            pkg-config \
+            perl
+
+      - name: Cache Cargo
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: ${{ runner.os }}-sec002-cargo-${{ hashFiles('Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-sec002-cargo-
+
+      - name: SEC-002 MVP — shipped selftest_security_fuzz.sh / decode_fuzz
+        env:
+          CARGO_TERM_COLOR: always
+        run: |
+          set -euo pipefail
+          bash scripts/ci/sec002_continuous_fuzz_mvp.sh

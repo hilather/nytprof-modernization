@@ -18,11 +18,19 @@ pub const CRC32_IEEE_POLY: u32 = 0xEDB_88320;
 /// Fail-closed CRC errors.
 #[derive(Debug, PartialEq, Eq)]
 pub enum CrcError {
-    Truncated { need: usize, got: usize },
+    Truncated {
+        need: usize,
+        got: usize,
+    },
     /// Stored CRC does not match recomputed value.
-    Mismatch { expected: u32, got: u32 },
+    Mismatch {
+        expected: u32,
+        got: u32,
+    },
     /// Header too short for CRC field / covered range.
-    HeaderTooShort { len: usize },
+    HeaderTooShort {
+        len: usize,
+    },
 }
 
 impl std::fmt::Display for CrcError {
@@ -32,7 +40,10 @@ impl std::fmt::Display for CrcError {
                 write!(f, "truncated crc input: need {need} bytes, got {got}")
             }
             CrcError::Mismatch { expected, got } => {
-                write!(f, "crc mismatch: expected 0x{expected:08X}, got 0x{got:08X}")
+                write!(
+                    f,
+                    "crc mismatch: expected 0x{expected:08X}, got 0x{got:08X}"
+                )
             }
             CrcError::HeaderTooShort { len } => {
                 write!(
@@ -147,13 +158,8 @@ pub fn encode_fixed_header_full_sealed(
     required_features: u64,
     optional_features: u64,
 ) -> [u8; HEADER_LEN_FULL as usize] {
-    let mut h = crate::encode_fixed_header_full(
-        major,
-        minor,
-        required_features,
-        optional_features,
-        0,
-    );
+    let mut h =
+        crate::encode_fixed_header_full(major, minor, required_features, optional_features, 0);
     // Covered range is always present in full header; fill cannot fail.
     let _ = fill_header_crc(&mut h);
     h

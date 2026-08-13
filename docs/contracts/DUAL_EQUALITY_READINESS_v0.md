@@ -28,7 +28,7 @@ Plan COL-007 listed dependencies **FMT-002 through FMT-010**. This program **imp
 |-------|---------|-------------------|
 | **E1 — v5 semantic surfaces** | Native v5 read/report vs oracle / pure-Perl JSONL bridges on advertised fixtures (already R1-preview ready for offline scope) | offline_gate + packaging smokes; residual matrix “Advertised ready” |
 | **E2 — v6 encode↔decode** | Rust (or C) encode → always-inflate decode recovers equal logical events/sites/seq/strings under packing/absolute policies | `cargo test -p nytprof-format-v6` always-inflate packing/mid-stream/multi-chunk tests |
-| **E3 — C writer ↔ Rust decode** | COL-007 C emitter produces streams that Rust always-inflate path decodes with E2 equality on golden workloads | **ready (EVENT)** — C fixtures `fixtures/v6/from-c/**` + `e3_c_*` tests + `tools/oracle/e3_c_writer_parity.sh`. Stand-in harness remains engineering only. **E3-mixed residual.** |
+| **E3 — C writer ↔ Rust decode** | COL-007 C emitter produces streams that Rust always-inflate path decodes with E2 equality on golden workloads | **ready (EVENT + mixed MVP)** — C fixtures `fixtures/v6/from-c/**` (incl. `mixed.nytprof`) + `e3_c_*` / `e3_c_mixed_*` + `tools/oracle/e3_c_writer_parity.sh`. Stand-in harness remains engineering only. |
 | **E4 — v5↔v6 semantic** | Same workload profiled as v5 and v6 yields equal advertised aggregates / dump structure after normalize | **E4-v0 ready (PR-B10)** + **E4 product CLI ready (PR-B12b)** — policy + dual-sink pairs + model equality + real CLI `report --json`/E5 surfaces + offline_gate step 12; **COL-014** logical equality harness (PR-B10a); full oracle pairs residual (TEST-008) |
 | **E5 — CLI product path** | CLI report/verify on v6 files as product surface (opt-in, not default) + convert/merge/repack/salvage | **ready (PR-B12 + PR-C01/C02)** — report/html/csv/folded/callgrind/dump/verify on v6; capability `v6_decode`/`v6_report`/`convert`/`merge`/`repack`/`salvage` **true**; `collection_default: v5`; schemas [`cli-e5-v6-opt-in-mvp-v0.md`](https://github.com/hilather/nytprof-modernization/blob/main/docs/schemas/cli-e5-v6-opt-in-mvp-v0.md), [`convert-strict-mvp-v0.md`](https://github.com/hilather/nytprof-modernization/blob/main/docs/schemas/convert-strict-mvp-v0.md), [`merge-repack-salvage-mvp-v0.md`](https://github.com/hilather/nytprof-modernization/blob/main/docs/schemas/merge-repack-salvage-mvp-v0.md) |
 
@@ -47,7 +47,7 @@ Plan COL-007 listed dependencies **FMT-002 through FMT-010**. This program **imp
 | E3 harness (writer bytes → Rust decode) | E3 | **ready** (stand-in + product C path) | Stand-in is **not** product evidence; product path is `e3_c_*` |
 | C COL-007 absolute / codecs / packing / dict / mid-stream | E3 runway | **done** (PR-B06..B08 scaffold + PR-B09 E3-C) | Board COL-007 **done** for EVENT product path |
 | C COL-007 product E3-EVENT fixtures | E3 | **ready** | `fixtures/v6/from-c/**`; absolute+packing+dict+mid-stream matrix |
-| E3-mixed multi-kind C fixtures | E3 | **residual** | SOURCE/INDEX/SUMMARY product C matrix open |
+| E3-mixed multi-kind C fixtures | E3 | **done (MVP)** | `mixed.nytprof` + `e3_c_mixed_*`; not TEST-008 / COL-008 / CLI v6 collection default |
 | Batched Rust COL-008 writer | E3/E4 | **deferred** (non-baseline) | COL-009 / ADR-0007 reaffirms C; re-open only with dual-equality + measurement ADR |
 | v5↔v6 semantic equality policy | E4 | **policy draft ready** | Surfaces + packing interaction documented |
 | COL-014 same-run dual writer (test/dev-only, OQ-4) | E4/M6 runway | **ready (harness)** | Fan-out v5+v6; logical equality on M4 + primary-fixture-shaped streams; **not** product UX; full oracle dual residual |
@@ -68,7 +68,7 @@ Plan COL-007 listed dependencies **FMT-002 through FMT-010**. This program **imp
 
 ## Explicit open gates after R2-stable cut (PR-C05)
 
-1. **E3-mixed:** multi-kind SOURCE/INDEX/SUMMARY product C fixtures (EVENT path is ready).
+1. **E3-mixed depth:** compressed per-kind codecs / multi-chunk mixed C matrix (MVP `mixed.nytprof` landed).
 2. **E4 full oracle dual:** E4-v0 model + E4 product CLI smoke are **ready** on dual-sink scaled pairs (PR-B10/B12b; offline_gate step 12). Remaining: full oracle v5+v6 pairs (TEST-003/TEST-008). Policy: [`E4_V5_V6_SEMANTIC_EQUALITY_POLICY_v0.md`](https://github.com/hilather/nytprof-modernization/blob/main/docs/contracts/E4_V5_V6_SEMANTIC_EQUALITY_POLICY_v0.md).
 3. **Wire freeze** — **done** (ADR-0006 + golden vectors). OQ-5 seq policy frozen in ADR-0006 §3.
 4. **OI-002** full ATTRIBUTE/OPTION key vocabulary — residual (not numeric ID freeze).

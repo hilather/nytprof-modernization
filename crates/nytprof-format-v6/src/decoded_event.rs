@@ -37,19 +37,27 @@ pub enum DecodedEventError {
     Encode(CompressedProfileError),
     StringDict(StringDictError),
     /// Non-EVENT/FOOTER kind on this MVP path.
-    UnexpectedKind { kind: u8 },
+    UnexpectedKind {
+        kind: u8,
+    },
     /// FOOTER not last / more than one FOOTER.
     InvalidFooter,
     /// FOOTER must use codec NONE.
-    UnexpectedFooterCodec { codec: u8 },
+    UnexpectedFooterCodec {
+        codec: u8,
+    },
     /// EVENT codec not in {NONE, ZLIB, ZSTD, LZ4}.
-    UnsupportedEventCodec { codec: u8 },
+    UnsupportedEventCodec {
+        codec: u8,
+    },
     /// No EVENT chunks present when events were expected on decode of non-empty body path.
     MissingEventChunks,
     /// Mid-stream codec-switch preflight requires START_DEFLATE in the pre-switch EVENT body.
     MissingStartDeflateMarker,
     /// Mid-stream codec-switch preflight requires distinct pre/post payload codecs.
-    MidStreamCodecsMustDiffer { codec: u8 },
+    MidStreamCodecsMustDiffer {
+        codec: u8,
+    },
     /// Body VERSION major/minor disagree with fixed-header / file-prefix version fields.
     VersionHeaderMismatch {
         header_major: u16,
@@ -341,9 +349,7 @@ pub fn encode_decoded_event_profile(
     footer: Option<&[u8]>,
 ) -> DecodedEventResult<Vec<u8>> {
     if !events.is_empty() && !is_supported_event_codec(event_codec) {
-        return Err(DecodedEventError::UnsupportedEventCodec {
-            codec: event_codec,
-        });
+        return Err(DecodedEventError::UnsupportedEventCodec { codec: event_codec });
     }
 
     let parts = if events.is_empty() {
@@ -791,9 +797,7 @@ pub fn encode_decoded_event_profile_with_site_deltas_and_seq(
     dict_entries: Option<&[(u64, u8, &[u8])]>,
 ) -> DecodedEventResult<Vec<u8>> {
     if !events.is_empty() && !is_supported_event_codec(event_codec) {
-        return Err(DecodedEventError::UnsupportedEventCodec {
-            codec: event_codec,
-        });
+        return Err(DecodedEventError::UnsupportedEventCodec { codec: event_codec });
     }
 
     let parts = if events.is_empty() {
@@ -940,9 +944,7 @@ pub fn decode_decoded_event_profile(
         match chunk.kind {
             k if k == kind::EVENT => {
                 if !is_supported_event_codec(chunk.codec) {
-                    return Err(DecodedEventError::UnsupportedEventCodec {
-                        codec: chunk.codec,
-                    });
+                    return Err(DecodedEventError::UnsupportedEventCodec { codec: chunk.codec });
                 }
                 if event_chunk_count == 0 {
                     event_codec = chunk.codec;
@@ -953,9 +955,7 @@ pub fn decode_decoded_event_profile(
             }
             k if k == kind::FOOTER => {
                 if chunk.codec != codec::NONE {
-                    return Err(DecodedEventError::UnexpectedFooterCodec {
-                        codec: chunk.codec,
-                    });
+                    return Err(DecodedEventError::UnexpectedFooterCodec { codec: chunk.codec });
                 }
                 has_footer = true;
                 footer_payload = Some(chunk.plain.clone());
@@ -1153,7 +1153,8 @@ mod tests {
         )
         .unwrap();
         // Truncate payload of the single EVENT chunk so joined body is incomplete.
-        let prefix_n = crate::file_prefix::encode_file_prefix(SUPPORTED_MAJOR, 0, 0, 0, 0, &[]).len();
+        let prefix_n =
+            crate::file_prefix::encode_file_prefix(SUPPORTED_MAJOR, 0, 0, 0, 0, &[]).len();
         let f0 = parse_chunk_frame(&wire[prefix_n..]).unwrap();
         let payload_off = prefix_n + CHUNK_HEADER_LEN;
         // Keep header but drop half the plain payload bytes and shrink buffer.
@@ -1187,7 +1188,8 @@ mod tests {
             None,
         )
         .unwrap();
-        let prefix_n = crate::file_prefix::encode_file_prefix(SUPPORTED_MAJOR, 0, 0, 0, 0, &[]).len();
+        let prefix_n =
+            crate::file_prefix::encode_file_prefix(SUPPORTED_MAJOR, 0, 0, 0, 0, &[]).len();
         let f0 = parse_chunk_frame(&wire[prefix_n..]).unwrap();
         assert_eq!(f0.codec, codec::ZLIB);
         let payload_len = f0.payload.len();
@@ -1203,9 +1205,9 @@ mod tests {
             other => panic!("expected payload err, got {other:?}"),
         }
         match decode_decoded_event_profile(&wire, true) {
-            Err(DecodedEventError::Stream(DecodedStreamError::Chunk(
-                DecodedChunkError::Crc(_),
-            ))) => {}
+            Err(DecodedEventError::Stream(DecodedStreamError::Chunk(DecodedChunkError::Crc(
+                _,
+            )))) => {}
             other => panic!("expected crc err, got {other:?}"),
         }
     }
@@ -1228,9 +1230,9 @@ mod tests {
         );
         let wire = encode_prefix_sealed_chunks(SUPPORTED_MAJOR, 0, 0, 0, 0, &[], &[&bad]);
         match decode_decoded_event_profile(&wire, true) {
-            Err(DecodedEventError::Stream(DecodedStreamError::Chunk(
-                DecodedChunkError::Crc(_),
-            ))) => {}
+            Err(DecodedEventError::Stream(DecodedStreamError::Chunk(DecodedChunkError::Crc(
+                _,
+            )))) => {}
             other => panic!("expected crc mismatch, got {other:?}"),
         }
         let (prof, n) = decode_decoded_event_profile(&wire, false).expect("no crc");
@@ -1296,7 +1298,8 @@ mod tests {
             None,
         )
         .unwrap();
-        let prefix_n = crate::file_prefix::encode_file_prefix(SUPPORTED_MAJOR, 0, 0, 0, 0, &[]).len();
+        let prefix_n =
+            crate::file_prefix::encode_file_prefix(SUPPORTED_MAJOR, 0, 0, 0, 0, &[]).len();
         let f0 = parse_chunk_frame(&wire[prefix_n..]).unwrap();
         assert_eq!(f0.kind, kind::EVENT);
         assert_eq!(f0.payload, expected.as_slice());
@@ -1326,19 +1329,9 @@ mod tests {
     fn time_block_sub_entry_none_zlib_zstd_lz4_roundtrip() {
         let events = time_block_sub_entry_events();
         for c in [codec::NONE, codec::ZLIB, codec::ZSTD, codec::LZ4] {
-            let wire = encode_decoded_event_profile(
-                SUPPORTED_MAJOR,
-                0,
-                0,
-                0,
-                0,
-                &[],
-                c,
-                &events,
-                0,
-                None,
-            )
-            .unwrap_or_else(|e| panic!("encode codec {c}: {e}"));
+            let wire =
+                encode_decoded_event_profile(SUPPORTED_MAJOR, 0, 0, 0, 0, &[], c, &events, 0, None)
+                    .unwrap_or_else(|e| panic!("encode codec {c}: {e}"));
             let (prof, n) = decode_decoded_event_profile(&wire, true)
                 .unwrap_or_else(|e| panic!("decode codec {c}: {e}"));
             assert_eq!(n, wire.len(), "codec {c}");
@@ -1408,19 +1401,9 @@ mod tests {
     fn sub_return_sub_info_none_zlib_zstd_lz4_roundtrip() {
         let events = sub_return_sub_info_events();
         for c in [codec::NONE, codec::ZLIB, codec::ZSTD, codec::LZ4] {
-            let wire = encode_decoded_event_profile(
-                SUPPORTED_MAJOR,
-                0,
-                0,
-                0,
-                0,
-                &[],
-                c,
-                &events,
-                0,
-                None,
-            )
-            .unwrap_or_else(|e| panic!("encode codec {c}: {e}"));
+            let wire =
+                encode_decoded_event_profile(SUPPORTED_MAJOR, 0, 0, 0, 0, &[], c, &events, 0, None)
+                    .unwrap_or_else(|e| panic!("encode codec {c}: {e}"));
             let (prof, n) = decode_decoded_event_profile(&wire, true)
                 .unwrap_or_else(|e| panic!("decode codec {c}: {e}"));
             assert_eq!(n, wire.len(), "codec {c}");
@@ -1492,19 +1475,9 @@ mod tests {
     fn src_line_new_fid_none_zlib_zstd_lz4_roundtrip() {
         let events = src_line_new_fid_events();
         for c in [codec::NONE, codec::ZLIB, codec::ZSTD, codec::LZ4] {
-            let wire = encode_decoded_event_profile(
-                SUPPORTED_MAJOR,
-                0,
-                0,
-                0,
-                0,
-                &[],
-                c,
-                &events,
-                0,
-                None,
-            )
-            .unwrap_or_else(|e| panic!("encode codec {c}: {e}"));
+            let wire =
+                encode_decoded_event_profile(SUPPORTED_MAJOR, 0, 0, 0, 0, &[], c, &events, 0, None)
+                    .unwrap_or_else(|e| panic!("encode codec {c}: {e}"));
             let (prof, n) = decode_decoded_event_profile(&wire, true)
                 .unwrap_or_else(|e| panic!("decode codec {c}: {e}"));
             assert_eq!(n, wire.len(), "codec {c}");
@@ -1562,19 +1535,9 @@ mod tests {
     fn pid_start_end_none_zlib_zstd_lz4_roundtrip() {
         let events = pid_start_end_events();
         for c in [codec::NONE, codec::ZLIB, codec::ZSTD, codec::LZ4] {
-            let wire = encode_decoded_event_profile(
-                SUPPORTED_MAJOR,
-                0,
-                0,
-                0,
-                0,
-                &[],
-                c,
-                &events,
-                0,
-                None,
-            )
-            .unwrap_or_else(|e| panic!("encode codec {c}: {e}"));
+            let wire =
+                encode_decoded_event_profile(SUPPORTED_MAJOR, 0, 0, 0, 0, &[], c, &events, 0, None)
+                    .unwrap_or_else(|e| panic!("encode codec {c}: {e}"));
             let (prof, n) = decode_decoded_event_profile(&wire, true)
                 .unwrap_or_else(|e| panic!("decode codec {c}: {e}"));
             assert_eq!(n, wire.len(), "codec {c}");
@@ -1639,19 +1602,9 @@ mod tests {
     fn sub_callers_discount_none_zlib_zstd_lz4_roundtrip() {
         let events = sub_callers_discount_events();
         for c in [codec::NONE, codec::ZLIB, codec::ZSTD, codec::LZ4] {
-            let wire = encode_decoded_event_profile(
-                SUPPORTED_MAJOR,
-                0,
-                0,
-                0,
-                0,
-                &[],
-                c,
-                &events,
-                0,
-                None,
-            )
-            .unwrap_or_else(|e| panic!("encode codec {c}: {e}"));
+            let wire =
+                encode_decoded_event_profile(SUPPORTED_MAJOR, 0, 0, 0, 0, &[], c, &events, 0, None)
+                    .unwrap_or_else(|e| panic!("encode codec {c}: {e}"));
             let (prof, n) = decode_decoded_event_profile(&wire, true)
                 .unwrap_or_else(|e| panic!("decode codec {c}: {e}"));
             assert_eq!(n, wire.len(), "codec {c}");
@@ -1727,19 +1680,9 @@ mod tests {
     fn attribute_option_none_zlib_zstd_lz4_roundtrip() {
         let events = attribute_option_events();
         for c in [codec::NONE, codec::ZLIB, codec::ZSTD, codec::LZ4] {
-            let wire = encode_decoded_event_profile(
-                SUPPORTED_MAJOR,
-                0,
-                0,
-                0,
-                0,
-                &[],
-                c,
-                &events,
-                0,
-                None,
-            )
-            .unwrap_or_else(|e| panic!("encode codec {c}: {e}"));
+            let wire =
+                encode_decoded_event_profile(SUPPORTED_MAJOR, 0, 0, 0, 0, &[], c, &events, 0, None)
+                    .unwrap_or_else(|e| panic!("encode codec {c}: {e}"));
             let (prof, n) = decode_decoded_event_profile(&wire, true)
                 .unwrap_or_else(|e| panic!("decode codec {c}: {e}"));
             assert_eq!(n, wire.len(), "codec {c}");
@@ -1798,19 +1741,9 @@ mod tests {
     fn comment_none_zlib_zstd_lz4_roundtrip() {
         let events = comment_events();
         for c in [codec::NONE, codec::ZLIB, codec::ZSTD, codec::LZ4] {
-            let wire = encode_decoded_event_profile(
-                SUPPORTED_MAJOR,
-                0,
-                0,
-                0,
-                0,
-                &[],
-                c,
-                &events,
-                0,
-                None,
-            )
-            .unwrap_or_else(|e| panic!("encode codec {c}: {e}"));
+            let wire =
+                encode_decoded_event_profile(SUPPORTED_MAJOR, 0, 0, 0, 0, &[], c, &events, 0, None)
+                    .unwrap_or_else(|e| panic!("encode codec {c}: {e}"));
             let (prof, n) = decode_decoded_event_profile(&wire, true)
                 .unwrap_or_else(|e| panic!("decode codec {c}: {e}"));
             assert_eq!(n, wire.len(), "codec {c}");
@@ -1859,19 +1792,9 @@ mod tests {
     fn start_deflate_none_zlib_zstd_lz4_roundtrip() {
         let events = start_deflate_events();
         for c in [codec::NONE, codec::ZLIB, codec::ZSTD, codec::LZ4] {
-            let wire = encode_decoded_event_profile(
-                SUPPORTED_MAJOR,
-                0,
-                0,
-                0,
-                0,
-                &[],
-                c,
-                &events,
-                0,
-                None,
-            )
-            .unwrap_or_else(|e| panic!("encode codec {c}: {e}"));
+            let wire =
+                encode_decoded_event_profile(SUPPORTED_MAJOR, 0, 0, 0, 0, &[], c, &events, 0, None)
+                    .unwrap_or_else(|e| panic!("encode codec {c}: {e}"));
             let (prof, n) = decode_decoded_event_profile(&wire, true)
                 .unwrap_or_else(|e| panic!("decode codec {c}: {e}"));
             assert_eq!(n, wire.len(), "codec {c}");
@@ -1902,10 +1825,7 @@ mod tests {
 
     fn version_events() -> [EventRecordSpec<'static>; 3] {
         [
-            EventRecordSpec::Version {
-                major: 5,
-                minor: 0,
-            },
+            EventRecordSpec::Version { major: 5, minor: 0 },
             EventRecordSpec::StartDeflate,
             EventRecordSpec::TimeLine {
                 fid: 1,
@@ -1919,19 +1839,9 @@ mod tests {
     fn version_none_zlib_zstd_lz4_roundtrip() {
         let events = version_events();
         for c in [codec::NONE, codec::ZLIB, codec::ZSTD, codec::LZ4] {
-            let wire = encode_decoded_event_profile(
-                SUPPORTED_MAJOR,
-                0,
-                0,
-                0,
-                0,
-                &[],
-                c,
-                &events,
-                0,
-                None,
-            )
-            .unwrap_or_else(|e| panic!("encode codec {c}: {e}"));
+            let wire =
+                encode_decoded_event_profile(SUPPORTED_MAJOR, 0, 0, 0, 0, &[], c, &events, 0, None)
+                    .unwrap_or_else(|e| panic!("encode codec {c}: {e}"));
             let (prof, n) = decode_decoded_event_profile(&wire, true)
                 .unwrap_or_else(|e| panic!("decode codec {c}: {e}"));
             assert_eq!(n, wire.len(), "codec {c}");
@@ -1965,10 +1875,7 @@ mod tests {
     /// VERSION → meta → START_DEFLATE → PID_START … interior … PID_END (provisional dual-output).
     fn dual_output_sequence_events() -> [EventRecordSpec<'static>; 9] {
         [
-            EventRecordSpec::Version {
-                major: 5,
-                minor: 0,
-            },
+            EventRecordSpec::Version { major: 5, minor: 0 },
             EventRecordSpec::Comment {
                 string_id: 0,
                 string_flags: 0,
@@ -2077,19 +1984,9 @@ mod tests {
     fn dual_output_sequence_none_zlib_zstd_lz4_roundtrip() {
         let events = dual_output_sequence_events();
         for c in [codec::NONE, codec::ZLIB, codec::ZSTD, codec::LZ4] {
-            let wire = encode_decoded_event_profile(
-                SUPPORTED_MAJOR,
-                0,
-                0,
-                0,
-                0,
-                &[],
-                c,
-                &events,
-                0,
-                None,
-            )
-            .unwrap_or_else(|e| panic!("encode codec {c}: {e}"));
+            let wire =
+                encode_decoded_event_profile(SUPPORTED_MAJOR, 0, 0, 0, 0, &[], c, &events, 0, None)
+                    .unwrap_or_else(|e| panic!("encode codec {c}: {e}"));
             let (prof, n) = decode_decoded_event_profile(&wire, true)
                 .unwrap_or_else(|e| panic!("decode codec {c}: {e}"));
             assert_eq!(n, wire.len(), "codec {c}");
@@ -2124,10 +2021,7 @@ mod tests {
     /// Pre-switch prelude ending with START_DEFLATE (chunk codec NONE).
     fn mid_stream_pre_events() -> [EventRecordSpec<'static>; 3] {
         [
-            EventRecordSpec::Version {
-                major: 5,
-                minor: 0,
-            },
+            EventRecordSpec::Version { major: 5, minor: 0 },
             EventRecordSpec::Comment {
                 string_id: 0,
                 string_flags: 0,
@@ -2243,8 +2137,7 @@ mod tests {
         all.extend_from_slice(&post);
         let single_plain =
             crate::event_body::encode_event_body_with_site_deltas_and_seq(&all).unwrap();
-        let (single_body, _) =
-            crate::event_body::decode_event_body_full(&single_plain).unwrap();
+        let (single_body, _) = crate::event_body::decode_event_body_full(&single_plain).unwrap();
 
         for post_c in [codec::ZLIB, codec::ZSTD, codec::LZ4] {
             let wire = encode_decoded_event_mid_stream_codec_switch_with_site_deltas_and_seq(
@@ -2407,10 +2300,8 @@ mod tests {
         use crate::string::FLAG_UTF8;
         let pre = mid_stream_dict_packing_pre_events();
         let post = mid_stream_dict_packing_post_events();
-        let dict_entries: &[(u64, u8, &[u8])] = &[
-            (1, FLAG_UTF8, b"ms-dict-mark"),
-            (2, 0, b"# ms-dict-end"),
-        ];
+        let dict_entries: &[(u64, u8, &[u8])] =
+            &[(1, FLAG_UTF8, b"ms-dict-mark"), (2, 0, b"# ms-dict-end")];
         let mut all: Vec<EventRecordSpec<'static>> = pre.to_vec();
         all.extend_from_slice(&post);
         let single_plain =
@@ -2470,9 +2361,8 @@ mod tests {
                     dict_entries,
                 )
                 .unwrap_or_else(|e| panic!("encode post_codec {post_c}: {e}"));
-            let (prof, dict, n_read) =
-                decode_decoded_event_profile_with_string_dict(&wire, true)
-                    .unwrap_or_else(|e| panic!("decode post_codec {post_c}: {e}"));
+            let (prof, dict, n_read) = decode_decoded_event_profile_with_string_dict(&wire, true)
+                .unwrap_or_else(|e| panic!("decode post_codec {post_c}: {e}"));
             assert_eq!(n_read, wire.len(), "codec {post_c}");
             assert_eq!(prof.event_chunk_count, 2);
             assert_eq!(dict.get(1).unwrap().data, b"ms-dict-mark");
@@ -2529,8 +2419,7 @@ mod tests {
                 None,
             )
             .expect("baseline");
-        let (single_prof, _) =
-            decode_decoded_event_profile_auto_version(&baseline, true).unwrap();
+        let (single_prof, _) = decode_decoded_event_profile_auto_version(&baseline, true).unwrap();
         match &single_prof.records[0] {
             OwnedEventRecord::Version { major, minor } => {
                 assert_eq!(
@@ -2632,9 +2521,7 @@ mod tests {
             &post,
             None,
         ) {
-            Err(DecodedEventError::VersionHeaderMismatch {
-                body_minor: 88, ..
-            }) => {}
+            Err(DecodedEventError::VersionHeaderMismatch { body_minor: 88, .. }) => {}
             other => panic!("expected VersionHeaderMismatch, got {other:?}"),
         }
     }
@@ -2670,9 +2557,9 @@ mod tests {
             )
             .expect("encode");
         match decode_decoded_event_profile_with_string_dict(&wire, true) {
-            Err(DecodedEventError::StringDict(crate::string_dict::StringDictError::UnknownId {
-                id: 99,
-            })) => {}
+            Err(DecodedEventError::StringDict(
+                crate::string_dict::StringDictError::UnknownId { id: 99 },
+            )) => {}
             other => panic!("expected UnknownId 99, got {other:?}"),
         }
     }
@@ -2709,7 +2596,10 @@ mod tests {
             );
             assert_eq!(prof.event_codec, codec::NONE, "first codec is pre");
             assert!(prof.has_footer);
-            assert_eq!(prof.footer_payload.as_deref(), Some(b"switch-end".as_slice()));
+            assert_eq!(
+                prof.footer_payload.as_deref(),
+                Some(b"switch-end".as_slice())
+            );
             assert_mid_stream_order(&prof.records);
 
             // Default non-inflating stream: second EVENT payload is compressed, not plain body.
@@ -2768,10 +2658,7 @@ mod tests {
 
     #[test]
     fn mid_stream_codec_switch_missing_marker_err() {
-        let pre = [EventRecordSpec::Version {
-            major: 5,
-            minor: 0,
-        }];
+        let pre = [EventRecordSpec::Version { major: 5, minor: 0 }];
         let post = mid_stream_post_events();
         match encode_decoded_event_mid_stream_codec_switch_profile(
             SUPPORTED_MAJOR,
@@ -2882,10 +2769,7 @@ mod tests {
             let synthetic = version_record_from_header(&prof.header);
             match (&prof.records[0], &synthetic) {
                 (
-                    OwnedEventRecord::Version {
-                        major: a,
-                        minor: b,
-                    },
+                    OwnedEventRecord::Version { major: a, minor: b },
                     OwnedEventRecord::Version {
                         major: c_m,
                         minor: c_n,
@@ -3090,19 +2974,9 @@ mod tests {
     fn known_key_attr_option_none_zlib_zstd_lz4_roundtrip() {
         let events = known_key_attr_option_sample_specs();
         for c in [codec::NONE, codec::ZLIB, codec::ZSTD, codec::LZ4] {
-            let wire = encode_decoded_event_profile(
-                SUPPORTED_MAJOR,
-                0,
-                0,
-                0,
-                0,
-                &[],
-                c,
-                &events,
-                0,
-                None,
-            )
-            .unwrap_or_else(|e| panic!("encode codec {c}: {e}"));
+            let wire =
+                encode_decoded_event_profile(SUPPORTED_MAJOR, 0, 0, 0, 0, &[], c, &events, 0, None)
+                    .unwrap_or_else(|e| panic!("encode codec {c}: {e}"));
             let (prof, n) = decode_decoded_event_profile(&wire, true)
                 .unwrap_or_else(|e| panic!("decode codec {c}: {e}"));
             assert_eq!(n, wire.len(), "codec {c}");
@@ -3161,19 +3035,9 @@ mod tests {
                 + crate::known_key::KNOWN_OPTION_KEYS.len()
         );
         for c in [codec::NONE, codec::ZLIB, codec::ZSTD, codec::LZ4] {
-            let wire = encode_decoded_event_profile(
-                SUPPORTED_MAJOR,
-                0,
-                0,
-                0,
-                0,
-                &[],
-                c,
-                &events,
-                0,
-                None,
-            )
-            .unwrap_or_else(|e| panic!("encode codec {c}: {e}"));
+            let wire =
+                encode_decoded_event_profile(SUPPORTED_MAJOR, 0, 0, 0, 0, &[], c, &events, 0, None)
+                    .unwrap_or_else(|e| panic!("encode codec {c}: {e}"));
             let (prof, n) = decode_decoded_event_profile(&wire, true)
                 .unwrap_or_else(|e| panic!("decode codec {c}: {e}"));
             assert_eq!(n, wire.len(), "codec {c}");
@@ -3189,9 +3053,7 @@ mod tests {
                         // Value recovered from real encode path (not hard-coded alone).
                         match &events[i] {
                             EventRecordSpec::Attribute {
-                                key: sk,
-                                value: sv,
-                                ..
+                                key: sk, value: sv, ..
                             } => {
                                 assert_eq!(key.as_slice(), *sk);
                                 assert_eq!(value.as_slice(), *sv);
@@ -3206,9 +3068,7 @@ mod tests {
                         );
                         match &events[i] {
                             EventRecordSpec::Option {
-                                key: sk,
-                                value: sv,
-                                ..
+                                key: sk, value: sv, ..
                             } => {
                                 assert_eq!(key.as_slice(), *sk);
                                 assert_eq!(value.as_slice(), *sv);
@@ -3253,21 +3113,11 @@ mod tests {
 
     fn seal_event_plain_profile(codec_id: u8, plain: &[u8]) -> Vec<u8> {
         let frame = crate::compressed_profile::encode_event_chunk(
-            codec_id,
-            0,
-            2, // two logical known records (skip not counted)
+            codec_id, 0, 2, // two logical known records (skip not counted)
             plain,
         )
         .expect("seal EVENT");
-        encode_prefix_sealed_chunks(
-            SUPPORTED_MAJOR,
-            0,
-            0,
-            0,
-            0,
-            &[],
-            &[frame.as_slice()],
-        )
+        encode_prefix_sealed_chunks(SUPPORTED_MAJOR, 0, 0, 0, 0, &[], &[frame.as_slice()])
     }
 
     #[test]
@@ -3422,9 +3272,9 @@ mod tests {
         )
         .expect("encode");
         match decode_decoded_event_profile_with_string_dict(&wire, true) {
-            Err(DecodedEventError::StringDict(crate::string_dict::StringDictError::UnknownId {
-                id: 42,
-            })) => {}
+            Err(DecodedEventError::StringDict(
+                crate::string_dict::StringDictError::UnknownId { id: 42 },
+            )) => {}
             other => panic!("expected UnknownId 42, got {other:?}"),
         }
     }
@@ -3584,9 +3434,9 @@ mod tests {
         )
         .expect("encode");
         match decode_decoded_event_profile_with_string_dict(&wire, true) {
-            Err(DecodedEventError::StringDict(crate::string_dict::StringDictError::UnknownId {
-                id: 99,
-            })) => {}
+            Err(DecodedEventError::StringDict(
+                crate::string_dict::StringDictError::UnknownId { id: 99 },
+            )) => {}
             other => panic!("expected UnknownId 99, got {other:?}"),
         }
     }
@@ -3676,15 +3526,8 @@ mod tests {
         for c in [codec::NONE, codec::ZLIB, codec::ZSTD, codec::LZ4] {
             let frame = crate::compressed_profile::encode_event_chunk(c, 0, 5, &plain)
                 .unwrap_or_else(|e| panic!("seal codec {c}: {e}"));
-            let wire = encode_prefix_sealed_chunks(
-                SUPPORTED_MAJOR,
-                0,
-                0,
-                0,
-                0,
-                &[],
-                &[frame.as_slice()],
-            );
+            let wire =
+                encode_prefix_sealed_chunks(SUPPORTED_MAJOR, 0, 0, 0, 0, &[], &[frame.as_slice()]);
             let (prof, n) = decode_decoded_event_profile(&wire, true)
                 .unwrap_or_else(|e| panic!("decode codec {c}: {e}"));
             assert_eq!(n, wire.len(), "codec {c}");
@@ -3774,15 +3617,8 @@ mod tests {
         for c in [codec::NONE, codec::ZLIB, codec::ZSTD, codec::LZ4] {
             let frame = crate::compressed_profile::encode_event_chunk(c, 0, 5, &plain)
                 .unwrap_or_else(|e| panic!("seal codec {c}: {e}"));
-            let wire = encode_prefix_sealed_chunks(
-                SUPPORTED_MAJOR,
-                0,
-                0,
-                0,
-                0,
-                &[],
-                &[frame.as_slice()],
-            );
+            let wire =
+                encode_prefix_sealed_chunks(SUPPORTED_MAJOR, 0, 0, 0, 0, &[], &[frame.as_slice()]);
             let (prof, n) = decode_decoded_event_profile(&wire, true)
                 .unwrap_or_else(|e| panic!("decode codec {c}: {e}"));
             assert_eq!(n, wire.len(), "codec {c}");
@@ -3886,15 +3722,8 @@ mod tests {
         for c in [codec::NONE, codec::ZLIB, codec::ZSTD, codec::LZ4] {
             let frame = crate::compressed_profile::encode_event_chunk(c, 0, 5, &plain)
                 .unwrap_or_else(|e| panic!("seal codec {c}: {e}"));
-            let wire = encode_prefix_sealed_chunks(
-                SUPPORTED_MAJOR,
-                0,
-                0,
-                0,
-                0,
-                &[],
-                &[frame.as_slice()],
-            );
+            let wire =
+                encode_prefix_sealed_chunks(SUPPORTED_MAJOR, 0, 0, 0, 0, &[], &[frame.as_slice()]);
             let (prof, n) = decode_decoded_event_profile(&wire, true)
                 .unwrap_or_else(|e| panic!("decode codec {c}: {e}"));
             assert_eq!(n, wire.len(), "codec {c}");
@@ -3916,10 +3745,7 @@ mod tests {
 
     fn event_seq_dual_output_specs() -> [EventRecordSpec<'static>; 9] {
         [
-            EventRecordSpec::Version {
-                major: 5,
-                minor: 0,
-            },
+            EventRecordSpec::Version { major: 5, minor: 0 },
             EventRecordSpec::Comment {
                 string_id: 0,
                 string_flags: 0,
@@ -4009,15 +3835,8 @@ mod tests {
         for c in [codec::NONE, codec::ZLIB, codec::ZSTD, codec::LZ4] {
             let frame = crate::compressed_profile::encode_event_chunk(c, 0, 9, &plain)
                 .unwrap_or_else(|e| panic!("seal codec {c}: {e}"));
-            let wire = encode_prefix_sealed_chunks(
-                SUPPORTED_MAJOR,
-                0,
-                0,
-                0,
-                0,
-                &[],
-                &[frame.as_slice()],
-            );
+            let wire =
+                encode_prefix_sealed_chunks(SUPPORTED_MAJOR, 0, 0, 0, 0, &[], &[frame.as_slice()]);
             let (prof, n) = decode_decoded_event_profile(&wire, true)
                 .unwrap_or_else(|e| panic!("decode codec {c}: {e}"));
             assert_eq!(n, wire.len(), "codec {c}");
@@ -4039,10 +3858,7 @@ mod tests {
 
     fn site_delta_and_seq_compose_specs() -> [EventRecordSpec<'static>; 7] {
         [
-            EventRecordSpec::Version {
-                major: 5,
-                minor: 0,
-            },
+            EventRecordSpec::Version { major: 5, minor: 0 },
             EventRecordSpec::TimeLine {
                 fid: 1,
                 line: 10,
@@ -4146,15 +3962,8 @@ mod tests {
         for c in [codec::NONE, codec::ZLIB, codec::ZSTD, codec::LZ4] {
             let frame = crate::compressed_profile::encode_event_chunk(c, 0, 7, &plain)
                 .unwrap_or_else(|e| panic!("seal codec {c}: {e}"));
-            let wire = encode_prefix_sealed_chunks(
-                SUPPORTED_MAJOR,
-                0,
-                0,
-                0,
-                0,
-                &[],
-                &[frame.as_slice()],
-            );
+            let wire =
+                encode_prefix_sealed_chunks(SUPPORTED_MAJOR, 0, 0, 0, 0, &[], &[frame.as_slice()]);
             let (prof, n) = decode_decoded_event_profile(&wire, true)
                 .unwrap_or_else(|e| panic!("decode codec {c}: {e}"));
             assert_eq!(n, wire.len(), "codec {c}");
@@ -4177,10 +3986,7 @@ mod tests {
     /// ≥4 logical events with site-delta+seq, split into ≥2 EVENT chunks.
     fn multi_chunk_packing_specs() -> [EventRecordSpec<'static>; 6] {
         [
-            EventRecordSpec::Version {
-                major: 5,
-                minor: 0,
-            },
+            EventRecordSpec::Version { major: 5, minor: 0 },
             EventRecordSpec::TimeLine {
                 fid: 1,
                 line: 10,
@@ -4392,10 +4198,8 @@ mod tests {
     fn string_dict_multi_chunk_site_delta_seq_packing_none_zlib_zstd_lz4_always_inflate() {
         use crate::string::FLAG_UTF8;
         let specs = string_dict_multi_chunk_packing_specs();
-        let dict_entries: &[(u64, u8, &[u8])] = &[
-            (1, FLAG_UTF8, b"mc-dict-mark"),
-            (2, 0, b"# mc-dict-end"),
-        ];
+        let dict_entries: &[(u64, u8, &[u8])] =
+            &[(1, FLAG_UTF8, b"mc-dict-mark"), (2, 0, b"# mc-dict-end")];
         // Single-chunk dict+packing baseline of the same specs.
         let single_wire = encode_decoded_event_profile_with_string_dict_and_site_deltas_and_seq(
             SUPPORTED_MAJOR,
@@ -4519,9 +4323,9 @@ mod tests {
             "must partition to multi-chunk"
         );
         match decode_decoded_event_profile_with_string_dict(&wire, true) {
-            Err(DecodedEventError::StringDict(crate::string_dict::StringDictError::UnknownId {
-                id: 99,
-            })) => {}
+            Err(DecodedEventError::StringDict(
+                crate::string_dict::StringDictError::UnknownId { id: 99 },
+            )) => {}
             other => panic!("expected UnknownId 99, got {other:?}"),
         }
     }
@@ -4664,7 +4468,11 @@ mod tests {
         assert_multi_chunk_packing_with_runs_owned(&single_prof.records, &single_prof.sequences);
 
         let parts = partition_event_records(&specs, 2);
-        assert!(parts.len() >= 3, "expected multi-chunk, got {}", parts.len());
+        assert!(
+            parts.len() >= 3,
+            "expected multi-chunk, got {}",
+            parts.len()
+        );
         assert!(
             matches!(parts[0].last(), Some(EventRecordSpec::TimeLineRun { .. })),
             "part0 ends with TIME_LINE_RUN so post-run site-delta is in a later chunk"
@@ -4850,7 +4658,11 @@ mod tests {
         assert_eq!(single_dict.get(2).unwrap().data, b"# dict-run-mc-end");
 
         let parts = partition_event_records(&specs, 2);
-        assert!(parts.len() >= 3, "expected multi-chunk, got {}", parts.len());
+        assert!(
+            parts.len() >= 3,
+            "expected multi-chunk, got {}",
+            parts.len()
+        );
         assert!(
             matches!(parts[0].last(), Some(EventRecordSpec::TimeLineRun { .. })),
             "part0 ends with TIME_LINE_RUN so post-run site-delta is later chunk"
@@ -5131,9 +4943,9 @@ mod tests {
         )
         .expect("encode");
         match decode_decoded_event_profile_with_string_dict(&wire, true) {
-            Err(DecodedEventError::StringDict(crate::string_dict::StringDictError::UnknownId {
-                id: 99,
-            })) => {}
+            Err(DecodedEventError::StringDict(
+                crate::string_dict::StringDictError::UnknownId { id: 99 },
+            )) => {}
             other => panic!("expected UnknownId 99, got {other:?}"),
         }
     }
@@ -5211,8 +5023,7 @@ mod tests {
         )
         .expect("single-chunk auto-version dict packing");
         let (single_prof, single_dict, _) =
-            decode_decoded_event_profile_auto_version_with_string_dict(&single_wire, true)
-                .unwrap();
+            decode_decoded_event_profile_auto_version_with_string_dict(&single_wire, true).unwrap();
         assert_eq!(single_dict.get(1).unwrap().data, b"av-dict-mc-mark");
         assert_eq!(single_dict.get(2).unwrap().data, b"# av-dict-mc-end");
         match &single_prof.records[0] {
@@ -5309,9 +5120,7 @@ mod tests {
             2,
             Some(&[(1, 0, b"x")]),
         ) {
-            Err(DecodedEventError::VersionHeaderMismatch {
-                body_minor: 77, ..
-            }) => {}
+            Err(DecodedEventError::VersionHeaderMismatch { body_minor: 77, .. }) => {}
             other => panic!("expected VersionHeaderMismatch, got {other:?}"),
         }
     }
@@ -5355,9 +5164,9 @@ mod tests {
         )
         .expect("encode");
         match decode_decoded_event_profile_auto_version_with_string_dict(&wire, true) {
-            Err(DecodedEventError::StringDict(crate::string_dict::StringDictError::UnknownId {
-                id: 99,
-            })) => {}
+            Err(DecodedEventError::StringDict(
+                crate::string_dict::StringDictError::UnknownId { id: 99 },
+            )) => {}
             other => panic!("expected UnknownId 99, got {other:?}"),
         }
     }

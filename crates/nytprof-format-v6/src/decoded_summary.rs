@@ -28,13 +28,19 @@ pub enum DecodedSummaryError {
     SummaryBody(SummaryBodyError),
     Encode(CompressedProfileError),
     /// Non-SUMMARY/FOOTER kind on this MVP path.
-    UnexpectedKind { kind: u8 },
+    UnexpectedKind {
+        kind: u8,
+    },
     /// FOOTER not last / more than one FOOTER.
     InvalidFooter,
     /// FOOTER must use codec NONE.
-    UnexpectedFooterCodec { codec: u8 },
+    UnexpectedFooterCodec {
+        codec: u8,
+    },
     /// SUMMARY codec not in {NONE, ZLIB, ZSTD, LZ4} or mixed across SUMMARY chunks.
-    UnsupportedSummaryCodec { codec: u8 },
+    UnsupportedSummaryCodec {
+        codec: u8,
+    },
     /// No SUMMARY chunks when a non-empty body path is required.
     MissingSummaryChunks,
 }
@@ -222,9 +228,7 @@ pub fn decode_decoded_summary_profile(
             }
             k if k == kind::FOOTER => {
                 if chunk.codec != codec::NONE {
-                    return Err(DecodedSummaryError::UnexpectedFooterCodec {
-                        codec: chunk.codec,
-                    });
+                    return Err(DecodedSummaryError::UnexpectedFooterCodec { codec: chunk.codec });
                 }
                 has_footer = true;
                 footer_payload = Some(chunk.plain.clone());

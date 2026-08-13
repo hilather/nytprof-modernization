@@ -18,36 +18,39 @@
 use crate::chunk::{codec, encode_chunk_frame, kind};
 use crate::compressed_mixed::{
     encode_compressed_mixed_profile_per_kind, encode_multi_chunk_summary_mixed_profile,
-    KindCodecs, OwnedFooterRecord, OwnedIndexRecord, OwnedSourceRecord, OwnedSummaryRecord,
-    CompressedMixedError,
+    CompressedMixedError, KindCodecs, OwnedFooterRecord, OwnedIndexRecord, OwnedSourceRecord,
+    OwnedSummaryRecord,
 };
 use crate::compressed_profile::{
     encode_event_chunk, encode_kind_chunk, is_supported_event_codec, CompressedProfileError,
     OwnedEventRecord,
 };
-use crate::decoded_event::{
-    align_event_records_version_with_header, DecodedEventError,
-};
 use crate::crc::compute_payload_crc;
+use crate::decoded_event::{align_event_records_version_with_header, DecodedEventError};
 use crate::decoded_stream::{
     decode_prefix_chunk_stream_plain, encode_prefix_sealed_chunks, DecodedStreamError,
 };
 use crate::event_body::{
-    decode_event_body_full, encode_event_body, encode_event_body_with_site_deltas_and_seq_continuing,
-    PackingEncodeState, EventBodyError, EventRecordSpec,
+    decode_event_body_full, encode_event_body,
+    encode_event_body_with_site_deltas_and_seq_continuing, EventBodyError, EventRecordSpec,
+    PackingEncodeState,
 };
-use crate::multi_chunk_event::partition_event_records;
-use crate::string_dict::{
-    decode_string_dictionary, encode_string_dictionary, resolve_event_records, StringDictError,
-    StringDictionary,
+use crate::footer_body::{
+    decode_footer_body, encode_footer_body, FooterBodyError, FooterRecordSpec,
 };
-use crate::footer_body::{decode_footer_body, encode_footer_body, FooterBodyError, FooterRecordSpec};
 use crate::index_body::{decode_index_body, encode_index_body, IndexBodyError, IndexRecordSpec};
 use crate::mid_record_span::{
     split_event_body_bytes, split_index_body_bytes, split_source_body_bytes,
     split_summary_body_bytes,
 };
-use crate::source_body::{decode_source_body, encode_source_body, SourceBodyError, SourceRecordSpec};
+use crate::multi_chunk_event::partition_event_records;
+use crate::source_body::{
+    decode_source_body, encode_source_body, SourceBodyError, SourceRecordSpec,
+};
+use crate::string_dict::{
+    decode_string_dictionary, encode_string_dictionary, resolve_event_records, StringDictError,
+    StringDictionary,
+};
 use crate::summary_body::{
     decode_summary_body, encode_summary_body, SummaryBodyError, SummaryRecordSpec,
 };
@@ -65,14 +68,26 @@ pub enum DecodedMixedError {
     IndexBody(IndexBodyError),
     SummaryBody(SummaryBodyError),
     FooterBody(FooterBodyError),
-    UnsupportedCodec { codec: u8 },
-    UnexpectedKind { kind: u8 },
+    UnsupportedCodec {
+        codec: u8,
+    },
+    UnexpectedKind {
+        kind: u8,
+    },
     InvalidFooter,
-    UnexpectedFooterCodec { codec: u8 },
+    UnexpectedFooterCodec {
+        codec: u8,
+    },
     /// Mixed codecs within the same kind across chunks (MVP).
-    KindCodecMismatch { kind: u8, expected: u8, got: u8 },
+    KindCodecMismatch {
+        kind: u8,
+        expected: u8,
+        got: u8,
+    },
     /// Concurrent mid-record encode requires ≥2 kinds with interior splits.
-    NeedConcurrentMidRecordKinds { got: usize },
+    NeedConcurrentMidRecordKinds {
+        got: usize,
+    },
     /// Body VERSION major/minor disagree with fixed-header / file-prefix version fields.
     VersionHeaderMismatch {
         header_major: u16,
@@ -474,9 +489,7 @@ pub fn decode_decoded_mixed_profile_with_string_dict(
                     && chunk.codec != codec::ZSTD
                     && chunk.codec != codec::LZ4
                 {
-                    return Err(DecodedMixedError::UnsupportedCodec {
-                        codec: chunk.codec,
-                    });
+                    return Err(DecodedMixedError::UnsupportedCodec { codec: chunk.codec });
                 }
                 if event_chunk_count == 0 {
                     kind_codecs.event = chunk.codec;
@@ -514,9 +527,7 @@ pub fn decode_decoded_mixed_profile_with_string_dict(
             }
             k if k == kind::FOOTER => {
                 if chunk.codec != codec::NONE {
-                    return Err(DecodedMixedError::UnexpectedFooterCodec {
-                        codec: chunk.codec,
-                    });
+                    return Err(DecodedMixedError::UnexpectedFooterCodec { codec: chunk.codec });
                 }
                 has_footer = true;
                 footer_raw = Some(chunk.plain.clone());
@@ -592,10 +603,12 @@ pub fn decode_decoded_mixed_profile_with_string_dict(
     if !summary_plain.is_empty() {
         let (recs, body_n) = decode_summary_body(&summary_plain)?;
         if body_n != summary_plain.len() {
-            return Err(DecodedMixedError::SummaryBody(SummaryBodyError::Truncated {
-                need: summary_plain.len(),
-                got: body_n,
-            }));
+            return Err(DecodedMixedError::SummaryBody(
+                SummaryBodyError::Truncated {
+                    need: summary_plain.len(),
+                    got: body_n,
+                },
+            ));
         }
         for r in recs {
             summary_records.push(OwnedSummaryRecord {
@@ -1322,13 +1335,7 @@ pub fn encode_decoded_mixed_mid_record_index_profile(
         head,
     )?);
     seq += 1;
-    sealed.push(encode_kind_chunk(
-        kind::INDEX,
-        codecs.index,
-        seq,
-        0,
-        tail,
-    )?);
+    sealed.push(encode_kind_chunk(kind::INDEX, codecs.index, seq, 0, tail)?);
     seq += 1;
 
     if !summaries.is_empty() {
@@ -1400,10 +1407,9 @@ pub fn encode_decoded_mixed_mid_record_summary_profile(
     footer: Option<&[FooterRecordSpec<'_>]>,
 ) -> DecodedMixedResult<Vec<u8>> {
     if summaries.is_empty() {
-        return Err(DecodedMixedError::SummaryBody(SummaryBodyError::Truncated {
-            need: 1,
-            got: 0,
-        }));
+        return Err(DecodedMixedError::SummaryBody(
+            SummaryBodyError::Truncated { need: 1, got: 0 },
+        ));
     }
     for (present, c) in [
         (!events.is_empty(), codecs.event),
@@ -1577,10 +1583,9 @@ pub fn encode_decoded_mixed_mid_record_concurrent_profile(
         }));
     }
     if splits.summary.is_some() && summaries.is_empty() {
-        return Err(DecodedMixedError::SummaryBody(SummaryBodyError::Truncated {
-            need: 1,
-            got: 0,
-        }));
+        return Err(DecodedMixedError::SummaryBody(
+            SummaryBodyError::Truncated { need: 1, got: 0 },
+        ));
     }
 
     for (present, c) in [
@@ -1615,13 +1620,7 @@ pub fn encode_decoded_mixed_mid_record_concurrent_profile(
                 head,
             )?);
             seq += 1;
-            sealed.push(encode_kind_chunk(
-                kind::EVENT,
-                codecs.event,
-                seq,
-                0,
-                tail,
-            )?);
+            sealed.push(encode_kind_chunk(kind::EVENT, codecs.event, seq, 0, tail)?);
             seq += 1;
         } else {
             sealed.push(encode_kind_chunk(
@@ -1691,13 +1690,7 @@ pub fn encode_decoded_mixed_mid_record_concurrent_profile(
                 head,
             )?);
             seq += 1;
-            sealed.push(encode_kind_chunk(
-                kind::INDEX,
-                codecs.index,
-                seq,
-                0,
-                tail,
-            )?);
+            sealed.push(encode_kind_chunk(kind::INDEX, codecs.index, seq, 0, tail)?);
             seq += 1;
         } else {
             sealed.push(encode_kind_chunk(
@@ -1836,9 +1829,11 @@ fn validate_mixed_mid_stream_codec_switch(
         .iter()
         .any(|e| matches!(e, EventRecordSpec::StartDeflate))
     {
-        return Err(DecodedMixedError::EventBody(EventBodyError::UnknownOpcode {
-            opcode: 16, // START_DEFLATE — marker missing in pre region
-        }));
+        return Err(DecodedMixedError::EventBody(
+            EventBodyError::UnknownOpcode {
+                opcode: 16, // START_DEFLATE — marker missing in pre region
+            },
+        ));
     }
     if !sources.is_empty() && !is_supported_event_codec(source_codec) {
         return Err(DecodedMixedError::UnsupportedCodec {
@@ -2110,18 +2105,8 @@ fn seal_mixed_mid_stream_profile(
     footer_payload: Option<&[u8]>,
 ) -> DecodedMixedResult<Vec<u8>> {
     let mut sealed: Vec<Vec<u8>> = Vec::new();
-    sealed.push(encode_event_chunk(
-        pre_codec,
-        0,
-        pre_count,
-        pre_plain,
-    )?);
-    sealed.push(encode_event_chunk(
-        post_codec,
-        1,
-        post_count,
-        post_plain,
-    )?);
+    sealed.push(encode_event_chunk(pre_codec, 0, pre_count, pre_plain)?);
+    sealed.push(encode_event_chunk(post_codec, 1, post_count, post_plain)?);
 
     if !sources.is_empty() {
         let src_plain = encode_source_body(sources);
@@ -2243,9 +2228,7 @@ pub fn decode_decoded_mixed_profile(
                     && chunk.codec != codec::ZSTD
                     && chunk.codec != codec::LZ4
                 {
-                    return Err(DecodedMixedError::UnsupportedCodec {
-                        codec: chunk.codec,
-                    });
+                    return Err(DecodedMixedError::UnsupportedCodec { codec: chunk.codec });
                 }
                 match k {
                     k if k == kind::EVENT => {
@@ -2289,9 +2272,7 @@ pub fn decode_decoded_mixed_profile(
             }
             k if k == kind::FOOTER => {
                 if chunk.codec != codec::NONE {
-                    return Err(DecodedMixedError::UnexpectedFooterCodec {
-                        codec: chunk.codec,
-                    });
+                    return Err(DecodedMixedError::UnexpectedFooterCodec { codec: chunk.codec });
                 }
                 has_footer = true;
                 footer_plain = Some(chunk.plain.clone());
@@ -2360,10 +2341,12 @@ pub fn decode_decoded_mixed_profile(
     if !summary_plain.is_empty() {
         let (recs, body_n) = decode_summary_body(&summary_plain)?;
         if body_n != summary_plain.len() {
-            return Err(DecodedMixedError::SummaryBody(SummaryBodyError::Truncated {
-                need: summary_plain.len(),
-                got: body_n,
-            }));
+            return Err(DecodedMixedError::SummaryBody(
+                SummaryBodyError::Truncated {
+                    need: summary_plain.len(),
+                    got: body_n,
+                },
+            ));
         }
         for r in recs {
             summary_records.push(OwnedSummaryRecord {
@@ -2420,8 +2403,8 @@ mod tests {
     use crate::chunk::{encode_chunk_frame, parse_chunk_frame, CHUNK_HEADER_LEN, CHUNK_SYNC};
     use crate::crc::compute_payload_crc;
     use crate::decoded_chunk::DecodedChunkError;
-    use crate::decoded_stream::DecodedStreamError;
     use crate::decoded_stream::decode_prefix_chunk_stream_plain;
+    use crate::decoded_stream::DecodedStreamError;
     use crate::event_body::{
         decode_event_body, encode_event_body, known_key_attr_option_sample_specs,
     };
@@ -2432,8 +2415,8 @@ mod tests {
     };
     use crate::payload_codec::{deflate_zlib, encode_chunk_frame_zlib};
     use crate::source_body::encode_source_body;
-    use crate::summary_body::encode_summary_body;
     use crate::stream::{decode_prefix_chunk_stream, StreamError};
+    use crate::summary_body::encode_summary_body;
     use crate::{MAGIC, SUPPORTED_MAJOR};
 
     fn sample_events() -> [EventRecordSpec<'static>; 2] {
@@ -2663,9 +2646,9 @@ mod tests {
             other => panic!("expected payload err, got {other:?}"),
         }
         match decode_decoded_mixed_profile(&wire, true) {
-            Err(DecodedMixedError::Stream(DecodedStreamError::Chunk(
-                DecodedChunkError::Crc(_),
-            ))) => {}
+            Err(DecodedMixedError::Stream(DecodedStreamError::Chunk(DecodedChunkError::Crc(
+                _,
+            )))) => {}
             other => panic!("expected crc err, got {other:?}"),
         }
     }
@@ -2685,8 +2668,15 @@ mod tests {
             &compressed,
             compute_payload_crc(&compressed) ^ 0x1111,
         );
-        let ev = encode_chunk_frame_zlib(kind::EVENT, 0, 1, 0, 2, &encode_event_body(&sample_events()))
-            .unwrap();
+        let ev = encode_chunk_frame_zlib(
+            kind::EVENT,
+            0,
+            1,
+            0,
+            2,
+            &encode_event_body(&sample_events()),
+        )
+        .unwrap();
         let wire = crate::decoded_stream::encode_prefix_sealed_chunks(
             SUPPORTED_MAJOR,
             0,
@@ -2697,9 +2687,9 @@ mod tests {
             &[&ev, &bad],
         );
         match decode_decoded_mixed_profile(&wire, true) {
-            Err(DecodedMixedError::Stream(DecodedStreamError::Chunk(
-                DecodedChunkError::Crc(_),
-            ))) => {}
+            Err(DecodedMixedError::Stream(DecodedStreamError::Chunk(DecodedChunkError::Crc(
+                _,
+            )))) => {}
             other => panic!("expected crc mismatch, got {other:?}"),
         }
         let (prof, n) = decode_decoded_mixed_profile(&wire, false).expect("no crc");
@@ -2941,9 +2931,9 @@ mod tests {
             other => panic!("expected payload err, got {other:?}"),
         }
         match decode_decoded_mixed_profile(&wire, true) {
-            Err(DecodedMixedError::Stream(DecodedStreamError::Chunk(
-                DecodedChunkError::Crc(_),
-            ))) => {}
+            Err(DecodedMixedError::Stream(DecodedStreamError::Chunk(DecodedChunkError::Crc(
+                _,
+            )))) => {}
             other => panic!("expected crc err, got {other:?}"),
         }
     }
@@ -3211,9 +3201,9 @@ mod tests {
             other => panic!("expected payload err, got {other:?}"),
         }
         match decode_decoded_mixed_profile(&wire, true) {
-            Err(DecodedMixedError::Stream(DecodedStreamError::Chunk(
-                DecodedChunkError::Crc(_),
-            ))) => {}
+            Err(DecodedMixedError::Stream(DecodedStreamError::Chunk(DecodedChunkError::Crc(
+                _,
+            )))) => {}
             other => panic!("expected crc err, got {other:?}"),
         }
     }
@@ -3475,9 +3465,9 @@ mod tests {
             other => panic!("expected payload err, got {other:?}"),
         }
         match decode_decoded_mixed_profile(&wire, true) {
-            Err(DecodedMixedError::Stream(DecodedStreamError::Chunk(
-                DecodedChunkError::Crc(_),
-            ))) => {}
+            Err(DecodedMixedError::Stream(DecodedStreamError::Chunk(DecodedChunkError::Crc(
+                _,
+            )))) => {}
             other => panic!("expected crc err, got {other:?}"),
         }
     }
@@ -3768,9 +3758,9 @@ mod tests {
             other => panic!("expected payload err, got {other:?}"),
         }
         match decode_decoded_mixed_profile(&wire, true) {
-            Err(DecodedMixedError::Stream(DecodedStreamError::Chunk(
-                DecodedChunkError::Crc(_),
-            ))) => {}
+            Err(DecodedMixedError::Stream(DecodedStreamError::Chunk(DecodedChunkError::Crc(
+                _,
+            )))) => {}
             other => panic!("expected crc err, got {other:?}"),
         }
     }
@@ -4061,9 +4051,9 @@ mod tests {
             other => panic!("expected payload err, got {other:?}"),
         }
         match decode_decoded_mixed_profile(&wire, true) {
-            Err(DecodedMixedError::Stream(DecodedStreamError::Chunk(
-                DecodedChunkError::Crc(_),
-            ))) => {}
+            Err(DecodedMixedError::Stream(DecodedStreamError::Chunk(DecodedChunkError::Crc(
+                _,
+            )))) => {}
             other => panic!("expected crc err, got {other:?}"),
         }
     }
@@ -4441,9 +4431,9 @@ mod tests {
             other => panic!("expected payload err, got {other:?}"),
         }
         match decode_decoded_mixed_profile(&wire, true) {
-            Err(DecodedMixedError::Stream(DecodedStreamError::Chunk(
-                DecodedChunkError::Crc(_),
-            ))) => {}
+            Err(DecodedMixedError::Stream(DecodedStreamError::Chunk(DecodedChunkError::Crc(
+                _,
+            )))) => {}
             other => panic!("expected crc err, got {other:?}"),
         }
     }
@@ -5146,10 +5136,7 @@ mod tests {
 
     fn version_events() -> [EventRecordSpec<'static>; 3] {
         [
-            EventRecordSpec::Version {
-                major: 5,
-                minor: 0,
-            },
+            EventRecordSpec::Version { major: 5, minor: 0 },
             EventRecordSpec::StartDeflate,
             EventRecordSpec::TimeLine {
                 fid: 1,
@@ -5209,10 +5196,7 @@ mod tests {
 
     fn dual_output_sequence_events() -> [EventRecordSpec<'static>; 9] {
         [
-            EventRecordSpec::Version {
-                major: 5,
-                minor: 0,
-            },
+            EventRecordSpec::Version { major: 5, minor: 0 },
             EventRecordSpec::Comment {
                 string_id: 0,
                 string_flags: 0,
@@ -5353,10 +5337,7 @@ mod tests {
 
     fn mid_stream_pre_events() -> [EventRecordSpec<'static>; 3] {
         [
-            EventRecordSpec::Version {
-                major: 5,
-                minor: 0,
-            },
+            EventRecordSpec::Version { major: 5, minor: 0 },
             EventRecordSpec::Comment {
                 string_id: 0,
                 string_flags: 0,
@@ -5525,8 +5506,7 @@ mod tests {
                 None,
             )
             .expect("baseline");
-        let (single_prof, _) =
-            decode_decoded_mixed_profile_auto_version(&baseline, true).unwrap();
+        let (single_prof, _) = decode_decoded_mixed_profile_auto_version(&baseline, true).unwrap();
         assert_eq!(single_prof.source_records.len(), 2);
         match &single_prof.event_records[0] {
             OwnedEventRecord::Version { major, minor } => {
@@ -5704,8 +5684,7 @@ mod tests {
         all.extend_from_slice(&post);
         let single_plain =
             crate::event_body::encode_event_body_with_site_deltas_and_seq(&all).unwrap();
-        let (single_body, _) =
-            crate::event_body::decode_event_body_full(&single_plain).unwrap();
+        let (single_body, _) = crate::event_body::decode_event_body_full(&single_plain).unwrap();
         let single_owned: Vec<_> = single_body
             .records
             .iter()
@@ -5916,12 +5895,10 @@ mod tests {
         )
         .expect("encode without VERSION");
         let (plain, _) = decode_decoded_mixed_profile(&wire, true).expect("plain");
-        assert!(
-            !plain
-                .event_records
-                .iter()
-                .any(|r| matches!(r, OwnedEventRecord::Version { .. }))
-        );
+        assert!(!plain
+            .event_records
+            .iter()
+            .any(|r| matches!(r, OwnedEventRecord::Version { .. })));
         let (auto, _) = decode_decoded_mixed_profile_auto_version(&wire, true).expect("auto");
         match &auto.event_records[0] {
             OwnedEventRecord::Version { major, minor } => {
@@ -6079,9 +6056,7 @@ mod tests {
                         );
                         match &events[i] {
                             EventRecordSpec::Attribute {
-                                key: sk,
-                                value: sv,
-                                ..
+                                key: sk, value: sv, ..
                             } => {
                                 assert_eq!(key.as_slice(), *sk);
                                 assert_eq!(value.as_slice(), *sv);
@@ -6096,9 +6071,7 @@ mod tests {
                         );
                         match &events[i] {
                             EventRecordSpec::Option {
-                                key: sk,
-                                value: sv,
-                                ..
+                                key: sk, value: sv, ..
                             } => {
                                 assert_eq!(key.as_slice(), *sk);
                                 assert_eq!(value.as_slice(), *sv);
@@ -6146,13 +6119,8 @@ mod tests {
         let sources = sample_sources();
         let src_plain = encode_source_body(&sources);
         for c in [codec::NONE, codec::ZLIB, codec::ZSTD, codec::LZ4] {
-            let event_frame = crate::compressed_profile::encode_event_chunk(
-                c,
-                0,
-                2,
-                &event_plain,
-            )
-            .expect("event seal");
+            let event_frame = crate::compressed_profile::encode_event_chunk(c, 0, 2, &event_plain)
+                .expect("event seal");
             let source_frame = crate::compressed_profile::encode_kind_chunk(
                 kind::SOURCE,
                 codec::NONE,
@@ -6533,10 +6501,7 @@ mod tests {
     fn mixed_event_seq_none_zlib_zstd_lz4_with_source() {
         use crate::event_body::encode_event_body_with_seq;
         let specs = [
-            EventRecordSpec::Version {
-                major: 5,
-                minor: 0,
-            },
+            EventRecordSpec::Version { major: 5, minor: 0 },
             EventRecordSpec::Comment {
                 string_id: 0,
                 string_flags: 0,
@@ -6788,15 +6753,7 @@ mod tests {
             .unwrap();
             let mut refs: Vec<&[u8]> = event_frames.iter().map(|v| v.as_slice()).collect();
             refs.push(source_frame.as_slice());
-            let wire = encode_prefix_sealed_chunks(
-                SUPPORTED_MAJOR,
-                0,
-                0,
-                0,
-                0,
-                &[],
-                &refs,
-            );
+            let wire = encode_prefix_sealed_chunks(SUPPORTED_MAJOR, 0, 0, 0, 0, &[], &refs);
             let (prof, n) = decode_decoded_mixed_profile(&wire, true)
                 .unwrap_or_else(|e| panic!("decode codec {c}: {e}"));
             assert_eq!(n, wire.len(), "codec {c}");
@@ -7135,15 +7092,7 @@ mod tests {
             .unwrap();
             let mut refs: Vec<&[u8]> = event_frames.iter().map(|v| v.as_slice()).collect();
             refs.push(source_frame.as_slice());
-            let wire = encode_prefix_sealed_chunks(
-                SUPPORTED_MAJOR,
-                0,
-                0,
-                0,
-                0,
-                &[],
-                &refs,
-            );
+            let wire = encode_prefix_sealed_chunks(SUPPORTED_MAJOR, 0, 0, 0, 0, &[], &refs);
             let (prof, n) = decode_decoded_mixed_profile(&wire, true)
                 .unwrap_or_else(|e| panic!("decode codec {c}: {e}"));
             assert_eq!(n, wire.len(), "codec {c}");
@@ -7178,10 +7127,7 @@ mod tests {
                 ),
                 other => panic!("codec {c}: [7] {other:?}"),
             }
-            assert_eq!(
-                prof.event_records, single_prof.event_records,
-                "codec {c}"
-            );
+            assert_eq!(prof.event_records, single_prof.event_records, "codec {c}");
             assert_eq!(
                 prof.event_sequences, single_prof.event_sequences,
                 "codec {c}"
@@ -7201,8 +7147,7 @@ mod tests {
     }
 
     #[test]
-    fn mixed_auto_version_dict_multi_chunk_packing_with_time_runs_none_zlib_zstd_lz4_with_source()
-    {
+    fn mixed_auto_version_dict_multi_chunk_packing_with_time_runs_none_zlib_zstd_lz4_with_source() {
         use crate::string::FLAG_UTF8;
         const TL: &[u64] = &[7, 8];
         const TB: &[u64] = &[10, 20];
@@ -7279,8 +7224,7 @@ mod tests {
             )
             .expect("single-chunk mixed auto-version dict packing");
         let (single_prof, single_dict, _) =
-            decode_decoded_mixed_profile_auto_version_with_string_dict(&single_wire, true)
-                .unwrap();
+            decode_decoded_mixed_profile_auto_version_with_string_dict(&single_wire, true).unwrap();
         assert_eq!(single_prof.source_records.len(), 2);
         assert_eq!(single_dict.get(1).unwrap().data, b"mixed-av-dict-mc-mark");
         match &single_prof.event_records[0] {
@@ -7331,10 +7275,7 @@ mod tests {
             assert_eq!(prof.source_records.len(), 2);
             assert_eq!(dict.get(1).unwrap().data, b"mixed-av-dict-mc-mark");
             assert_eq!(dict.get(2).unwrap().data, b"# mixed-av-dict-mc-end");
-            assert_eq!(
-                prof.event_records, single_prof.event_records,
-                "codec {c}"
-            );
+            assert_eq!(prof.event_records, single_prof.event_records, "codec {c}");
             assert_eq!(
                 prof.event_sequences, single_prof.event_sequences,
                 "codec {c}"
@@ -7475,10 +7416,7 @@ mod tests {
             assert_eq!(prof.kind_codecs.event, c);
             assert!(prof.event_chunk_count >= 4, "codec {c}");
             assert_eq!(prof.source_records.len(), 2);
-            assert_eq!(
-                prof.event_records, single_prof.event_records,
-                "codec {c}"
-            );
+            assert_eq!(prof.event_records, single_prof.event_records, "codec {c}");
             assert_eq!(
                 prof.event_sequences, single_prof.event_sequences,
                 "codec {c}"
@@ -7663,10 +7601,7 @@ mod tests {
                 }
                 other => panic!("codec {c}: [9] {other:?}"),
             }
-            assert_eq!(
-                prof.event_records, single_prof.event_records,
-                "codec {c}"
-            );
+            assert_eq!(prof.event_records, single_prof.event_records, "codec {c}");
             assert_eq!(
                 prof.event_sequences, single_prof.event_sequences,
                 "codec {c}"

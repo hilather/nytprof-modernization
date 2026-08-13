@@ -59,9 +59,7 @@ pub fn encode_multi_chunk_compressed_profile(
     footer: Option<&[u8]>,
 ) -> MultiChunkCompressedResult<Vec<u8>> {
     if !events.is_empty() && !is_supported_event_codec(event_codec) {
-        return Err(CompressedProfileError::UnsupportedEventCodec {
-            codec: event_codec,
-        });
+        return Err(CompressedProfileError::UnsupportedEventCodec { codec: event_codec });
     }
 
     let partitions = partition_event_records(events, max_records_per_chunk);
@@ -138,10 +136,12 @@ pub fn decode_multi_chunk_compressed_profile(
                 let plain = decode_chunk_payload(frame)?;
                 let (body_recs, body_n) = decode_event_body(&plain)?;
                 if body_n != plain.len() {
-                    return Err(CompressedProfileError::EventBody(EventBodyError::Truncated {
-                        need: plain.len(),
-                        got: body_n,
-                    }));
+                    return Err(CompressedProfileError::EventBody(
+                        EventBodyError::Truncated {
+                            need: plain.len(),
+                            got: body_n,
+                        },
+                    ));
                 }
                 for r in &body_recs {
                     records.push(OwnedEventRecord::from_borrowed(r));

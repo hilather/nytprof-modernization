@@ -16,8 +16,8 @@ collector/
   include/     public C headers (sink API, types, clock, batch/event, counting + v5/v6 wire + dual + v6 IDs)
   src/         sink wrappers + backends + fake-clock + batch/fast path + v5 + v6 + dual writers
   t/           unit tests (no Perl; pure C; zlib/zstd/lz4 for wire)
-  xs/          reserved for future XS glue (empty)
-  Makefile     opt-in C build (links -lz -lzstd -llz4)
+  xs/          CollectorBootstrap (PR-G02) + product debugger Devel::NYTProf (PR-G03a load + PR-G03b emit)
+  Makefile     opt-in C build (full archive -lz -lzstd -llz4; D1-B libnytp_sink_v5.a -lz only)
   build/       gitignored objects / test binaries / sample .nytprof
   README.md    this file
 ```
@@ -42,13 +42,16 @@ collector/
 | **Fake-clock harness** | Scripted ticks + BASE-003 stmt driver + M4 **mini** sample |
 | `make -C collector test` | `test_sink_api` + `test_lifecycle_seq` + `test_fake_clock` + `test_batch_fast` + **`test_v5_wire`** + **`test_v6_abs_wire`** + **`test_v6_codec_chunk_crc`** + **`test_v6_packing_footer`** + **`test_dual_sink`** |
 | `make -C collector gen-e3-fixtures` | Write product E3-EVENT C matrix to `OUTDIR` (default `../fixtures/v6/from-c`) |
+| **`libnytp_sink_v5.a` (PR-G02)** | D1-B product archive: v5 + counting + batch + clock + fork; **no** v6/dual; link **`-lz` only**. Full `libnytp_sink.a` remains test/dev. |
+| **CollectorBootstrap (PR-G02)** | Load-only XS under `xs/` — **not** the debugger, **not** product attach |
+| **Product debugger (PR-G03a/G03b/G03c/G03d)** | `Devel::NYTProf` + `Core` + `NYTProf.xs` — `perl -d:NYTProf` **loads** (in-memory sink; no `nytprof.out` on trivial `-e`); G03b `DB::enable_sink` + `nytp_emit_time_*` / `discount` write a real `NYTProf 5` stream; G03c `DB::emit_sub_entry` / `emit_sub_return` add `SUB_ENTRY` / `SUB_RETURN`; G03d `DB::emit_attribute` / `option` / `new_fid` / `src_line` / `sub_info` / `pid_*` add meta/finalize tags |
 
 ## Explicit non-claims
 
 - **Not full M4 oracle corpus** — mini sample only; full `fixtures/v5/*` v5-via-sink equality needs complete TEST-003  
 - **Board COL-007 is done for product E3-EVENT** (`fixtures/v6/from-c/`, `e3_c_*`, `tools/oracle/e3_c_writer_parity.sh`; schema [collector-v6-e3-c-fixtures-mvp-v0.md](https://github.com/hilather/nytprof-modernization/blob/main/docs/schemas/collector-v6-e3-c-fixtures-mvp-v0.md)). **Wire freeze** major=6 IDs: [ADR-0006](https://github.com/hilather/nytprof-modernization/blob/main/docs/adrs/0006-v6-wire-freeze.md) + golden vectors `fixtures/v6/vectors/`. **Residuals:** **E3-mixed** multi-kind C fixtures; CLI v6 default; full oracle E4 / E4 product smoke (E4-v0 model on dual-sink pairs is ready); live XS hooks; COL-008  
 - **Not COL-015** — full fork buffer ownership / signal-safe finalization matrix  
-- **Not** hooked into live Perl opcode profiler yet  
+- **G03a debugger load + G03b–G03e emit-MVP + G04 attach-MVP + G05 options/`format=v6` + G06 fork/`addpid` are landed** (`perl -d:NYTProf` + `make -C collector xs-nytprof` / `xs-nytprof-v6` + `nytp_emit_*` + live `DB::sub`/`DB::DB` + `CORE::GLOBAL::fork` → `nytp_fork_*`). G04 smoke default-calls1 leaf **15** / mid **3** / edge **15**. G05: D1-B `format=v6` fail-closed; D1-A writes `NYTPROF6`. G06: parent + `<file>.<pid>` `NYTProf 5`. **Not** full TEST-018 / mid-deflate-in-child / full 6.15 opcode/`entersub`. G02 CollectorBootstrap remains a distinct load-only module.  
 - **Not** a default dependency of `make legacy-smoke` or dual-path legacy half  
 - Dual-sink (COL-014) is **test/dev only** (OQ-4) — not advertised product `format=dual`; full fixtures dual equality residual  
 - Fake-clock is **test/dev only** — must not be production default  
@@ -60,12 +63,22 @@ collector/
 
 ## Build / test
 
-Requires a C toolchain (`cc` / `gcc` / `clang`) and **zlib + zstd + lz4** (`-lz -lzstd -llz4`). Honest skip in CI when CC absent.
+Requires a C toolchain (`cc` / `gcc` / `clang`) and **zlib + zstd + lz4** (`-lz -lzstd -llz4`) for the **full** test/dev archive. The **D1-B product archive** (`libnytp_sink_v5.a`) links **`-lz` only**. Honest skip in CI when CC absent.
 
 ```sh
 # from repo root
 make -C collector
 make -C collector test
+# D1-B product link (PR-G02; not attach):
+make -C collector libnytp_sink_v5.a
+make -C collector probe-v5          # -lz only; not part of make test
+make -C collector xs-bootstrap      # load-only CollectorBootstrap
+make -C collector xs-nytprof        # G03a/G03b/G03c/G03d debugger (hold sink + emit APIs)
+./scripts/packaging/g02_v5_product_link_smoke.sh
+./scripts/packaging/product_attach_smoke.sh   # real perl -d:NYTProf; attach NOT-YET
+./scripts/packaging/g03b_stmt_emit_smoke.sh   # nytp_emit_*; NOT-YET attach / G04
+./scripts/packaging/g03c_sub_emit_smoke.sh    # nytp_emit_sub_*; NOT-YET attach / G04
+./scripts/packaging/g03d_meta_emit_smoke.sh   # nytp_emit_* meta; NOT-YET attach / G04
 # product E3-EVENT C fixtures (COL-007 / PR-B09):
 make -C collector gen-e3-fixtures OUTDIR="$(pwd)/fixtures/v6/from-c"
 ./tools/oracle/e3_c_writer_parity.sh

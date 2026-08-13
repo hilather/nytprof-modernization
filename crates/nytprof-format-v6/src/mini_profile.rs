@@ -17,9 +17,13 @@ pub enum MiniProfileError {
     Stream(StreamError),
     EventBody(EventBodyError),
     /// EVENT chunk must use codec NONE in this MVP.
-    UnexpectedCodec { codec: u8 },
+    UnexpectedCodec {
+        codec: u8,
+    },
     /// Chunk kind not EVENT or FOOTER (mini-profile MVP).
-    UnexpectedKind { kind: u8 },
+    UnexpectedKind {
+        kind: u8,
+    },
     /// FOOTER appeared before EVENT stream end more than once, or mid-stream FOOTER
     /// followed by another non-footer (MVP: at most one trailing FOOTER).
     InvalidFooter,
@@ -31,12 +35,17 @@ impl std::fmt::Display for MiniProfileError {
             MiniProfileError::Stream(e) => write!(f, "v6 mini-profile stream: {e}"),
             MiniProfileError::EventBody(e) => write!(f, "v6 mini-profile event-body: {e}"),
             MiniProfileError::UnexpectedCodec { codec } => {
-                write!(f, "v6 mini-profile unexpected chunk codec {codec} (NONE required)")
+                write!(
+                    f,
+                    "v6 mini-profile unexpected chunk codec {codec} (NONE required)"
+                )
             }
             MiniProfileError::UnexpectedKind { kind } => {
                 write!(f, "v6 mini-profile unexpected chunk kind {kind}")
             }
-            MiniProfileError::InvalidFooter => write!(f, "v6 mini-profile invalid FOOTER placement"),
+            MiniProfileError::InvalidFooter => {
+                write!(f, "v6 mini-profile invalid FOOTER placement")
+            }
         }
     }
 }
@@ -134,9 +143,7 @@ pub fn decode_mini_profile(buf: &[u8]) -> MiniProfileResult<(MiniProfile<'_>, us
         match frame.kind {
             k if k == kind::EVENT => {
                 if frame.codec != codec::NONE {
-                    return Err(MiniProfileError::UnexpectedCodec {
-                        codec: frame.codec,
-                    });
+                    return Err(MiniProfileError::UnexpectedCodec { codec: frame.codec });
                 }
                 let (body_recs, body_n) = decode_event_body(frame.payload)?;
                 if body_n != frame.payload.len() {
@@ -150,9 +157,7 @@ pub fn decode_mini_profile(buf: &[u8]) -> MiniProfileResult<(MiniProfile<'_>, us
             }
             k if k == kind::FOOTER => {
                 if frame.codec != codec::NONE {
-                    return Err(MiniProfileError::UnexpectedCodec {
-                        codec: frame.codec,
-                    });
+                    return Err(MiniProfileError::UnexpectedCodec { codec: frame.codec });
                 }
                 has_footer = true;
                 footer_payload = Some(frame.payload);
@@ -186,8 +191,8 @@ mod tests {
     use crate::event_body::opcode;
     use crate::stream::StreamError;
     use crate::varint::encode_u64;
-    use crate::{FilePrefixError, MAGIC, SUPPORTED_MAJOR};
     use crate::Error as HeaderError;
+    use crate::{FilePrefixError, MAGIC, SUPPORTED_MAJOR};
 
     #[test]
     fn roundtrip_empty_events_prefix_only() {
@@ -362,8 +367,9 @@ mod tests {
         let mut enc = prefix;
         enc.extend_from_slice(&frame);
         // Sanity: chunk parses
-        let _ = parse_chunk_frame(&enc[encode_file_prefix(SUPPORTED_MAJOR, 0, 0, 0, 0, &[]).len()..])
-            .expect("chunk ok");
+        let _ =
+            parse_chunk_frame(&enc[encode_file_prefix(SUPPORTED_MAJOR, 0, 0, 0, 0, &[]).len()..])
+                .expect("chunk ok");
         match decode_mini_profile(&enc) {
             Err(MiniProfileError::EventBody(_)) => {}
             other => panic!("expected event-body error, got {other:?}"),

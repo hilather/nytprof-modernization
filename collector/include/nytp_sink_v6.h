@@ -13,7 +13,7 @@
  *
  * Residuals (honest):
  *   - Board COL-007 done for product E3-EVENT (PR-B09 fixtures/v6/from-c/).
- *   - E3-mixed multi-kind C fixtures residual; not wire freeze; not CLI v6 default.
+ *   - E3-mixed SOURCE/INDEX/SUMMARY C fixtures: nytp_v6_sink_emit_{source,index,summary}.
  *   - NEW_FID drops eval_*, flags, size, mtime (provisional absolute shape).
  *   - TIME_BLOCK drops sub_line (provisional absolute shape).
  *   - NV doubles projected to non-negative integer ULEB (fail closed).
@@ -179,6 +179,27 @@ nytp_status nytp_v6_sink_emit_time_line_run(nytp_sink *sink, nytp_fid fid,
                                             nytp_line line,
                                             const uint64_t *ticks,
                                             size_t n_ticks);
+
+/*
+ * E3-mixed: append SOURCE / INDEX / SUMMARY records (codec NONE bodies).
+ * Sealed after EVENT on close (wire order EVENT, SOURCE, INDEX, SUMMARY,
+ * optional FOOTER). Not EVENT-body opcodes; not Rust stand-in encode.
+ */
+nytp_status nytp_v6_sink_emit_source(nytp_sink *sink, nytp_fid fid,
+                                     nytp_line line, nytp_string_view text);
+nytp_status nytp_v6_sink_emit_index(nytp_sink *sink, uint64_t key_id,
+                                    uint64_t file_offset, uint64_t length,
+                                    nytp_string_view label);
+nytp_status nytp_v6_sink_emit_summary(nytp_sink *sink, uint64_t key_id,
+                                      uint64_t count, uint64_t value,
+                                      nytp_string_view label);
+
+uint32_t nytp_v6_sink_source_record_count(const nytp_sink *sink);
+uint32_t nytp_v6_sink_index_record_count(const nytp_sink *sink);
+uint32_t nytp_v6_sink_summary_record_count(const nytp_sink *sink);
+uint32_t nytp_v6_sink_source_chunk_count(const nytp_sink *sink);
+uint32_t nytp_v6_sink_index_chunk_count(const nytp_sink *sink);
+uint32_t nytp_v6_sink_summary_chunk_count(const nytp_sink *sink);
 
 /*
  * Borrow the open event-body buffer (not yet framed). Valid until next emit,

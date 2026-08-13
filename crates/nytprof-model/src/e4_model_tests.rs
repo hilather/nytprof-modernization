@@ -6,8 +6,8 @@
 //! Policy: `docs/contracts/E4_V5_V6_SEMANTIC_EQUALITY_POLICY_v0.md`
 //! Fixtures: `fixtures/e4/dual-sink/*` (C dual-sink COL-014, test/dev-only OQ-4)
 //!
-//! Residuals: full oracle `fixtures/v5/*` dual pairs (TEST-003/TEST-008);
-//! E4 product smoke in offline_gate (PR-B12b); wire freeze; CLI v6 default.
+//! Residuals: full oracle `fixtures/v5/*` dual pairs (TEST-003/TEST-008 corpus);
+//! E4-01/E4-02/E4-03: `fixtures/e4/oracle-pair/` count surfaces only.
 
 use super::*;
 use std::path::PathBuf;
@@ -40,9 +40,8 @@ fn load_pair(stem: &str) -> (ProfileModel, ProfileModel) {
 
 fn assert_e4_pair(stem: &str) {
     let (v5, v6) = load_pair(stem);
-    e4_v0_aggregates_equal(&v5, &v6, true).unwrap_or_else(|m| {
-        panic!("E4-v0 model equality failed for dual-sink pair '{stem}': {m}")
-    });
+    e4_v0_aggregates_equal(&v5, &v6, true)
+        .unwrap_or_else(|m| panic!("E4-v0 model equality failed for dual-sink pair '{stem}': {m}"));
     // Both sides must be stream-complete for E4 required surfaces.
     assert!(
         v5.is_stream_complete(),
@@ -92,10 +91,7 @@ fn e4_v0_dual_default_calls1_model_equal() {
             .map(|d| (d.fid, d.first_line, d.last_line)),
         Some((1, 8, 12))
     );
-    assert!(v5
-        .source_line(1, 5)
-        .unwrap_or("")
-        .contains("x++"));
+    assert!(v5.source_line(1, 5).unwrap_or("").contains("x++"));
     assert_eq!(
         v5.attributes.get("ticks_per_sec").map(String::as_str),
         Some("10000000")
@@ -129,12 +125,7 @@ fn e4_v0_dual_calls2_default_model_equal() {
 /// All dual-sink pairs in one table-driven pass (smoke-friendly filter: e4_v0_).
 #[test]
 fn e4_v0_all_dual_sink_pairs_model_equal() {
-    for stem in [
-        "m4",
-        "default_calls1",
-        "blocks_calls1",
-        "calls2_default",
-    ] {
+    for stem in ["m4", "default_calls1", "blocks_calls1", "calls2_default"] {
         assert_e4_pair(stem);
     }
 }
@@ -182,7 +173,11 @@ fn e4_v0_standin_logical_vs_v6_model_equal() {
                 json!("workload.pl"),
             ],
         ),
-        Event::new(4, tags::TIME_LINE, vec![json!(5i64), json!(1u64), json!(5u64)]),
+        Event::new(
+            4,
+            tags::TIME_LINE,
+            vec![json!(5i64), json!(1u64), json!(5u64)],
+        ),
         Event::new(
             5,
             tags::SUB_RETURN,
@@ -218,7 +213,11 @@ fn e4_v0_standin_logical_vs_v6_model_equal() {
             tags::SRC_LINE,
             vec![json!(1u64), json!(5u64), json!("    $x++ for 1 .. 50;\n")],
         ),
-        Event::new(10, tags::PID_START, vec![json!(1u64), json!(0u64), json!(0u64)]),
+        Event::new(
+            10,
+            tags::PID_START,
+            vec![json!(1u64), json!(0u64), json!(0u64)],
+        ),
         Event::new(11, tags::PID_END, vec![json!(1u64), json!(1u64)]),
     ];
     let from_logical = ProfileModel::from_events(&logical).expect("logical");
@@ -295,11 +294,126 @@ fn e4_v0_standin_logical_vs_v6_model_equal() {
     let wire = e3_standin_write_absolute(&specs, codec::NONE).expect("encode");
     let from_v6 = ProfileModel::from_bytes(&wire).expect("v6 model");
     // VERSION present on both; total_events should match.
-    e4_v0_aggregates_equal(&from_logical, &from_v6, true)
-        .expect("logical vs v6 stand-in E4-v0");
+    e4_v0_aggregates_equal(&from_logical, &from_v6, true).expect("logical vs v6 stand-in E4-v0");
 }
 
-/// e4_v0_aggregates_equal reports mismatches (regression: must not silently pass).
+fn e4_oracle_pair(name: &str) -> PathBuf {
+    PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .join("../../fixtures/e4/oracle-pair")
+        .join(name)
+}
+
+/// E4-01 slice 1: oracle default-calls1 v5 + product format=v6 on the same
+/// workload. Compare advertised count surfaces from shipped `from_path`.
+/// Not full e4_v0_aggregates_equal (DISCOUNT/TIME_LINE/times remain TEST-008).
+#[test]
+fn e4_v0_oracle_pair_default_calls1_count_equal() {
+    let v5_path = e4_oracle_pair("default_calls1_v5.nytprof");
+    let v6_path = e4_oracle_pair("default_calls1_v6.nytprof");
+    assert!(v5_path.is_file(), "missing {}", v5_path.display());
+    assert!(v6_path.is_file(), "missing {}", v6_path.display());
+    let v5b = std::fs::read(&v5_path).expect("read v5");
+    let v6b = std::fs::read(&v6_path).expect("read v6");
+    assert!(v5b.starts_with(b"NYTProf 5"), "oracle v5 magic");
+    assert!(v6b.starts_with(b"NYTPROF6"), "product v6 magic");
+    let v5 = ProfileModel::from_path(&v5_path).expect("oracle v5 from_path");
+    let v6 = ProfileModel::from_path(&v6_path).expect("product v6 from_path");
+    let leaf5 = v5.sub_total("main::leaf").map(|t| t.returns);
+    let leaf6 = v6.sub_total("main::leaf").map(|t| t.returns);
+    let mid5 = v5.sub_total("main::mid").map(|t| t.returns);
+    let mid6 = v6.sub_total("main::mid").map(|t| t.returns);
+    let edge5 = v5.call_edge("main::mid", "main::leaf").map(|e| e.count);
+    let edge6 = v6.call_edge("main::mid", "main::leaf").map(|e| e.count);
+    assert_eq!(leaf5, leaf6, "leaf returns v5={leaf5:?} v6={leaf6:?}");
+    assert_eq!(mid5, mid6, "mid returns v5={mid5:?} v6={mid6:?}");
+    assert_eq!(edge5, edge6, "mid→leaf edge v5={edge5:?} v6={edge6:?}");
+    assert!(v5.is_stream_complete(), "oracle v5 incomplete");
+    assert!(v6.is_stream_complete(), "product v6 incomplete");
+}
+
+/// E4-02: oracle blocks-calls1 v5 + product format=v6 on the same workload.
+/// Count surfaces only (leaf/mid/edge). Not A4 780 / TIME_BLOCK / full TEST-008.
+#[test]
+fn e4_v0_oracle_pair_blocks_calls1_count_equal() {
+    let v5_path = e4_oracle_pair("blocks_calls1_v5.nytprof");
+    let v6_path = e4_oracle_pair("blocks_calls1_v6.nytprof");
+    assert!(v5_path.is_file(), "missing {}", v5_path.display());
+    assert!(v6_path.is_file(), "missing {}", v6_path.display());
+    let v5b = std::fs::read(&v5_path).expect("read v5");
+    let v6b = std::fs::read(&v6_path).expect("read v6");
+    assert!(v5b.starts_with(b"NYTProf 5"), "oracle v5 magic");
+    assert!(v6b.starts_with(b"NYTPROF6"), "product v6 magic");
+    let v5 = ProfileModel::from_path(&v5_path).expect("oracle v5 from_path");
+    let v6 = ProfileModel::from_path(&v6_path).expect("product v6 from_path");
+    let leaf5 = v5.sub_total("main::leaf").map(|t| t.returns);
+    let leaf6 = v6.sub_total("main::leaf").map(|t| t.returns);
+    let mid5 = v5.sub_total("main::mid").map(|t| t.returns);
+    let mid6 = v6.sub_total("main::mid").map(|t| t.returns);
+    let edge5 = v5.call_edge("main::mid", "main::leaf").map(|e| e.count);
+    let edge6 = v6.call_edge("main::mid", "main::leaf").map(|e| e.count);
+    assert_eq!(leaf5, leaf6, "leaf returns v5={leaf5:?} v6={leaf6:?}");
+    assert_eq!(mid5, mid6, "mid returns v5={mid5:?} v6={mid6:?}");
+    assert_eq!(edge5, edge6, "mid→leaf edge v5={edge5:?} v6={edge6:?}");
+    assert!(
+        leaf5.unwrap_or(0) >= 1,
+        "blocks_calls1 pair must have leaf returns from shipped load"
+    );
+    assert!(v5.is_stream_complete(), "oracle v5 incomplete");
+    assert!(v6.is_stream_complete(), "product v6 incomplete");
+}
+
+/// E4-03: oracle calls2-default v5 + product format=v6 on the same workload.
+/// Count surfaces only (leaf/mid/edge). Not SUB_ENTRY 27 / full TEST-008.
+#[test]
+fn e4_v0_oracle_pair_calls2_default_count_equal() {
+    let v5_path = e4_oracle_pair("calls2_default_v5.nytprof");
+    let v6_path = e4_oracle_pair("calls2_default_v6.nytprof");
+    assert!(v5_path.is_file(), "missing {}", v5_path.display());
+    assert!(v6_path.is_file(), "missing {}", v6_path.display());
+    let v5b = std::fs::read(&v5_path).expect("read v5");
+    let v6b = std::fs::read(&v6_path).expect("read v6");
+    assert!(v5b.starts_with(b"NYTProf 5"), "oracle v5 magic");
+    assert!(v6b.starts_with(b"NYTPROF6"), "product v6 magic");
+    let v5 = ProfileModel::from_path(&v5_path).expect("oracle v5 from_path");
+    let v6 = ProfileModel::from_path(&v6_path).expect("product v6 from_path");
+    let leaf5 = v5.sub_total("main::leaf").map(|t| t.returns);
+    let leaf6 = v6.sub_total("main::leaf").map(|t| t.returns);
+    let mid5 = v5.sub_total("main::mid").map(|t| t.returns);
+    let mid6 = v6.sub_total("main::mid").map(|t| t.returns);
+    let edge5 = v5.call_edge("main::mid", "main::leaf").map(|e| e.count);
+    let edge6 = v6.call_edge("main::mid", "main::leaf").map(|e| e.count);
+    assert_eq!(leaf5, leaf6, "leaf returns v5={leaf5:?} v6={leaf6:?}");
+    assert_eq!(mid5, mid6, "mid returns v5={mid5:?} v6={mid6:?}");
+    assert_eq!(edge5, edge6, "mid→leaf edge v5={edge5:?} v6={edge6:?}");
+    assert!(
+        leaf5.unwrap_or(0) >= 1,
+        "calls2_default pair must have leaf returns from shipped load"
+    );
+    assert!(v5.is_stream_complete(), "oracle v5 incomplete");
+    assert!(v6.is_stream_complete(), "product v6 incomplete");
+}
+
+/// Truncated oracle-pair bytes fail closed on the shipped ingest path.
+#[test]
+fn e4_v0_oracle_pair_truncated_fail_closed() {
+    for name in [
+        "default_calls1_v5.nytprof",
+        "default_calls1_v6.nytprof",
+        "blocks_calls1_v5.nytprof",
+        "blocks_calls1_v6.nytprof",
+        "calls2_default_v5.nytprof",
+        "calls2_default_v6.nytprof",
+    ] {
+        let bytes = std::fs::read(e4_oracle_pair(name)).expect(name);
+        let n = (bytes.len() / 2).max(8);
+        let truncated = &bytes[..n];
+        match ProfileModel::from_bytes(truncated) {
+            Err(_) => {}
+            Ok(_) => panic!("{name}: half-truncated pair bytes must fail closed"),
+        }
+    }
+}
+
 #[test]
 fn e4_v0_aggregates_equal_detects_mismatch() {
     let (v5, mut v6) = load_pair("m4");

@@ -87,9 +87,8 @@ pub use compressed_mixed::{
     encode_compressed_mixed_profile_per_kind, encode_multi_chunk_index_mixed_profile,
     encode_multi_chunk_kind_mixed_profile, encode_multi_chunk_source_mixed_profile,
     encode_multi_chunk_summary_mixed_profile, partition_index_records, partition_source_records,
-    partition_summary_records, CompressedMixedError, CompressedMixedProfile,
-    CompressedMixedResult, KindCodecs, OwnedFooterRecord, OwnedIndexRecord, OwnedSourceRecord,
-    OwnedSummaryRecord,
+    partition_summary_records, CompressedMixedError, CompressedMixedProfile, CompressedMixedResult,
+    KindCodecs, OwnedFooterRecord, OwnedIndexRecord, OwnedSourceRecord, OwnedSummaryRecord,
 };
 pub use compressed_profile::{
     decode_compressed_mini_profile, encode_compressed_mini_profile, CompressedMiniProfile,
@@ -108,15 +107,14 @@ pub use decoded_event::{
     decode_decoded_event_profile_auto_version,
     decode_decoded_event_profile_auto_version_with_string_dict,
     decode_decoded_event_profile_with_string_dict,
-    encode_decoded_event_mid_stream_codec_switch_profile,
     encode_decoded_event_mid_stream_codec_switch_auto_version_with_site_deltas_and_seq,
+    encode_decoded_event_mid_stream_codec_switch_profile,
     encode_decoded_event_mid_stream_codec_switch_with_site_deltas_and_seq,
     encode_decoded_event_mid_stream_codec_switch_with_string_dict_and_site_deltas_and_seq,
-    encode_decoded_event_profile,
-    encode_decoded_event_profile_auto_version,
+    encode_decoded_event_profile, encode_decoded_event_profile_auto_version,
     encode_decoded_event_profile_auto_version_with_site_deltas_and_seq,
-    encode_decoded_event_profile_with_string_dict,
     encode_decoded_event_profile_with_site_deltas_and_seq,
+    encode_decoded_event_profile_with_string_dict,
     encode_decoded_event_profile_with_string_dict_and_site_deltas_and_seq,
     version_record_from_header, DecodedEventError, DecodedEventProfile, DecodedEventResult,
 };
@@ -126,23 +124,23 @@ pub use decoded_index::{
 };
 pub use decoded_mixed::{
     decode_decoded_mixed_profile, decode_decoded_mixed_profile_auto_version,
-    decode_decoded_mixed_profile_with_string_dict,
     decode_decoded_mixed_profile_auto_version_with_string_dict,
+    decode_decoded_mixed_profile_with_string_dict,
     encode_decoded_mixed_mid_record_concurrent_profile,
     encode_decoded_mixed_mid_record_event_profile, encode_decoded_mixed_mid_record_index_profile,
-    encode_decoded_mixed_mid_record_source_profile, encode_decoded_mixed_mid_record_summary_profile,
-    encode_decoded_mixed_mid_stream_codec_switch_profile,
+    encode_decoded_mixed_mid_record_source_profile,
+    encode_decoded_mixed_mid_record_summary_profile,
     encode_decoded_mixed_mid_stream_codec_switch_auto_version_with_site_deltas_and_seq,
+    encode_decoded_mixed_mid_stream_codec_switch_profile,
     encode_decoded_mixed_mid_stream_codec_switch_with_site_deltas_and_seq,
     encode_decoded_mixed_mid_stream_codec_switch_with_string_dict_and_site_deltas_and_seq,
-    encode_decoded_mixed_multi_chunk_profile,
-    encode_decoded_mixed_profile, encode_decoded_mixed_profile_auto_version,
+    encode_decoded_mixed_multi_chunk_profile, encode_decoded_mixed_profile,
+    encode_decoded_mixed_profile_auto_version,
     encode_decoded_mixed_profile_auto_version_with_site_deltas_and_seq,
     encode_decoded_mixed_profile_auto_version_with_string_dict_and_site_deltas_and_seq,
     encode_decoded_mixed_profile_with_string_dict,
     encode_decoded_mixed_profile_with_string_dict_and_site_deltas_and_seq, DecodedMixedError,
-    DecodedMixedProfile,
-    DecodedMixedResult, MidRecordKindSplits,
+    DecodedMixedProfile, DecodedMixedResult, MidRecordKindSplits,
 };
 pub use decoded_source::{
     decode_decoded_source_profile, encode_decoded_source_profile, DecodedSourceError,
@@ -152,30 +150,29 @@ pub use decoded_stream::{
     decode_prefix_chunk_stream_plain, encode_prefix_sealed_chunks, DecodedStream,
     DecodedStreamError, DecodedStreamResult,
 };
-pub use dual_equality::{
-    detect_profile_wire_kind, e3_assert_logical_equal, e3_decode_writer_bytes,
-    e3_standin_write_absolute, e3_standin_write_mid_stream_packing,
-    e3_standin_write_mid_stream_string_dict_packing, e3_standin_write_packing,
-    e3_standin_write_string_dict, e3_standin_write_string_dict_packing,
-    product_decode_v6_event_profile, E3Decoded, ProfileWireKind,
-};
 pub use decoded_summary::{
     decode_decoded_summary_profile, encode_decoded_summary_profile, DecodedSummaryError,
     DecodedSummaryProfile, DecodedSummaryResult,
 };
+pub use dual_equality::{
+    detect_profile_wire_kind, e3_assert_logical_equal, e3_decode_mixed_writer_bytes,
+    e3_decode_writer_bytes, e3_standin_write_absolute, e3_standin_write_mid_stream_packing,
+    e3_standin_write_mid_stream_string_dict_packing, e3_standin_write_packing,
+    e3_standin_write_string_dict, e3_standin_write_string_dict_packing,
+    product_decode_v6_event_profile, E3Decoded, ProfileWireKind,
+};
+pub use event_body::known_key;
 pub use event_body::{
     attribute_kv, decode_event_body, decode_event_body_full, encode_event_body,
     encode_event_body_with_seq, encode_event_body_with_site_deltas,
     encode_event_body_with_site_deltas_and_seq,
     encode_event_body_with_site_deltas_and_seq_continuing, encode_unknown_optional_skip_record,
-    is_known_opcode,
-    known_key_attr_option_expanded_sample_specs, known_key_attr_option_sample_specs, option_kv,
-    EventBodyDecoded, EventBodyError, EventBodyResult, EventRecord, EventRecordSpec,
-    PackingEncodeState,
-    FLAG_BODY_LENGTH, FLAG_HAS_SEQ, FLAG_OPCODE_REQUIRED, FLAG_SITE_DELTA, MAX_EVENT_BODY_BYTES,
-    MAX_SKIP_BODY_BYTES, MAX_TIME_BLOCK_RUN_LEN, MAX_TIME_LINE_RUN_LEN,
+    is_known_opcode, known_key_attr_option_expanded_sample_specs,
+    known_key_attr_option_sample_specs, option_kv, EventBodyDecoded, EventBodyError,
+    EventBodyResult, EventRecord, EventRecordSpec, PackingEncodeState, FLAG_BODY_LENGTH,
+    FLAG_HAS_SEQ, FLAG_OPCODE_REQUIRED, FLAG_SITE_DELTA, MAX_EVENT_BODY_BYTES, MAX_SKIP_BODY_BYTES,
+    MAX_TIME_BLOCK_RUN_LEN, MAX_TIME_LINE_RUN_LEN,
 };
-pub use event_body::known_key;
 pub use file_prefix::{
     decode_file_prefix, encode_file_prefix, FilePrefix, FilePrefixError, FilePrefixResult,
 };
@@ -210,8 +207,8 @@ pub use multi_chunk_event::{
     MultiChunkEventError, MultiChunkEventProfile, MultiChunkEventResult,
 };
 pub use payload_codec::{
-    compress_lz4, compress_zstd, decode_chunk_payload, deflate_zlib, decompress_lz4,
-    decompress_zstd, encode_chunk_frame_lz4, encode_chunk_frame_zlib, encode_chunk_frame_zstd,
+    compress_lz4, compress_zstd, decode_chunk_payload, decompress_lz4, decompress_zstd,
+    deflate_zlib, encode_chunk_frame_lz4, encode_chunk_frame_zlib, encode_chunk_frame_zstd,
     inflate_zlib, PayloadCodecError, PayloadCodecResult, MAX_INFLATE_BYTES,
 };
 pub use source_body::{
@@ -223,10 +220,6 @@ pub use stream::{
     decode_prefix_chunk_stream, encode_prefix_chunk_stream, ChunkSpec, PrefixChunkStream,
     StreamError, StreamResult,
 };
-pub use summary_body::{
-    decode_summary_body, encode_summary_body, SummaryBodyError, SummaryBodyResult, SummaryRecord,
-    SummaryRecordSpec, MAX_SUMMARY_BODY_BYTES,
-};
 pub use string::{
     decode_string_blob, encode_string_blob, StringBlob, StringError, StringResult, FLAG_UTF8,
     MAX_STRING_BYTES,
@@ -235,6 +228,10 @@ pub use string_dict::{
     decode_string_dictionary, encode_string_dictionary, owned_event_from_borrowed_resolved,
     resolve_event_records, DictEntry, StringDictError, StringDictResult, StringDictionary,
     MAX_DICT_ENTRIES, MAX_DICT_TOTAL_BYTES,
+};
+pub use summary_body::{
+    decode_summary_body, encode_summary_body, SummaryBodyError, SummaryBodyResult, SummaryRecord,
+    SummaryRecordSpec, MAX_SUMMARY_BODY_BYTES,
 };
 pub use tlv::{
     decode_tlv, decode_tlv_region, encode_tlv, encode_tlv_region, is_known_type, Tlv, TlvError,
@@ -492,8 +489,7 @@ mod tests {
     fn invalid_header_len_too_small_err() {
         let mut bytes = encode_fixed_header_full(6, 0, 0, 0, 0);
         // header_len = 8 (< 16)
-        bytes[offsets::HEADER_LEN..offsets::HEADER_LEN + 4]
-            .copy_from_slice(&8u32.to_le_bytes());
+        bytes[offsets::HEADER_LEN..offsets::HEADER_LEN + 4].copy_from_slice(&8u32.to_le_bytes());
         assert_eq!(
             parse_fixed_header(&bytes),
             Err(Error::InvalidHeaderLen { header_len: 8 })

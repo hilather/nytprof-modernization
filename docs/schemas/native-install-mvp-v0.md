@@ -1,7 +1,7 @@
 # Native install path MVP (v0)
 
-**Status:** implemented (R1 packaging — stable on-disk CLI for Perl dispatch)  
-**Not:** system-wide cargo install / CPAN dual release
+**Status:** implemented (R1 packaging — stable on-disk CLI for Perl dispatch). I02 MakeMaker `NYTPROF_NATIVE=1`/`auto` drives this installer ([`i02_makemaker_native_smoke.sh`](https://github.com/hilather/nytprof-modernization/blob/main/scripts/packaging/i02_makemaker_native_smoke.sh)).  
+**Not:** system-wide cargo install / CPAN dual release / `BUILD-003-FULL`
 
 ## Install location (frozen)
 
@@ -38,9 +38,11 @@ Shared resolution (also used by `install_facade.sh` so **dual-install cannot spl
 
 0. If `$ENV{NYTPROF_FORCE_NO_NATIVE}` is truthy → fail immediately (**test hook only**; ENGINE-AUTO-FALLBACK)  
 1. `$ENV{NYTPROF_NATIVE_CLI}` if executable  
-2. `$REPO/prefix/bin/nytprof-cli` or `nytprof-dump`  
-3. `$REPO/target/release/nytprof-dump` then `target/debug/nytprof-dump`  
-4. `cargo run -q -p nytprof-cli --` fallback  
+2. I03 sibling `$PREFIX/bin/{nytprof-cli,nytprof-dump}` (`FindBin` next to installed `nytprof-engine`)  
+3. I03 `$repo_root/bin/{nytprof-cli,nytprof-dump}` when `$repo` is the product prefix  
+4. `$REPO/prefix/bin/nytprof-cli` or `nytprof-dump`  
+5. `$REPO/target/release/nytprof-dump` then `target/debug/nytprof-dump`  
+6. `cargo run -q -p nytprof-cli --` fallback **only if** `$repo_root/Cargo.toml` exists  
 
 ## Smoke
 

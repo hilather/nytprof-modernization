@@ -58,7 +58,10 @@ impl std::fmt::Display for PayloadCodecError {
                 )
             }
             PayloadCodecError::Oversize { len } => {
-                write!(f, "oversize uncompressed_len {len} (max {MAX_INFLATE_BYTES})")
+                write!(
+                    f,
+                    "oversize uncompressed_len {len} (max {MAX_INFLATE_BYTES})"
+                )
             }
             PayloadCodecError::Zlib { message } => write!(f, "zlib error: {message}"),
             PayloadCodecError::Zstd { message } => write!(f, "zstd error: {message}"),
@@ -94,10 +97,9 @@ fn check_plain_cap(plain: &[u8]) -> PayloadCodecResult<()> {
 /// Pure function over byte slices. Empty input is valid (produces a small zlib stream).
 pub fn deflate_zlib(plain: &[u8]) -> PayloadCodecResult<Vec<u8>> {
     let mut enc = ZlibEncoder::new(Vec::new(), Compression::default());
-    enc.write_all(plain)
-        .map_err(|e| PayloadCodecError::Zlib {
-            message: e.to_string(),
-        })?;
+    enc.write_all(plain).map_err(|e| PayloadCodecError::Zlib {
+        message: e.to_string(),
+    })?;
     enc.finish().map_err(|e| PayloadCodecError::Zlib {
         message: e.to_string(),
     })
@@ -198,9 +200,10 @@ pub fn decompress_lz4(
 ) -> PayloadCodecResult<Vec<u8>> {
     check_uncompressed_cap(expected_uncompressed_len)?;
     let need = expected_uncompressed_len as usize;
-    let out = lz4_flex::block::decompress(compressed, need).map_err(|e| PayloadCodecError::Lz4 {
-        message: e.to_string(),
-    })?;
+    let out =
+        lz4_flex::block::decompress(compressed, need).map_err(|e| PayloadCodecError::Lz4 {
+            message: e.to_string(),
+        })?;
     if out.len() != need {
         return Err(PayloadCodecError::SizeMismatch {
             expected: expected_uncompressed_len,
@@ -552,17 +555,7 @@ mod tests {
     #[test]
     fn none_uncompressed_len_mismatch_err() {
         let plain = b"abcd";
-        let frame_bytes = encode_chunk_frame(
-            kind::EVENT,
-            codec::NONE,
-            0,
-            0,
-            0,
-            0,
-            99,
-            plain,
-            0,
-        );
+        let frame_bytes = encode_chunk_frame(kind::EVENT, codec::NONE, 0, 0, 0, 0, 99, plain, 0);
         let frame = parse_chunk_frame(&frame_bytes).unwrap();
         match decode_chunk_payload(&frame) {
             Err(PayloadCodecError::SizeMismatch {

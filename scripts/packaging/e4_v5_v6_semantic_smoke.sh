@@ -27,6 +27,7 @@ ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 cd "$ROOT"
 
 FIXTURE_DIR="$ROOT/fixtures/e4/dual-sink"
+ORACLE_PAIR_DIR="$ROOT/fixtures/e4/oracle-pair"
 COLLECTOR="$ROOT/collector"
 # Default: full product CLI path (PR-B12b). Use --model-only for B10-only.
 MODE="full"
@@ -129,6 +130,39 @@ for stem in "${PAIRS[@]}"; do
     || fail "$v6: expected NYTPROF6 magic"
   ok "pair $stem ($(wc -c <"$v5") / $(wc -c <"$v6") bytes)"
 done
+
+banner "committed E4-01/E4-02/E4-03 oracle-pair (beyond dual-sink/)"
+[[ -d "$ORACLE_PAIR_DIR" ]] || fail "missing $ORACLE_PAIR_DIR"
+ORACLE_V5="$ORACLE_PAIR_DIR/default_calls1_v5.nytprof"
+ORACLE_V6="$ORACLE_PAIR_DIR/default_calls1_v6.nytprof"
+ORACLE_BLOCKS_V5="$ORACLE_PAIR_DIR/blocks_calls1_v5.nytprof"
+ORACLE_BLOCKS_V6="$ORACLE_PAIR_DIR/blocks_calls1_v6.nytprof"
+ORACLE_CALLS2_V5="$ORACLE_PAIR_DIR/calls2_default_v5.nytprof"
+ORACLE_CALLS2_V6="$ORACLE_PAIR_DIR/calls2_default_v6.nytprof"
+[[ -f "$ORACLE_V5" ]] || fail "missing E4-01 oracle v5 $ORACLE_V5"
+[[ -f "$ORACLE_V6" ]] || fail "missing E4-01 product v6 $ORACLE_V6"
+[[ -s "$ORACLE_V5" && -s "$ORACLE_V6" ]] || fail "empty E4-01 oracle-pair file"
+head5o="$(head -c 12 "$ORACLE_V5" | tr -d '\0' || true)"
+head6o="$(head -c 8 "$ORACLE_V6" | tr -d '\0' || true)"
+[[ "$head5o" == "NYTProf 5"* ]] || fail "$ORACLE_V5: expected NYTProf 5 header"
+[[ "$head6o" == "NYTPROF6" ]] || fail "$ORACLE_V6: expected NYTPROF6 magic"
+ok "oracle-pair default_calls1 ($(wc -c <"$ORACLE_V5") / $(wc -c <"$ORACLE_V6") bytes)"
+[[ -f "$ORACLE_BLOCKS_V5" ]] || fail "missing E4-02 oracle v5 $ORACLE_BLOCKS_V5"
+[[ -f "$ORACLE_BLOCKS_V6" ]] || fail "missing E4-02 product v6 $ORACLE_BLOCKS_V6"
+[[ -s "$ORACLE_BLOCKS_V5" && -s "$ORACLE_BLOCKS_V6" ]] || fail "empty E4-02 oracle-pair file"
+head5b="$(head -c 12 "$ORACLE_BLOCKS_V5" | tr -d '\0' || true)"
+head6b="$(head -c 8 "$ORACLE_BLOCKS_V6" | tr -d '\0' || true)"
+[[ "$head5b" == "NYTProf 5"* ]] || fail "$ORACLE_BLOCKS_V5: expected NYTProf 5 header"
+[[ "$head6b" == "NYTPROF6" ]] || fail "$ORACLE_BLOCKS_V6: expected NYTPROF6 magic"
+ok "oracle-pair blocks_calls1 ($(wc -c <"$ORACLE_BLOCKS_V5") / $(wc -c <"$ORACLE_BLOCKS_V6") bytes)"
+[[ -f "$ORACLE_CALLS2_V5" ]] || fail "missing E4-03 oracle v5 $ORACLE_CALLS2_V5"
+[[ -f "$ORACLE_CALLS2_V6" ]] || fail "missing E4-03 product v6 $ORACLE_CALLS2_V6"
+[[ -s "$ORACLE_CALLS2_V5" && -s "$ORACLE_CALLS2_V6" ]] || fail "empty E4-03 oracle-pair file"
+head5c="$(head -c 12 "$ORACLE_CALLS2_V5" | tr -d '\0' || true)"
+head6c="$(head -c 8 "$ORACLE_CALLS2_V6" | tr -d '\0' || true)"
+[[ "$head5c" == "NYTProf 5"* ]] || fail "$ORACLE_CALLS2_V5: expected NYTProf 5 header"
+[[ "$head6c" == "NYTPROF6" ]] || fail "$ORACLE_CALLS2_V6: expected NYTPROF6 magic"
+ok "oracle-pair calls2_default ($(wc -c <"$ORACLE_CALLS2_V5") / $(wc -c <"$ORACLE_CALLS2_V6") bytes)"
 
 # ---------------------------------------------------------------------------
 # Model-level stage (E4-v0)
@@ -378,9 +412,38 @@ else
   fi
 fi
 
+# E4-01 / E4-02: advertised count surfaces on oracle-pair via shipped report --json.
+oracle_pair_count_compare() {
+  local stem="$1"
+  local v5="$2"
+  local v6="$3"
+  local o5 o6 key g5 g6
+  o5="$(mktemp)"
+  o6="$(mktemp)"
+  cli report --json "$v5" >"$o5" || fail "report --json oracle-pair $stem v5"
+  cli report --json "$v6" >"$o6" || fail "report --json oracle-pair $stem v6"
+  for key in leaf_returns mid_returns mid_leaf_edge; do
+    g5="$(grep -oE "\"$key\"[[:space:]]*:[[:space:]]*[^,}]+" "$o5" | head -1 || true)"
+    g6="$(grep -oE "\"$key\"[[:space:]]*:[[:space:]]*[^,}]+" "$o6" | head -1 || true)"
+    [[ -n "$g5" && "$g5" == "$g6" ]] \
+      || fail "oracle-pair $stem $key mismatch v5=[$g5] v6=[$g6]"
+  done
+  grep -E -q '"leaf_returns"[[:space:]]*:[[:space:]]*[1-9][0-9]*' "$o5" \
+    || fail "oracle-pair $stem v5 missing positive leaf_returns from shipped report"
+  rm -f "$o5" "$o6"
+  ok "oracle-pair $stem leaf/mid/edge equal via shipped report --json"
+}
+
+if [[ "$MODE" == "full" ]] && resolve_cli; then
+  banner "E4-01/E4-02/E4-03 oracle-pair count equality (shipped report --json)"
+  oracle_pair_count_compare default_calls1 "$ORACLE_V5" "$ORACLE_V6"
+  oracle_pair_count_compare blocks_calls1 "$ORACLE_BLOCKS_V5" "$ORACLE_BLOCKS_V6"
+  oracle_pair_count_compare calls2_default "$ORACLE_CALLS2_V5" "$ORACLE_CALLS2_V6"
+fi
+
 note "E4: dual-sink pairs are COL-014 test/dev-only (OQ-4) — not product format=dual"
-note "Scaled synthetic shapes — not full oracle fixtures/v5/* counts (TEST-003/TEST-008 residual)"
-note "CLI v6 collection default remains residual (R4); convert/merge residual (PR-C01+)"
+note "E4-01/E4-02/E4-03 oracle-pair: count surfaces only (leaf/mid/edge); not full TEST-008 DISCOUNT/TL/780/SUB_ENTRY27"
+note "CLI v6 collection default remains residual (R4); L01/L02 opt-in only"
 
 banner "e4_v5_v6_semantic_smoke PASSED"
 if [[ "$MODE" == "full" ]]; then

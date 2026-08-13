@@ -106,7 +106,10 @@ impl std::fmt::Display for StringDictError {
                 write!(f, "truncated string-dict: need {need} bytes, got {got}")
             }
             StringDictError::Oversize { len } => {
-                write!(f, "oversize string-dict entry_count {len} (max {MAX_DICT_ENTRIES})")
+                write!(
+                    f,
+                    "oversize string-dict entry_count {len} (max {MAX_DICT_ENTRIES})"
+                )
             }
             StringDictError::OversizeEntry { id, len } => {
                 write!(
@@ -398,11 +401,8 @@ mod tests {
 
     #[test]
     fn dictionary_roundtrip_two_entries() {
-        let wire = encode_string_dictionary(&[
-            (1, FLAG_UTF8, b"hello"),
-            (2, 0, b"world"),
-        ])
-        .expect("encode");
+        let wire = encode_string_dictionary(&[(1, FLAG_UTF8, b"hello"), (2, 0, b"world")])
+            .expect("encode");
         let (dict, n) = decode_string_dictionary(&wire).expect("decode");
         assert_eq!(n, wire.len());
         assert_eq!(dict.len(), 2);
@@ -476,11 +476,9 @@ mod tests {
 
     #[test]
     fn event_body_mark_and_comment_resolve_from_dict() {
-        let dict_wire = encode_string_dictionary(&[
-            (1, FLAG_UTF8, b"dict-label"),
-            (2, 0, b"# dict comment"),
-        ])
-        .unwrap();
+        let dict_wire =
+            encode_string_dictionary(&[(1, FLAG_UTF8, b"dict-label"), (2, 0, b"# dict comment")])
+                .unwrap();
         let (dict, _) = decode_string_dictionary(&dict_wire).unwrap();
 
         // Non-zero string_id with empty inline payload → interned.

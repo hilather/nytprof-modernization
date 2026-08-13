@@ -105,7 +105,7 @@ Every artifact class from [`REPORT_HTML_RESIDUAL_INVENTORY_v0.md`](https://githu
 | Block-level report pages | yes / partial | **WAIVE** | No oracle `*-block.html` page mode; native A4b block_line table remains MVP when present |
 | Sub-level report pages | yes | **WAIVE** | No `*-sub.html`; legacy `nytprofhtml` retains sub page mode |
 | Shared CSS | yes | **CLOSE** | **PR-A01** (`style.css` or documented equivalent) — **closed (MVP)** at PR-A10 |
-| Shared JS (jquery / tablesorter / floatThead) | yes | **CLOSE** | **PR-A01** mapped both CSS and JS; **A01 shipped CSS/structure only**. Shared JS/tablesorter remains **OPEN residual (CLOSE path)** at PR-A10 — **not** silently waived. Follow-on close PR or superseding ADR required before claiming closed |
+| Shared JS (jquery / tablesorter / floatThead) | yes | **CLOSE** *(superseded — see Amendment 2026-08-12)* | **PR-A01** mapped both CSS and JS; **A01 shipped CSS/structure only**. Original A10 map left Shared JS **OPEN residual (CLOSE path)**. **Superseded by PR-M01 / Q4 user-final: WAIVE** for GA-candidate (documentation residual, not CLOSE). jquery/tablesorter **not** shipped. |
 | JIT / treemap assets | yes | **WAIVE** | `js/jit/*` |
 | Treemap HTML page | yes | **WAIVE** | `subs-treemap-excl.html` |
 | Flame graph SVG | yes | **CLOSE** | **PR-A03** — optional `--flame`; no default site bloat (`all_stacks_by_time.svg`) |
@@ -126,11 +126,25 @@ Every artifact class from [`REPORT_HTML_RESIDUAL_INVENTORY_v0.md`](https://githu
 
 **PR-A10 rule:** full R1 HTML posture may be claimed only when every class above is either **closed with evidence** (CLOSE rows + tests + inventory flip) or still listed as **WAIVE** with residual honesty. PR-A10 must **not** claim full oracle `nytprofhtml` DOM.
 
+### Amendment 2026-08-12 — PR-M01 / Q4 user-final (Shared JS **WAIVE**)
+
+**Does not rewrite** the original Phase A CLOSE/WAIVE table above. This amendment **supersedes only** the Shared JS / tablesorter / floatThead disposition.
+
+| Item | Binding now |
+|------|-------------|
+| **Decision** | Shared JS (jquery / tablesorter / floatThead) is **WAIVE** for **GA-candidate**. It is a **documentation residual**, not a remaining CLOSE implementation requirement. |
+| **Why** | User-final Q4 / KD-25-adjacent: GA-candidate does **not** require shipping tablesorter. Native HTML stays **MVP** (A01 CSS/structure + A02 excl index), **not** oracle DOM. |
+| **What this is not** | **Not** an implementation of jquery/tablesorter/floatThead. **Not** a full `nytprofhtml` DOM close. **Does not** waive flame A03 (still **OPEN residual / CLOSE path**). |
+| **Honesty** | Inventory residual for Shared JS remains **yes** (oracle has `js/`; native does not). Operators must **not** be told tablesorter is native-ready. |
+| **Supersede later** | Shipping tablesorter later requires a new close PR + inventory flip (or a new ADR). Do **not** treat Shared JS as an open CLOSE gate for GA-candidate. |
+
+Normative inventory row: [`REPORT_HTML_RESIDUAL_INVENTORY_v0.md`](https://github.com/hilather/nytprof-modernization/blob/main/docs/contracts/REPORT_HTML_RESIDUAL_INVENTORY_v0.md) Shared JS disposition **WAIVE**. Board: `M01-HTML-JS-WAIVE` **done (docs)**.
+
 ### Close-PR roll-up (Phase A)
 
 | PR | Role |
 |----|------|
-| **PR-A01** | Shared CSS + structure (**closed MVP**); Shared JS/tablesorter remaining OPEN CLOSE residual |
+| **PR-A01** | Shared CSS + structure (**closed MVP**); Shared JS/tablesorter originally remaining OPEN CLOSE — **superseded by PR-M01 WAIVE** (Amendment 2026-08-12) |
 | **PR-A02** | `index-subs-excl.html` + exclusive ranking page depth |
 | **PR-A03** | Optional flame path (`--flame`) |
 | **PR-A04** | **This ADR** + matrix / inventory / runbook map (policy only) |
@@ -216,5 +230,6 @@ Every artifact class from [`REPORT_HTML_RESIDUAL_INVENTORY_v0.md`](https://githu
 |----|--------|----------|
 | `R1-RESIDUAL-POLICY-ADR` (PR-A04) | **done** (policy) | this ADR |
 | `REPORT-HTML-RESIDUAL-INV` | done (inventory); map extended by A04 | inventory + this ADR |
+| `M01-HTML-JS-WAIVE` | **done (docs)** (PR-M01) | Amendment 2026-08-12 — Shared JS **WAIVE** for GA-candidate |
 | `R1-RESIDUAL-MATRIX` | done (preview freeze); disposition extended by A04 | matrix + this ADR |
 | COL-007 | deferred | OUT-OF-R1 |

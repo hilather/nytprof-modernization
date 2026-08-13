@@ -4,7 +4,7 @@
 **Board ID:** `SEC-FUZZ-HARDENING-MVP`  
 **Plan refs:** SEC-001 (threat model subset), SEC-002 (deterministic offline battery only), COL-005 / COL-015 threat coverage notes  
 **Depends on:** COL-007 product E3-EVENT (PR-B09), DECODE-FUZZ-MVP, COMPAT-010 fail-closed  
-**Gate:** offline smoke `tools/oracle/selftest_security_fuzz.sh` (+ cargo batteries); offline_gate step 12 when cargo present  
+**Gate:** offline smoke `tools/oracle/selftest_security_fuzz.sh` (cargo-required) + P02 wrapper `scripts/ci/sec002_continuous_fuzz_mvp.sh` (honest `SKIP:` without cargo). Not an offline_gate step (step 12 is E4).  
 **Schema:** [`docs/schemas/security-fuzz-hardening-mvp-v0.md`](https://github.com/hilather/nytprof-modernization/blob/main/docs/schemas/security-fuzz-hardening-mvp-v0.md)
 
 ---
@@ -18,7 +18,7 @@ Ship an **honest security/fuzz hardening package** for the modernized stack that
 3. Extends offline **deterministic mutation batteries** to **v6 C-writer sinks** (and keeps v5 DECODE-FUZZ-MVP green).
 4. Documents **batching** and **fork** threat mitigations with existing unit evidence — without claiming full SEC-002 continuous fuzz or full COL-015.
 
-This package is **not** a release security certification (SEC-012) and **not** a continuous fuzz program (SEC-002 full).
+This package is **not** a release security certification (independent SEC-012 sign-off) and **not** a full continuous fuzz program (SEC-002 cargo-fuzz/AFL). P02 landed a **checklist** + **job MVP** that wraps this package; those rows are **not** independent sign-off.
 
 ---
 
@@ -98,8 +98,8 @@ make -C collector test
 
 | Topic | Status |
 |-------|--------|
-| Full SEC-002 continuous fuzz (cargo-fuzz / AFL / scheduled deep corpus) | **deferred** |
-| SEC-012 independent security release review | **open** (R2-stable / release) |
+| Full SEC-002 continuous fuzz (cargo-fuzz / AFL / scheduled deep corpus) | **deferred** — P02 **job MVP** wraps this package only |
+| SEC-012 independent security release review | **open** — P02 **checklist MVP** landed; **not** independent sign-off |
 | Full COL-015 fork/PID + buffered sink ownership / signal matrix | **residual** (PR-C02b) — state MVP only |
 | Full SEC-001 global resource-limit library/CLI API | **partial** (constants + fail-closed; no unified config surface) |
 | SEC-003 salvage / recovery freeze | **open** |
@@ -118,8 +118,9 @@ make -C collector test
 | Plan task | This package |
 |-----------|--------------|
 | SEC-001 | Scoped threat model + limit constants; **not** full limit API |
-| SEC-002 | Offline deterministic batteries + smoke harness stub; **not** continuous jobs |
-| SEC-003..012 | Residual / not claimed |
+| SEC-002 | Offline batteries + P02 job/script MVP (`sec002_continuous_fuzz_mvp.sh`); **not** cargo-fuzz / AFL |
+| SEC-012 | P02 reviewer **checklist** landed; independent sign-off **open** |
+| SEC-003..011 | Residual / not claimed |
 | RUST-018 / TEST-016 | Partial offline property/mutation coverage only |
 | COL-005 | Batching UAF threat **covered** by existing lifetime tests (catalogued here) |
 | COL-015 | Fork threat **documented** + lifecycle MVP evidence; full suite residual |
@@ -131,6 +132,8 @@ make -C collector test
 | ID | Status | Evidence |
 |----|--------|----------|
 | `SEC-FUZZ-HARDENING-MVP` | **done** (package MVP) | this contract + schema + `decode_fuzz` (v5+v6) + `selftest_security_fuzz.sh` |
+| `SEC-012-CHECKLIST-MVP` | **done (MVP / checklist)** | [`SEC_012_RELEASE_REVIEW_CHECKLIST_v0.md`](https://github.com/hilather/nytprof-modernization/blob/main/docs/contracts/SEC_012_RELEASE_REVIEW_CHECKLIST_v0.md) — **not** independent sign-off |
+| `SEC-002-CONTINUOUS-FUZZ-MVP` | **done (MVP / job)** | `scripts/ci/sec002_continuous_fuzz_mvp.sh` + `.github/workflows/sec002-fuzz-mvp.yml` — **not** cargo-fuzz / AFL |
 | `DECODE-FUZZ-MVP` | done (pre-existing) | v5/report batteries |
 | `COL-005-BATCH-MVP` | done (scaffold) | SV lifetime evidence reused |
 | `COL-002-LIFECYCLE-MVP` | done (scaffold) | fork state MVP evidence reused |
@@ -140,4 +143,4 @@ make -C collector test
 
 ## Revision rule
 
-Closing continuous-fuzz, COL-015, or SEC-012 rows requires a matrix/board revision and new evidence. Do not mark R2-stable security complete from this package alone.
+Closing **full** continuous-fuzz (cargo-fuzz/AFL), COL-015, or **independent** SEC-012 sign-off requires a matrix/board revision and new evidence. P02 checklist/job MVP does **not** mark R2-stable security or GA marketing complete.

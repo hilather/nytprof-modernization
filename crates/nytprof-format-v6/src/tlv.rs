@@ -40,12 +40,21 @@ pub struct Tlv<'a> {
 #[derive(Debug, PartialEq, Eq)]
 pub enum TlvError {
     Varint(VarintError),
-    Truncated { need: usize, got: usize },
-    Oversize { len: u64 },
+    Truncated {
+        need: usize,
+        got: usize,
+    },
+    Oversize {
+        len: u64,
+    },
     InvalidType,
-    UnknownRequiredType { type_id: u64 },
+    UnknownRequiredType {
+        type_id: u64,
+    },
     /// Multi-TLV region exceeded `MAX_TLV_REGION_BYTES`.
-    RegionOversize { len: usize },
+    RegionOversize {
+        len: usize,
+    },
     /// Multi-TLV region ended without a terminator TLV.
     MissingTerminator,
     /// Terminator TLV must have empty value and no required-unknown semantics.
@@ -60,7 +69,10 @@ impl std::fmt::Display for TlvError {
                 write!(f, "truncated tlv: need {need} bytes, got {got}")
             }
             TlvError::Oversize { len } => {
-                write!(f, "oversize tlv value_length {len} (max {MAX_TLV_VALUE_BYTES})")
+                write!(
+                    f,
+                    "oversize tlv value_length {len} (max {MAX_TLV_VALUE_BYTES})"
+                )
             }
             TlvError::InvalidType => write!(f, "invalid tlv type_id 0 (reserved)"),
             TlvError::UnknownRequiredType { type_id } => {
@@ -385,10 +397,7 @@ mod tests {
     fn region_missing_terminator_err() {
         // Single producer TLV without END.
         let enc = encode_tlv(type_id::PRODUCER, 0, b"hi");
-        assert_eq!(
-            decode_tlv_region(&enc, 0),
-            Err(TlvError::MissingTerminator)
-        );
+        assert_eq!(decode_tlv_region(&enc, 0), Err(TlvError::MissingTerminator));
     }
 
     #[test]
@@ -415,10 +424,7 @@ mod tests {
         // Manually craft END with non-empty value.
         let mut enc = encode_tlv(type_id::PRODUCER, 0, b"a");
         enc.extend_from_slice(&encode_tlv(type_id::END, 0, b"x"));
-        assert_eq!(
-            decode_tlv_region(&enc, 0),
-            Err(TlvError::InvalidTerminator)
-        );
+        assert_eq!(decode_tlv_region(&enc, 0), Err(TlvError::InvalidTerminator));
     }
 
     #[test]

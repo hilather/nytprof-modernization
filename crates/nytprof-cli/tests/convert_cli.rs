@@ -89,10 +89,7 @@ fn convert_v6_to_v5_m4_old_tool_shape() {
         "convert --to=v5 must exit 0\nstdout:\n{stdout}\nstderr:\n{stderr}"
     );
     let bytes = std::fs::read(&out).expect("read out");
-    assert!(
-        bytes.starts_with(b"NYTProf 5 0\n"),
-        "expected v5 header"
-    );
+    assert!(bytes.starts_with(b"NYTProf 5 0\n"), "expected v5 header");
     // Independent v5 decoder (old-tool shape) via dump path.
     let (dc, dout, derr) = run(&["dump", out.to_str().unwrap()]);
     assert_eq!(dc, 0, "dump converted v5\n{dout}\n{derr}");
@@ -189,6 +186,71 @@ fn convert_help_mentions_strict() {
             || text.contains("lossy"),
         "help/usage must mention strict path and/or no lossy mode\n{text}"
     );
+}
+
+fn oracle_default_calls1() -> PathBuf {
+    PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../fixtures/v5/default-calls1/nytprof.out")
+}
+
+#[test]
+fn convert_oracle_default_calls1_strict_refuses_fractional_nv() {
+    let input = oracle_default_calls1();
+    assert!(input.is_file(), "missing {}", input.display());
+    let out = tmp_out("oracle-strict.v6");
+    let (code, stdout, stderr) = run(&[
+        "convert",
+        "--to=v6",
+        input.to_str().unwrap(),
+        "-o",
+        out.to_str().unwrap(),
+    ]);
+    assert_ne!(code, 0, "strict convert of oracle fixture must refuse");
+    assert!(
+        !stdout.lines().any(|l| l.starts_with("OK: convert")),
+        "must not print OK on strict refuse\n{stdout}"
+    );
+    assert!(
+        stderr.contains("fractional") || stderr.contains("PID_"),
+        "stderr should diagnose fractional NV\n{stderr}"
+    );
+    assert!(!out.is_file() || std::fs::metadata(&out).map(|m| m.len()).unwrap_or(0) == 0);
+    let _ = std::fs::remove_file(&out);
+}
+
+#[test]
+fn convert_oracle_default_calls1_allow_lossy_writes_nytprof6() {
+    let input = oracle_default_calls1();
+    assert!(input.is_file(), "missing {}", input.display());
+    let out = tmp_out("oracle-lossy.v6");
+    let (code, stdout, stderr) = run(&[
+        "convert",
+        "--to=v6",
+        "--allow-lossy",
+        input.to_str().unwrap(),
+        "-o",
+        out.to_str().unwrap(),
+    ]);
+    assert_eq!(
+        code, 0,
+        "allow-lossy must convert oracle fixture\nstdout:\n{stdout}\nstderr:\n{stderr}"
+    );
+    assert!(
+        stdout.lines().any(|l| l.starts_with("OK: convert")),
+        "missing OK: convert\n{stdout}"
+    );
+    assert!(
+        stderr.contains("--allow-lossy") || stderr.to_ascii_lowercase().contains("lossy"),
+        "lossy convert should be noisy on stderr\n{stderr}"
+    );
+    let bytes = std::fs::read(&out).expect("read lossy out");
+    assert!(
+        bytes.starts_with(b"NYTPROF6"),
+        "expected NYTPROF6, got {:?}",
+        &bytes[..bytes.len().min(16)]
+    );
+    let (vc, vout, verr) = run(&["verify", out.to_str().unwrap()]);
+    assert_eq!(vc, 0, "verify lossy v6\n{vout}\n{verr}");
+    let _ = std::fs::remove_file(&out);
 }
 
 #[test]

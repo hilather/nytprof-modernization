@@ -20,21 +20,34 @@ use strict;
 use warnings;
 use FindBin;
 use File::Spec;
+# Product prefix: $PREFIX/bin → $PREFIX/lib/perl5 (I01/I03).
+# Dev tree: perl/bin → perl/lib. Both are added so one script works either way.
+use lib File::Spec->catdir( $FindBin::Bin, '..', 'lib', 'perl5' );
 use lib File::Spec->catdir( $FindBin::Bin, '..', 'lib' );
 
 use Devel::NYTProf::EngineDispatch qw(run_cli find_repo_root);
 
 my $repo = $ENV{NYTPROF_MOD_ROOT};
 if ( !$repo || !-d $repo ) {
-    # perl/bin -> repo root
+    # perl/bin -> repo root; $PREFIX/bin -> parent of prefix
     $repo = File::Spec->catdir( $FindBin::Bin, '..', '..' );
 }
 eval {
     $repo = find_repo_root($repo);
     1;
 } or do {
+    # Prefix install has no Cargo.toml. Keep jsonl query cargo-free.
     require Cwd;
-    $repo = Cwd::abs_path($repo) // $repo;
+    my $prefix = File::Spec->catdir( $FindBin::Bin, '..' );
+    my $ed     = File::Spec->catfile(
+        $prefix, 'lib', 'perl5', 'Devel', 'NYTProf', 'EngineDispatch.pm'
+    );
+    if ( -f $ed ) {
+        $repo = Cwd::abs_path($prefix) // $prefix;
+    }
+    else {
+        $repo = Cwd::abs_path($repo) // $repo;
+    }
 };
 
 exit run_cli( $repo, [@ARGV] );

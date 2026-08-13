@@ -49,9 +49,11 @@ perl -Iperl/lib perl/bin/nytprof-engine query --json --jsonl fixtures/v5/default
 Order (see also `docs/schemas/native-install-mvp-v0.md`):
 1. If `$ENV{NYTPROF_FORCE_NO_NATIVE}` is truthy (`1` / non-empty, not `0`/`false`/`no`/`off`) → fail immediately (**test hook only**; ENGINE-AUTO-FALLBACK smokes)
 2. `$ENV{NYTPROF_NATIVE_CLI}` if set and executable  
-3. `$REPO/prefix/bin/nytprof-cli` or `prefix/bin/nytprof-dump` (stable install via `scripts/packaging/install_native.sh`)  
-4. `$REPO/target/release/nytprof-dump` then `target/debug/nytprof-dump` (binary name from nytprof-cli package)  
-5. `cargo run -q -p nytprof-cli --` from repo root when cargo exists  
+3. I03: sibling of the running script (`FindBin::Bin/{nytprof-cli,nytprof-dump}`) when `nytprof-engine` is installed under `$PREFIX/bin`  
+4. I03: `$repo_root/bin/{nytprof-cli,nytprof-dump}` when `find_repo_root` failed and the prefix was used as `$repo`  
+5. `$REPO/prefix/bin/nytprof-cli` or `prefix/bin/nytprof-dump` (stable install via `scripts/packaging/install_native.sh`)  
+6. `$REPO/target/release/nytprof-dump` then `target/debug/nytprof-dump` (binary name from nytprof-cli package)  
+7. `cargo run -q -p nytprof-cli --` from repo root when cargo exists **and** `$repo_root/Cargo.toml` exists (prefix installs have no manifest — do not select cargo native)  
 
 ## Legacy success contract
 

@@ -156,7 +156,10 @@ impl std::fmt::Display for EventSourceProfileError {
                 write!(f, "event+source profile source-body: {e}")
             }
             EventSourceProfileError::UnexpectedCodec { codec } => {
-                write!(f, "event+source profile unexpected codec {codec} (NONE required)")
+                write!(
+                    f,
+                    "event+source profile unexpected codec {codec} (NONE required)"
+                )
             }
             EventSourceProfileError::UnexpectedKind { kind } => {
                 write!(f, "event+source profile unexpected chunk kind {kind}")
@@ -317,9 +320,7 @@ pub fn decode_event_source_profile(
             return Err(EventSourceProfileError::InvalidFooter);
         }
         if frame.codec != codec::NONE {
-            return Err(EventSourceProfileError::UnexpectedCodec {
-                codec: frame.codec,
-            });
+            return Err(EventSourceProfileError::UnexpectedCodec { codec: frame.codec });
         }
         match frame.kind {
             k if k == kind::EVENT => {
@@ -378,11 +379,11 @@ mod tests {
     use super::*;
     use crate::chunk::{encode_chunk_frame, CHUNK_HEADER_LEN};
     use crate::encode_file_prefix;
-    use crate::string::FLAG_UTF8;
-    use crate::{MAGIC, SUPPORTED_MAJOR};
-    use crate::FilePrefixError;
-    use crate::Error as HeaderError;
     use crate::stream::StreamError;
+    use crate::string::FLAG_UTF8;
+    use crate::Error as HeaderError;
+    use crate::FilePrefixError;
+    use crate::{MAGIC, SUPPORTED_MAJOR};
 
     #[test]
     fn empty_source_body_roundtrip() {
@@ -591,8 +592,7 @@ mod tests {
 
     #[test]
     fn event_source_bad_magic_err() {
-        let mut enc =
-            encode_event_source_profile(SUPPORTED_MAJOR, 0, 0, 0, 0, &[], &[], &[], None);
+        let mut enc = encode_event_source_profile(SUPPORTED_MAJOR, 0, 0, 0, 0, &[], &[], &[], None);
         enc[0] = b'X';
         assert_eq!(
             decode_event_source_profile(&enc),

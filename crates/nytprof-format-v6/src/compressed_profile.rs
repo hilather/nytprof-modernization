@@ -14,11 +14,11 @@ use crate::event_body::{
     decode_event_body, encode_event_body, EventBodyError, EventRecord, EventRecordSpec,
 };
 use crate::file_prefix::{encode_file_prefix, FilePrefixError};
-use crate::payload_codec::{
-    decode_chunk_payload, encode_chunk_frame_lz4, encode_chunk_frame_zlib,
-    encode_chunk_frame_zstd, PayloadCodecError,
-};
 use crate::index_body::IndexBodyError;
+use crate::payload_codec::{
+    decode_chunk_payload, encode_chunk_frame_lz4, encode_chunk_frame_zlib, encode_chunk_frame_zstd,
+    PayloadCodecError,
+};
 use crate::source_body::SourceBodyError;
 use crate::stream::{decode_prefix_chunk_stream, StreamError};
 use crate::summary_body::SummaryBodyError;
@@ -37,13 +37,19 @@ pub enum CompressedProfileError {
     SummaryBody(SummaryBodyError),
     Payload(PayloadCodecError),
     /// EVENT codec not in {NONE, ZLIB, ZSTD, LZ4}.
-    UnsupportedEventCodec { codec: u8 },
+    UnsupportedEventCodec {
+        codec: u8,
+    },
     /// Chunk kind not EVENT or FOOTER on this MVP path.
-    UnexpectedKind { kind: u8 },
+    UnexpectedKind {
+        kind: u8,
+    },
     /// FOOTER not last / more than one FOOTER.
     InvalidFooter,
     /// FOOTER must use codec NONE on this MVP.
-    UnexpectedFooterCodec { codec: u8 },
+    UnexpectedFooterCodec {
+        codec: u8,
+    },
 }
 
 impl std::fmt::Display for CompressedProfileError {
@@ -146,15 +152,24 @@ pub type CompressedProfileResult<T> = std::result::Result<T, CompressedProfileEr
 /// Owned logical event recovered after inflate + `decode_event_body`.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum OwnedEventRecord {
-    Mark { label: Vec<u8> },
-    TimeLine { fid: u64, line: u64, ticks: u64 },
+    Mark {
+        label: Vec<u8>,
+    },
+    TimeLine {
+        fid: u64,
+        line: u64,
+        ticks: u64,
+    },
     TimeBlock {
         fid: u64,
         line: u64,
         block_line: u64,
         ticks: u64,
     },
-    SubEntry { caller_fid: u64, caller_line: u64 },
+    SubEntry {
+        caller_fid: u64,
+        caller_line: u64,
+    },
     SubReturn {
         depth: u64,
         incl: u64,
@@ -181,7 +196,10 @@ pub enum OwnedEventRecord {
         ppid: u64,
         start_time: u64,
     },
-    PidEnd { pid: u64, end_time: u64 },
+    PidEnd {
+        pid: u64,
+        end_time: u64,
+    },
     SubCallers {
         fid: u64,
         line: u64,
@@ -202,9 +220,14 @@ pub enum OwnedEventRecord {
         key: Vec<u8>,
         value: Vec<u8>,
     },
-    Comment { text: Vec<u8> },
+    Comment {
+        text: Vec<u8>,
+    },
     StartDeflate,
-    Version { major: u64, minor: u64 },
+    Version {
+        major: u64,
+        minor: u64,
+    },
 }
 
 impl OwnedEventRecord {
@@ -399,7 +422,13 @@ pub(crate) fn encode_event_chunk(
     logical_event_count: u32,
     plain: &[u8],
 ) -> CompressedProfileResult<Vec<u8>> {
-    encode_kind_chunk(kind::EVENT, event_codec, sequence, logical_event_count, plain)
+    encode_kind_chunk(
+        kind::EVENT,
+        event_codec,
+        sequence,
+        logical_event_count,
+        plain,
+    )
 }
 
 /// Encode a provisional compressed mini-profile.
@@ -423,9 +452,7 @@ pub fn encode_compressed_mini_profile(
     footer: Option<&[u8]>,
 ) -> CompressedProfileResult<Vec<u8>> {
     if !events.is_empty() && !is_supported_event_codec(event_codec) {
-        return Err(CompressedProfileError::UnsupportedEventCodec {
-            codec: event_codec,
-        });
+        return Err(CompressedProfileError::UnsupportedEventCodec { codec: event_codec });
     }
 
     let mut out = encode_file_prefix(
@@ -500,10 +527,12 @@ pub fn decode_compressed_mini_profile(
                 let plain = decode_chunk_payload(frame)?;
                 let (body_recs, body_n) = decode_event_body(&plain)?;
                 if body_n != plain.len() {
-                    return Err(CompressedProfileError::EventBody(EventBodyError::Truncated {
-                        need: plain.len(),
-                        got: body_n,
-                    }));
+                    return Err(CompressedProfileError::EventBody(
+                        EventBodyError::Truncated {
+                            need: plain.len(),
+                            got: body_n,
+                        },
+                    ));
                 }
                 for r in &body_recs {
                     records.push(OwnedEventRecord::from_borrowed(r));
@@ -625,7 +654,8 @@ mod tests {
             if c != codec::NONE {
                 let plain = encode_event_body(&events);
                 assert_ne!(
-                    event.payload, plain.as_slice(),
+                    event.payload,
+                    plain.as_slice(),
                     "wire payload must stay compressed for codec {c}"
                 );
             }
@@ -762,9 +792,18 @@ mod tests {
     fn never_panic_on_garbage() {
         assert!(decode_compressed_mini_profile(&[]).is_err());
         assert!(decode_compressed_mini_profile(b"not-v6").is_err());
-        let mut almost =
-            encode_compressed_mini_profile(SUPPORTED_MAJOR, 0, 0, 0, 0, &[], codec::NONE, &[], None)
-                .unwrap();
+        let mut almost = encode_compressed_mini_profile(
+            SUPPORTED_MAJOR,
+            0,
+            0,
+            0,
+            0,
+            &[],
+            codec::NONE,
+            &[],
+            None,
+        )
+        .unwrap();
         almost.push(0x01);
         assert!(decode_compressed_mini_profile(&almost).is_err());
         // reserved opcode inside NONE event body
@@ -811,9 +850,18 @@ mod tests {
 
     #[test]
     fn bad_sync_err() {
-        let mut enc =
-            encode_compressed_mini_profile(SUPPORTED_MAJOR, 0, 0, 0, 0, &[], codec::NONE, &[], None)
-                .unwrap();
+        let mut enc = encode_compressed_mini_profile(
+            SUPPORTED_MAJOR,
+            0,
+            0,
+            0,
+            0,
+            &[],
+            codec::NONE,
+            &[],
+            None,
+        )
+        .unwrap();
         let mut bad = vec![0u8; CHUNK_HEADER_LEN];
         bad[0..4].copy_from_slice(&0xDEAD_BEEFu32.to_le_bytes());
         enc.extend_from_slice(&bad);

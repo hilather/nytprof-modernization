@@ -13,8 +13,9 @@
 //! # Residual honesty (non-claims)
 //!
 //! - Stand-in writer tests are **NOT product dual-equality evidence**.
-//! - E3-EVENT with C is **ready** for the absolute/packing/dict/mid-stream matrix;
-//!   **E3-mixed** (SOURCE/INDEX/SUMMARY multi-kind product C fixtures) remains residual.
+//! - E3-EVENT with C is **ready** for the absolute/packing/dict/mid-stream matrix.
+//! - E3-mixed product C fixtures (`mixed.nytprof`) decode via
+//!   [`e3_decode_mixed_writer_bytes`] (shipped always-inflate mixed path).
 //! - Not wire freeze; not CLI v6 default; not E4 enforcement; COL-008 still deferred.
 
 use crate::compressed_profile::OwnedEventRecord;
@@ -29,6 +30,7 @@ use crate::decoded_event::{
     encode_decoded_event_profile_with_string_dict_and_site_deltas_and_seq, DecodedEventError,
     DecodedEventProfile,
 };
+use crate::decoded_mixed::{decode_decoded_mixed_profile, DecodedMixedError, DecodedMixedProfile};
 use crate::event_body::EventRecordSpec;
 use crate::string_dict::StringDictionary;
 use crate::{MAGIC, SUPPORTED_MAJOR};
@@ -83,8 +85,8 @@ pub fn detect_profile_wire_kind(buf: &[u8]) -> ProfileWireKind {
 ///   string_ids (ADR-0002) — fail closed on missing ids / corrupt table (no empty-string soft fallback)
 /// - Auto-align body VERSION with fixed-header (inject when omitted)
 ///
-/// Not a wire freeze; not full multi-kind SOURCE/INDEX/SUMMARY product path
-/// (E3-mixed residual). Default `parse_chunk_frame` remains non-inflating.
+/// Not a wire freeze. Multi-kind SOURCE/INDEX/SUMMARY uses
+/// [`e3_decode_mixed_writer_bytes`]. Default `parse_chunk_frame` remains non-inflating.
 pub fn product_decode_v6_event_profile(
     wire: &[u8],
     verify_crc: bool,
@@ -144,6 +146,17 @@ pub fn e3_decode_writer_bytes(
             bytes_consumed: n,
         })
     }
+}
+
+/// Always-inflate decode of writer-produced **mixed** (EVENT+SOURCE+INDEX+SUMMARY) bytes.
+///
+/// Drives shipped [`decode_decoded_mixed_profile`]. Product E3-mixed: feed C
+/// `mixed.nytprof` here. Does not re-encode or stand-in.
+pub fn e3_decode_mixed_writer_bytes(
+    wire: &[u8],
+    verify_crc: bool,
+) -> Result<(DecodedMixedProfile, usize), DecodedMixedError> {
+    decode_decoded_mixed_profile(wire, verify_crc)
 }
 
 /// Fail-closed E3 equality: decoded records and sequences must match expected.
@@ -555,12 +568,8 @@ mod tests {
         // Single-chunk packing of same specs must decode to same logical stream.
         let single = e3_standin_write_packing(&specs, codec::NONE, 0).unwrap();
         let (single_prof, _) = decode_decoded_event_profile(&single, true).unwrap();
-        e3_assert_logical_equal(
-            &e3.profile,
-            &single_prof.records,
-            &single_prof.sequences,
-        )
-        .expect("multi-chunk packing E3 equals single-chunk packing");
+        e3_assert_logical_equal(&e3.profile, &single_prof.records, &single_prof.sequences)
+            .expect("multi-chunk packing E3 equals single-chunk packing");
         match &e3.profile.records[0] {
             OwnedEventRecord::TimeLine { fid, line, ticks } => {
                 assert_eq!((*fid, *line, *ticks), (1, 10, 5));
@@ -585,7 +594,10 @@ mod tests {
         let e3 = e3_decode_writer_bytes(&wire, true, /* expect_string_dict */ true)
             .expect("E3 decode with string dict");
         assert_eq!(e3.bytes_consumed, wire.len());
-        let dict = e3.dict.as_ref().expect("dict present when expect_string_dict");
+        let dict = e3
+            .dict
+            .as_ref()
+            .expect("dict present when expect_string_dict");
         assert_eq!(dict.len(), 3);
         assert_eq!(dict.get(1).unwrap().data, b"e3-dict-label");
         assert_eq!(dict.get(2).unwrap().data, b"basetime");
@@ -650,9 +662,8 @@ mod tests {
             (1, FLAG_UTF8, b"pack-dict-mark"),
             (3, 0, b"# pack-dict-end"),
         ];
-        let wire =
-            e3_standin_write_string_dict_packing(&events, codec::ZLIB, 2, dict_entries)
-                .expect("dict packing write");
+        let wire = e3_standin_write_string_dict_packing(&events, codec::ZLIB, 2, dict_entries)
+            .expect("dict packing write");
         let e3 = e3_decode_writer_bytes(&wire, true, true).expect("E3 dict packing decode");
         assert_eq!(e3.bytes_consumed, wire.len());
         assert!(e3.profile.event_chunk_count >= 2);
@@ -663,12 +674,8 @@ mod tests {
             e3_standin_write_string_dict_packing(&events, codec::NONE, 0, dict_entries).unwrap();
         let (single_prof, _, _) =
             decode_decoded_event_profile_with_string_dict(&single, true).unwrap();
-        e3_assert_logical_equal(
-            &e3.profile,
-            &single_prof.records,
-            &single_prof.sequences,
-        )
-        .expect("multi-chunk dict packing E3 equals single-chunk");
+        e3_assert_logical_equal(&e3.profile, &single_prof.records, &single_prof.sequences)
+            .expect("multi-chunk dict packing E3 equals single-chunk");
         match &e3.profile.records[0] {
             OwnedEventRecord::Mark { label } => assert_eq!(label, b"pack-dict-mark"),
             other => panic!("{other:?}"),
@@ -685,13 +692,8 @@ mod tests {
     fn e3_harness_mid_stream_packing_standin_continuity() {
         let pre = mid_stream_packing_pre();
         let post = mid_stream_packing_post();
-        let wire = e3_standin_write_mid_stream_packing(
-            &pre,
-            codec::NONE,
-            &post,
-            codec::ZLIB,
-        )
-        .expect("mid-stream packing write");
+        let wire = e3_standin_write_mid_stream_packing(&pre, codec::NONE, &post, codec::ZLIB)
+            .expect("mid-stream packing write");
         let e3 = e3_decode_writer_bytes(&wire, true, false).expect("E3 mid-stream decode");
         assert_eq!(e3.bytes_consumed, wire.len());
         assert_eq!(e3.profile.event_chunk_count, 2);
@@ -706,8 +708,7 @@ mod tests {
         all.extend_from_slice(&post);
         let single_plain =
             crate::event_body::encode_event_body_with_site_deltas_and_seq(&all).unwrap();
-        let (single_body, _) =
-            crate::event_body::decode_event_body_full(&single_plain).unwrap();
+        let (single_body, _) = crate::event_body::decode_event_body_full(&single_plain).unwrap();
         let owned: Vec<_> = single_body
             .records
             .iter()
@@ -774,8 +775,7 @@ mod tests {
             other => panic!("comment {other:?}"),
         }
         // Cross-check: independent with_string_dict decode of same wire.
-        let (expected, _, _) =
-            decode_decoded_event_profile_with_string_dict(&wire, true).unwrap();
+        let (expected, _, _) = decode_decoded_event_profile_with_string_dict(&wire, true).unwrap();
         e3_assert_logical_equal(&e3.profile, &expected.records, &expected.sequences)
             .expect("E3 mid-stream dict packing equality");
     }

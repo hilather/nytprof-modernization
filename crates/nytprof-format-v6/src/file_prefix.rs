@@ -6,9 +6,7 @@
 //! with [`crate::tlv::encode_tlv_region`] / [`crate::tlv::decode_tlv_region`].
 
 use crate::tlv::{decode_tlv_region, encode_tlv_region, Tlv, TlvError};
-use crate::{
-    encode_fixed_header_full, parse_fixed_header, Error as HeaderError, FixedHeader,
-};
+use crate::{encode_fixed_header_full, parse_fixed_header, Error as HeaderError, FixedHeader};
 
 /// Fail-closed file-prefix errors (compose header + multi-TLV region).
 #[derive(Debug, PartialEq, Eq)]
@@ -100,12 +98,13 @@ pub fn decode_file_prefix(buf: &[u8]) -> FilePrefixResult<(FilePrefix<'_>, usize
         }));
     }
     let (tlvs, tlv_n) = decode_tlv_region(buf, tlv_start)?;
-    let total = tlv_start
-        .checked_add(tlv_n)
-        .ok_or(FilePrefixError::Header(HeaderError::Truncated {
-            need: tlv_start,
-            got: buf.len(),
-        }))?;
+    let total =
+        tlv_start
+            .checked_add(tlv_n)
+            .ok_or(FilePrefixError::Header(HeaderError::Truncated {
+                need: tlv_start,
+                got: buf.len(),
+            }))?;
     Ok((FilePrefix { header, tlvs }, total))
 }
 
@@ -113,7 +112,7 @@ pub fn decode_file_prefix(buf: &[u8]) -> FilePrefixResult<(FilePrefix<'_>, usize
 mod tests {
     use super::*;
     use crate::tlv::{type_id, TlvError};
-    use crate::{MAGIC, SUPPORTED_MAJOR, HEADER_LEN_FULL};
+    use crate::{HEADER_LEN_FULL, MAGIC, SUPPORTED_MAJOR};
 
     #[test]
     fn roundtrip_empty_tlv_region() {

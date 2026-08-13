@@ -1,0 +1,45 @@
+Revision history for NYTProfM (product modernization)
+
+6.15  2026-08-13
+        Identity Option B: CPAN DISTNAME NYTProfM, debugger
+        Devel::NYTProfM, $VERSION 6.15 (match baseline/6.15 pin).
+        Operators switch to perl -d:NYTProfM. Stock Devel::NYTProf /
+        -d:NYTProf remains the oracle pin and report-facade namespace.
+        Not PAUSE uploaded. Not Provides perl(Devel::NYTProf).
+
+7.00  2026-08-13
+        L01 optional --allow-lossy convert (strict remains default).
+        Oracle default-calls1 v5→v6 refuses without the flag; with
+        --allow-lossy writes NYTPROF6 (NV truncate + NEW_FID extras /
+        TIME_BLOCK.sub_line drop). Not packing convert; not TEST-008.
+
+        E4-01 TEST-008 slice 1: fixtures/e4/oracle-pair default-calls1
+        oracle v5 + product format=v6. Shipped from_path / report --json
+        leaf/mid/edge equality. Not full TEST-008 corpus; not format=dual.
+
+        E3-mixed MVP: C-produced fixtures/v6/from-c/mixed.nytprof
+        (SOURCE + INDEX + SUMMARY) decoded by shipped
+        e3_decode_mixed_writer_bytes / e3_c_mixed_*. Not TEST-008;
+        not COL-008; not CLI v6 collection default.
+
+        P02 SEC-012 checklist + SEC-002 job MVP: see
+        docs/contracts/SEC_012_RELEASE_REVIEW_CHECKLIST_v0.md and
+        scripts/ci/sec002_continuous_fuzz_mvp.sh (wraps shipped
+        tools/oracle/selftest_security_fuzz.sh / decode_fuzz; honest
+        SKIP without cargo). Not independent sign-off; not GA marketing;
+        not cargo-fuzz/AFL.
+
+        P01 GA-candidate honesty cut: see
+        docs/RELEASE_NOTES_GA_CANDIDATE_v0.md. Collection drop-in preview
+        on advertised flavors (CPAN D1-A / Rocky default D1-B only).
+        Not SEC-012 complete; not uploaded to PAUSE; R3/R4 not flipped.
+
+        J02 CPAN TRIAL notes-ready (attach-preview): see
+        docs/RELEASE_NOTES_CPAN_TRIAL_v0.md. Devel::NYTProf 7.00 drop-in
+        collection preview. Not uploaded to PAUSE. Residuals: tablesorter
+        WAIVE, not full opcode/entersub, collection_default v5, EL8 RPM
+        D1-B. Not BUILD-003-FULL.
+
+        J01 CPAN hygiene: MakeMaker NAME is Devel::NYTProf; $VERSION
+        read from collector/xs/Devel/NYTProf.pm (KD-16/17). Dist listing
+        excludes baseline/, target/, prefix/.

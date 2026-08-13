@@ -199,9 +199,7 @@ pub fn decode_multi_chunk_event_profile(
         match frame.kind {
             k if k == kind::EVENT => {
                 if frame.codec != codec::NONE {
-                    return Err(MultiChunkEventError::UnexpectedCodec {
-                        codec: frame.codec,
-                    });
+                    return Err(MultiChunkEventError::UnexpectedCodec { codec: frame.codec });
                 }
                 let (body_recs, body_n) = decode_event_body(frame.payload)?;
                 if body_n != frame.payload.len() {
@@ -215,9 +213,7 @@ pub fn decode_multi_chunk_event_profile(
             }
             k if k == kind::FOOTER => {
                 if frame.codec != codec::NONE {
-                    return Err(MultiChunkEventError::UnexpectedCodec {
-                        codec: frame.codec,
-                    });
+                    return Err(MultiChunkEventError::UnexpectedCodec { codec: frame.codec });
                 }
                 has_footer = true;
                 footer_payload = Some(frame.payload);
@@ -244,14 +240,14 @@ pub fn decode_multi_chunk_event_profile(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::chunk::ChunkError;
     use crate::chunk::{encode_chunk_frame, CHUNK_HEADER_LEN, CHUNK_SYNC};
     use crate::encode_file_prefix;
     use crate::event_body::opcode;
-    use crate::varint::encode_u64;
-    use crate::{FilePrefixError, MAGIC, SUPPORTED_MAJOR};
-    use crate::Error as HeaderError;
     use crate::stream::StreamError;
-    use crate::chunk::ChunkError;
+    use crate::varint::encode_u64;
+    use crate::Error as HeaderError;
+    use crate::{FilePrefixError, MAGIC, SUPPORTED_MAJOR};
 
     fn sample_events() -> [EventRecordSpec<'static>; 4] {
         [
@@ -387,8 +383,17 @@ mod tests {
         }
 
         // max=2 → two EVENT chunks, same ordered fields.
-        let enc2 =
-            encode_multi_chunk_event_profile(SUPPORTED_MAJOR, 0, 0, 0, 0, &[], &events, 2, Some(b"f"));
+        let enc2 = encode_multi_chunk_event_profile(
+            SUPPORTED_MAJOR,
+            0,
+            0,
+            0,
+            0,
+            &[],
+            &events,
+            2,
+            Some(b"f"),
+        );
         let (p2, n2) = decode_multi_chunk_event_profile(&enc2).expect("max2");
         assert_eq!(n2, enc2.len());
         assert_eq!(p2.event_chunk_count, 2);
@@ -399,8 +404,7 @@ mod tests {
 
     #[test]
     fn empty_events_zero_event_chunks() {
-        let enc =
-            encode_multi_chunk_event_profile(SUPPORTED_MAJOR, 0, 0, 0, 0, &[], &[], 2, None);
+        let enc = encode_multi_chunk_event_profile(SUPPORTED_MAJOR, 0, 0, 0, 0, &[], &[], 2, None);
         let (prof, n) = decode_multi_chunk_event_profile(&enc).unwrap();
         assert_eq!(n, enc.len());
         assert_eq!(prof.event_chunk_count, 0);

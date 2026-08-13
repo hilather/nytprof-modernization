@@ -77,10 +77,10 @@ Behavior:
 
 | Topic | Status |
 |-------|--------|
-| cargo-fuzz / AFL continuous program | deferred (SEC-002 full) |
+| cargo-fuzz / AFL continuous program | deferred (SEC-002 full; P02 is job MVP only) |
 | Re-decoding logic inside tests | **forbidden** |
 | Claiming COL-015 complete | residual |
-| Claiming SEC-012 release sign-off | residual |
+| Claiming SEC-012 independent sign-off | residual (P02 checklist MVP only) |
 | E3-mixed multi-kind fuzz corpus | residual |
 | Panic via `catch_unwind` requirement | Result-only; panic fails the suite |
 

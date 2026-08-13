@@ -9,9 +9,7 @@
 //! Does **not** change default `parse_chunk_frame` semantics.
 //! Not dictionaries, not COL-007 C writer, not CLI v6 default.
 
-use crate::decoded_chunk::{
-    decode_chunk_frame_plain, DecodedChunk, DecodedChunkError,
-};
+use crate::decoded_chunk::{decode_chunk_frame_plain, DecodedChunk, DecodedChunkError};
 use crate::file_prefix::encode_file_prefix;
 use crate::stream::{decode_prefix_chunk_stream, StreamError};
 use crate::FixedHeader;
@@ -219,12 +217,13 @@ mod tests {
     fn truncated_mid_stream_err() {
         let f0 = seal_none(kind::EVENT, 0, PLAIN_A);
         let f1 = encode_chunk_frame_zlib(kind::EVENT, 0, 1, 0, 1, PLAIN_B).unwrap();
-        let mut wire =
-            encode_prefix_sealed_chunks(SUPPORTED_MAJOR, 0, 0, 0, 0, &[], &[&f0, &f1]);
+        let mut wire = encode_prefix_sealed_chunks(SUPPORTED_MAJOR, 0, 0, 0, 0, &[], &[&f0, &f1]);
         // Drop last bytes of second chunk.
         wire.truncate(wire.len() - 4);
         match decode_prefix_chunk_stream_plain(&wire, false) {
-            Err(DecodedStreamError::Stream(StreamError::Chunk(ChunkError::Truncated { .. }))) => {}
+            Err(DecodedStreamError::Stream(StreamError::Chunk(ChunkError::Truncated {
+                ..
+            }))) => {}
             other => panic!("expected truncated mid-stream, got {other:?}"),
         }
     }
@@ -237,8 +236,7 @@ mod tests {
         if f1.len() > CHUNK_HEADER_LEN + 1 {
             f1[CHUNK_HEADER_LEN + 1] ^= 0xAA;
         }
-        let wire =
-            encode_prefix_sealed_chunks(SUPPORTED_MAJOR, 0, 0, 0, 0, &[], &[&f0, &f1]);
+        let wire = encode_prefix_sealed_chunks(SUPPORTED_MAJOR, 0, 0, 0, 0, &[], &[&f0, &f1]);
         // Without CRC: payload inflate fails.
         match decode_prefix_chunk_stream_plain(&wire, false) {
             Err(DecodedStreamError::Chunk(DecodedChunkError::Payload(_))) => {}
@@ -267,8 +265,7 @@ mod tests {
             compute_payload_crc(&compressed) ^ 0x1111_2222,
         );
         let good = seal_none(kind::SOURCE, 1, PLAIN_A);
-        let wire =
-            encode_prefix_sealed_chunks(SUPPORTED_MAJOR, 0, 0, 0, 0, &[], &[&bad, &good]);
+        let wire = encode_prefix_sealed_chunks(SUPPORTED_MAJOR, 0, 0, 0, 0, &[], &[&bad, &good]);
         match decode_prefix_chunk_stream_plain(&wire, true) {
             Err(DecodedStreamError::Chunk(DecodedChunkError::Crc(_))) => {}
             other => panic!("expected crc mismatch, got {other:?}"),

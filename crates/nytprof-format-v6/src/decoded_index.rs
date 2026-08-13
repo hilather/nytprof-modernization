@@ -17,9 +17,7 @@ use crate::crc::compute_payload_crc;
 use crate::decoded_stream::{
     decode_prefix_chunk_stream_plain, encode_prefix_sealed_chunks, DecodedStreamError,
 };
-use crate::index_body::{
-    decode_index_body, encode_index_body, IndexBodyError, IndexRecordSpec,
-};
+use crate::index_body::{decode_index_body, encode_index_body, IndexBodyError, IndexRecordSpec};
 use crate::FixedHeader;
 
 /// Fail-closed decoded-INDEX profile errors.
@@ -29,13 +27,19 @@ pub enum DecodedIndexError {
     IndexBody(IndexBodyError),
     Encode(CompressedProfileError),
     /// Non-INDEX/FOOTER kind on this MVP path.
-    UnexpectedKind { kind: u8 },
+    UnexpectedKind {
+        kind: u8,
+    },
     /// FOOTER not last / more than one FOOTER.
     InvalidFooter,
     /// FOOTER must use codec NONE.
-    UnexpectedFooterCodec { codec: u8 },
+    UnexpectedFooterCodec {
+        codec: u8,
+    },
     /// INDEX codec not in {NONE, ZLIB, ZSTD, LZ4} or mixed across INDEX chunks.
-    UnsupportedIndexCodec { codec: u8 },
+    UnsupportedIndexCodec {
+        codec: u8,
+    },
     /// No INDEX chunks when a non-empty body path is required.
     MissingIndexChunks,
 }
@@ -128,9 +132,7 @@ pub fn encode_decoded_index_profile(
     footer: Option<&[u8]>,
 ) -> DecodedIndexResult<Vec<u8>> {
     if !indexes.is_empty() && !is_supported_event_codec(index_codec) {
-        return Err(DecodedIndexError::UnsupportedIndexCodec {
-            codec: index_codec,
-        });
+        return Err(DecodedIndexError::UnsupportedIndexCodec { codec: index_codec });
     }
 
     let parts = if indexes.is_empty() {
@@ -206,26 +208,20 @@ pub fn decode_decoded_index_profile(
         match chunk.kind {
             k if k == kind::INDEX => {
                 if !is_supported_event_codec(chunk.codec) {
-                    return Err(DecodedIndexError::UnsupportedIndexCodec {
-                        codec: chunk.codec,
-                    });
+                    return Err(DecodedIndexError::UnsupportedIndexCodec { codec: chunk.codec });
                 }
                 if !saw_index {
                     index_codec = chunk.codec;
                     saw_index = true;
                 } else if chunk.codec != index_codec {
-                    return Err(DecodedIndexError::UnsupportedIndexCodec {
-                        codec: chunk.codec,
-                    });
+                    return Err(DecodedIndexError::UnsupportedIndexCodec { codec: chunk.codec });
                 }
                 plain.extend_from_slice(&chunk.plain);
                 index_chunk_count += 1;
             }
             k if k == kind::FOOTER => {
                 if chunk.codec != codec::NONE {
-                    return Err(DecodedIndexError::UnexpectedFooterCodec {
-                        codec: chunk.codec,
-                    });
+                    return Err(DecodedIndexError::UnexpectedFooterCodec { codec: chunk.codec });
                 }
                 has_footer = true;
                 footer_payload = Some(chunk.plain.clone());
@@ -474,9 +470,9 @@ mod tests {
             other => panic!("expected payload err, got {other:?}"),
         }
         match decode_decoded_index_profile(&wire, true) {
-            Err(DecodedIndexError::Stream(DecodedStreamError::Chunk(
-                DecodedChunkError::Crc(_),
-            ))) => {}
+            Err(DecodedIndexError::Stream(DecodedStreamError::Chunk(DecodedChunkError::Crc(
+                _,
+            )))) => {}
             other => panic!("expected crc err, got {other:?}"),
         }
     }
@@ -499,9 +495,9 @@ mod tests {
         );
         let wire = encode_prefix_sealed_chunks(SUPPORTED_MAJOR, 0, 0, 0, 0, &[], &[&bad]);
         match decode_decoded_index_profile(&wire, true) {
-            Err(DecodedIndexError::Stream(DecodedStreamError::Chunk(
-                DecodedChunkError::Crc(_),
-            ))) => {}
+            Err(DecodedIndexError::Stream(DecodedStreamError::Chunk(DecodedChunkError::Crc(
+                _,
+            )))) => {}
             other => panic!("expected crc mismatch, got {other:?}"),
         }
         let (prof, n) = decode_decoded_index_profile(&wire, false).expect("no crc");
