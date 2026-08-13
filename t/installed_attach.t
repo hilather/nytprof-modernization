@@ -1,10 +1,226 @@
 #!/usr/bin/env perl
-# RPM-03 / PR-A2: prove installed perl -d:NYTProfM attach (15/3/15) without nytprof-cli.
-# PR-A1 ships this file in NYTProfM-6.15.tar.gz. Bounded tag parser lands in PR-A2
-# (t/nytprof_v5_tag_table.inc). SKIP is intentional: mock %check must not
-# invoke this file until the parser lands (PR-A2).
+# PR-A2 / RPM-03: prove installed perl -d:NYTProfM attach (15/3/15)
+# without nytprof-cli. Bounded v5 scanner: SUB_RETURN + SUB_CALLERS only.
 use strict;
 use warnings;
+use File::Basename qw(dirname basename);
+use File::Spec;
+use File::Temp qw(tempdir);
+use Cwd qw(abs_path);
 
-print "SKIP: t/installed_attach.t parser lands in PR-A2 (RPM-03)\n";
+my $here = abs_path( dirname($0) );
+do File::Spec->catfile( $here, 'nytprof_v5_tag_table.inc' )
+  or die "missing t/nytprof_v5_tag_table.inc: $@\n";
+
+for my $inc (@INC) {
+    if ( defined $inc && $inc =~ m{/collector/build(?:/|\z)} ) {
+        die "t/installed_attach.t must not use repo collector/build in \@INC ($inc)\n";
+    }
+}
+
+my $mod = $INC{'Devel/NYTProfM.pm'};
+if ( !$mod ) {
+    require Devel::NYTProfM;
+    $mod = $INC{'Devel/NYTProfM.pm'};
+}
+die "Devel::NYTProfM not loadable from installed PERL5LIB\n" unless $mod;
+if ( $mod =~ m{/collector/build(?:/|\z)} ) {
+    die "loaded NYTProfM from repo dest, not installed prefix: $mod\n";
+}
+
+my $workload = File::Spec->catfile( $here, 'workload-calls1.pl' );
+die "missing $workload\n" unless -f $workload;
+
+my $tmp = tempdir( CLEANUP => 1 );
+my $profile = File::Spec->catfile( $tmp, 'nytprof.out' );
+
+{
+    local $ENV{NYTPROF} = "file=$profile";
+    local $ENV{PERL5OPT};
+    my $perl = $^X;
+    my @inc  = map { ( '-I', $_ ) } grep { defined && length } @INC;
+    my $rc   = system( $perl, @inc, '-d:NYTProfM', $workload );
+    die "installed perl -d:NYTProfM workload failed (rc=$rc)\n" if $rc != 0;
+}
+-f $profile or die "installed attach did not write $profile\n";
+
+my ( $leaf, $mid, $edge ) = scan_profile($profile);
+die "leaf SUB_RETURN=$leaf want 15\n" unless $leaf == 15;
+die "mid SUB_RETURN=$mid want 3\n"    unless $mid == 3;
+die "mid->leaf CALLERS=$edge want 15\n" unless $edge == 15;
+print "OK: installed attach leaf=15 mid=3 edge=15\n";
+
+# format=v6 must fail-closed on D1-B (no NYTPROF6 file).
+{
+    my $v6 = File::Spec->catfile( $tmp, 'nytprof.v6' );
+    local $ENV{NYTPROF} = "file=$v6:format=v6";
+    local $ENV{PERL5OPT};
+    my $perl = $^X;
+    my @inc  = map { ( '-I', $_ ) } grep { defined && length } @INC;
+    my $out  = `$perl @inc -d:NYTProfM -e 1 2>&1`;
+    my $rc   = $? >> 8;
+    die "format=v6 must fail (rc=$rc)\n" if $rc == 0;
+    $out =~ /v6_collect/ or die "format=v6 error missing v6_collect text\n";
+    die "format=v6 must not write $v6\n" if -e $v6;
+}
+print "OK: installed format=v6 fail-closed\n";
 exit 0;
+
+sub scan_profile {
+    my ($path) = @_;
+    open my $fh, '<:raw', $path or die "open $path: $!\n";
+    my $hdr = <$fh>;
+    die "bad magic (not NYTProf 5)\n" unless defined $hdr && $hdr =~ /^NYTProf 5/;
+    my $leaf = 0;
+    my $mid  = 0;
+    my $edge = 0;
+    while (1) {
+        my $tag;
+        last unless read( $fh, $tag, 1 );
+        last if $tag eq '';
+        if ( $tag eq ':' || $tag eq '!' || $tag eq '#' ) {
+            my $rest = <$fh>;
+            die "truncated text tag\n" unless defined $rest;
+            next;
+        }
+        if ( $tag eq 'z' ) {
+            die "START_DEFLATE not supported in installed tag parser\n";
+        }
+        if ( $tag eq '<' ) {
+            read_u32($fh);    # depth (already consumed tag)
+            skip_nv($fh);
+            skip_nv($fh);
+            my $name = read_str($fh);
+            $leaf++ if $name eq 'main::leaf';
+            $mid++  if $name eq 'main::mid';
+            next;
+        }
+        if ( $tag eq 'c' ) {
+            read_u32($fh);    # fid
+            skip_u32($fh);    # line
+            my $caller = read_str($fh);
+            skip_u32($fh);    # count
+            skip_nv($fh);
+            skip_nv($fh);
+            skip_nv($fh);
+            skip_u32($fh);    # rec_depth
+            my $called = read_str($fh);
+            $edge += 1 if $caller eq 'main::mid' && $called eq 'main::leaf';
+            next;
+        }
+        if ( $tag eq '+' ) {
+            read_u32($fh);
+            skip_u32($fh);
+            skip_u32($fh);
+            next;
+        }
+        if ( $tag eq '*' ) {
+            read_u32($fh);
+            skip_u32($fh);
+            skip_u32($fh);
+            skip_u32($fh);
+            skip_u32($fh);
+            next;
+        }
+        if ( $tag eq '-' ) {
+            next;
+        }
+        if ( $tag eq '>' ) {
+            read_u32($fh);
+            skip_u32($fh);
+            next;
+        }
+        if ( $tag eq '@' ) {
+            read_u32($fh);
+            skip_u32($fh);
+            skip_u32($fh);
+            skip_u32($fh);
+            skip_u32($fh);
+            skip_u32($fh);
+            skip_str($fh);
+            next;
+        }
+        if ( $tag eq 'S' ) {
+            read_u32($fh);
+            skip_u32($fh);
+            skip_str($fh);
+            next;
+        }
+        if ( $tag eq 's' ) {
+            read_u32($fh);
+            skip_str($fh);
+            skip_u32($fh);
+            skip_u32($fh);
+            next;
+        }
+        if ( $tag eq 'P' ) {
+            read_u32($fh);
+            skip_u32($fh);
+            skip_nv($fh);
+            next;
+        }
+        if ( $tag eq 'p' ) {
+            read_u32($fh);
+            skip_nv($fh);
+            next;
+        }
+        die sprintf( "unknown v5 tag 0x%02x (fail closed)\n", ord($tag) );
+    }
+    return ( $leaf, $mid, $edge );
+}
+
+sub read_u32 {
+    my ($fh) = @_;
+    my $b = read_byte($fh);
+    if ( $b < 0x80 ) {
+        return $b;
+    }
+    if ( $b < 0xC0 ) {
+        return ( ( $b & 0x3F ) << 8 ) | read_byte($fh);
+    }
+    if ( $b < 0xE0 ) {
+        return ( ( $b & 0x1F ) << 16 ) | ( read_byte($fh) << 8 ) | read_byte($fh);
+    }
+    if ( $b < 0xFF ) {
+        return ( ( $b & 0x0F ) << 24 )
+          | ( read_byte($fh) << 16 )
+          | ( read_byte($fh) << 8 )
+          | read_byte($fh);
+    }
+    return ( read_byte($fh) << 24 )
+      | ( read_byte($fh) << 16 )
+      | ( read_byte($fh) << 8 )
+      | read_byte($fh);
+}
+
+sub skip_u32 { read_u32(@_) }
+
+sub read_byte {
+    my ($fh) = @_;
+    my $buf;
+    my $n = read( $fh, $buf, 1 );
+    die "truncated u32/tag payload\n" unless $n && $n == 1;
+    return ord($buf);
+}
+
+sub skip_nv {
+    my ($fh) = @_;
+    my $buf;
+    my $n = read( $fh, $buf, 8 );
+    die "truncated NV\n" unless $n && $n == 8;
+}
+
+sub read_str {
+    my ($fh) = @_;
+    my $stag = read_byte($fh);
+    die "expected string tag\n" unless $stag == ord("'") || $stag == ord('"');
+    my $len = read_u32($fh);
+    die "oversize string $len\n" if $len > $NYTProfM::V5TagTable::MAX_STR + 0;
+    return '' if $len == 0;
+    my $buf;
+    my $n = read( $fh, $buf, $len );
+    die "truncated string\n" unless $n && $n == $len;
+    return $buf;
+}
+
+sub skip_str { read_str(@_) }

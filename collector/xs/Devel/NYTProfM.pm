@@ -68,6 +68,8 @@ $Devel::NYTProfM::PRODUCT_BLOCKS        = 0;
 $Devel::NYTProfM::PRODUCT_CALLS         = 1;
 $Devel::NYTProfM::PRODUCT_SLOWOPS       = 2;
 $Devel::NYTProfM::PRODUCT_STMT_OPS      = 0;
+$Devel::NYTProfM::PRODUCT_SLOWOPS_OPS   = 0;
+$Devel::NYTProfM::PRODUCT_REQUIRE_REBIND = 0;
 
 our @product_sub_stack;
 our $product_in_hook = 0;
@@ -147,36 +149,57 @@ sub _product_skip_sub {
     return 1 unless defined $name && length $name;
     return 1 if ref $name;
     return 1 if $name =~ /^(?:DB::|Devel::NYTProfM::|CORE::GLOBAL::fork)/;
+    return 1 if $name =~ /::__ANON__\b/;
     return 0;
 }
 
 # Smallest G04 hook: Perl DB::sub + $^P 0x01. Emits SUB_RETURN (A5) and
 # SUB_CALLERS (A7) through shipped DB::emit_* → nytp_emit_*. Not 6.15
 # entersub / opcode TIME_* / XSUB / goto.
+# $DB::sub is a CV ref for BEGIN (and some evals); resolve to
+# Package::BEGIN@line like 6.15.
 sub sub {
-    my $called = $DB::sub;
+    my $raw = $DB::sub;
+    my $called = $raw;
+    if ( ref $raw ) {
+        $called = DB::name_cv($raw);
+        if ( defined $called && $called =~ /::BEGIN$/ && $called !~ /@/ ) {
+            my ( undef, undef, $bline ) = caller(0);
+            $called .= '@' . ( $bline || 0 );
+        }
+    }
     if (  !$Devel::NYTProfM::PRODUCT_XS_ATTACH
         || $product_in_hook
         || _product_skip_sub($called) )
     {
-        goto &$called;
+        goto &$raw;
     }
 
     my $caller =
       @product_sub_stack ? $product_sub_stack[-1] : 'main::RUNTIME';
     push @product_sub_stack, $called;
 
+    if ( $Devel::NYTProfM::PRODUCT_CALLS >= 2 ) {
+        my ( undef, $cfile, $cline ) = caller(0);
+        $product_in_hook = 1;
+        eval {
+            DB::emit_sub_entry( DB::fid_for_filename($cfile), $cline || 1 );
+            1;
+        };
+        $product_in_hook = 0;
+    }
+
     my $wa = wantarray;
     my ( @ret, $scalar, $ok );
     $ok = eval {
         if ($wa) {
-            @ret = &$called;
+            @ret = &$raw;
         }
         elsif ( defined $wa ) {
-            $scalar = &$called;
+            $scalar = &$raw;
         }
         else {
-            &$called;
+            &$raw;
         }
         1;
     };
@@ -224,9 +247,29 @@ sub _product_fork {
     return 0;
 }
 
+sub _product_install_require_rebind {
+    return if $Devel::NYTProfM::PRODUCT_REQUIRE_REBIND;
+    $Devel::NYTProfM::PRODUCT_REQUIRE_REBIND = 1;
+    # After warnings.pm compiles, rebind MATCH/PRINT op_ppaddr (ck_match
+    # may not keep PL_ppaddr[OP_MATCH]). Then import() sees the hook.
+    *CORE::GLOBAL::require = sub {
+        my ($f) = @_;
+        my $ok = CORE::require($f);
+        if (  $Devel::NYTProfM::PRODUCT_SLOWOPS_OPS
+            && defined $f
+            && $f =~ /(?:^|[\/\\])warnings\.pm\z/ )
+        {
+            DB::rebind_stash_slowops('warnings');
+        }
+        return $ok;
+    };
+}
+
 sub _product_install_fork_hook {
     return if $Devel::NYTProfM::PRODUCT_FORK_HOOK;
-    no warnings 'redefine';
+    # Do not `no warnings` here: compiling that loads warnings.pm before
+    # XS BOOT can redirect OP_MATCH (needed for warnings::CORE:match).
+    local $^W = 0;
     *CORE::GLOBAL::fork = \&_product_fork;
     $Devel::NYTProfM::PRODUCT_FORK_HOOK = 1;
 }
@@ -308,6 +351,20 @@ init_profiler();    # G03a: hold in-memory v5 sink — never writes nytprof.out
             if ( $st_ops == 0 ) {
                 $Devel::NYTProfM::PRODUCT_STMT_OPS = 1;
             }
+        }
+        if (  $Devel::NYTProfM::PRODUCT_SLOWOPS == 2
+            && $Devel::NYTProfM::PRODUCT_CALLS >= 1 )
+        {
+            # Thin PRINT/MATCH only (KD-35). Not full slowops.h / DI-03.
+            my $st_so = DB::install_product_slowops();
+            if ( $st_so == 0 ) {
+                $Devel::NYTProfM::PRODUCT_SLOWOPS_OPS = 1;
+            }
+            # Compile warnings.pm after PL_ppaddr redirect, then rebind
+            # any MATCH ops that kept a specialized op_ppaddr.
+            require warnings;
+            DB::rebind_stash_slowops('warnings');
+            _product_install_require_rebind();
         }
         if ( $Devel::NYTProfM::PRODUCT_ADDPID ) {
             _product_install_fork_hook();

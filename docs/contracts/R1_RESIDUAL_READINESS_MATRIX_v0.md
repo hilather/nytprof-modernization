@@ -358,7 +358,7 @@ Binding contracts landed; G02 landed the D1-B **v5-only link artifact** and a **
 | `E4-02-ORACLE-PAIR-MVP` | **done (MVP)** — second oracle dual pair (blocks-calls1) count surfaces; **not** full TEST-008 / A4 780 attach / S2 |
 | `E4-03-ORACLE-PAIR-MVP` | **done (MVP)** — third oracle dual pair (calls2-default) count surfaces; **not** full TEST-008 / SUB_ENTRY 27 attach / S2 |
 | `NS-NYTPROFM-IDENTITY` | **done (MVP / Option B)** — CPAN **NYTProfM**, `Devel::NYTProfM` **6.15**, `-d:NYTProfM`; not PAUSE; not Provides stock Devel::NYTProf |
-| `DROP-IN-REMAINING` | **residual** — opcode/`calls=2` 27/TEST-003/S2/COMPAT-007/publish. **DI-01 live 780/810 landed** (PR-B1; not full opcode). |
+| `DROP-IN-REMAINING` | **residual** — opcode/TEST-003/S2/COMPAT-007/publish. **DI-01 780/810** and **DI-02 27 + CORE:** landed (not full opcode). |
 | `TOOL-MERGE-AGGREGATE-SUM-MVP` | **done (MVP)** — opt-in `--aggregate-sum`; stream-concat default; **not** full nytprofmerge option parity / S2 |
 | `SEC-012-CHECKLIST-MVP` | **done (MVP / checklist)** — not independent sign-off |
 | `SEC-002-CONTINUOUS-FUZZ-MVP` | **done (MVP / job)** — not cargo-fuzz / AFL / deep corpus |

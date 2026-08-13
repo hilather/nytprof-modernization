@@ -77,19 +77,9 @@ install -m 755 ${src}/auto/Devel/NYTProfM/NYTProfM.so \
 
 %check
 # mock/EL8 %%check (default = D1-B): no network, no cargo.
-# D1-B attach + format=v5 OK; format=v6 fail-closed. Do NOT require NYTPROF6.
-export NYTPROF_PREFIX=%{buildroot}/usr
-%if %{with v6_collect}
-# Optional D1-A path (not default K01 green).
-:
-%else
-if [ -x scripts/packaging/g05_options_format_smoke.sh ]; then
-  bash scripts/packaging/g05_options_format_smoke.sh
-fi
-if [ -x scripts/packaging/product_legacy_smoke.sh ]; then
-  PRODUCT_D1_FLAVOR=B bash scripts/packaging/product_legacy_smoke.sh
-fi
-%endif
+# Drive installed files only (PR-A2). Do NOT require NYTPROF6 / nytprof-cli.
+export PERL5LIB=%{buildroot}%{perl_vendorlib}
+%{__perl} t/installed_attach.t
 
 %files
 %license Changes

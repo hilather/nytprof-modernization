@@ -21,6 +21,7 @@
  * PR-B1   — fid_for_filename (first-seen NEW_FID) + visit_contexts
  *           block_and_sub_lines + optional DBSTATE/NEXTSTATE TIME_BLOCK
  *           slice (not full opcode / DI-03).
+ * PR-B2   — thin OP_PRINT / OP_MATCH slowops (not full slowops.h).
  *
  * MODULE Devel::NYTProfM; PACKAGE = DB
  * Default link: libnytp_sink_v5.a + -lz only (D1-B).
@@ -43,10 +44,18 @@
 #endif
 
 #include <limits.h>
+#include <stdio.h>
 #include <string.h>
 
 #ifndef OutCopFILE
 #define OutCopFILE CopFILE
+#endif
+#ifndef OpSIBLING
+#ifdef PERL_OP_PARENT
+#define OpSIBLING(o) ((o)->op_moresib ? (o)->op_sibparent : NULL)
+#else
+#define OpSIBLING(o) ((o)->op_sibling)
+#endif
 #endif
 
 /* 6.15 NYTProf.xs ~124 — VIA_STMT path only (eval/autosplit residual). */
@@ -599,6 +608,225 @@ product_install_stmt_ops(pTHX)
     return 0;
 }
 
+/* Thin slowops: OP_PRINT + OP_MATCH only (KD-26/35). Not full slowops.h. */
+static int product_slowops_installed = 0;
+static Perl_ppaddr_t product_orig_pp_print = NULL;
+static Perl_ppaddr_t product_orig_pp_match = NULL;
+static int product_in_slowop = 0;
+
+static IV
+product_opt_calls(pTHX)
+{
+    SV *sv = get_sv("Devel::NYTProfM::PRODUCT_CALLS", 0);
+    if (sv != NULL && SvOK(sv))
+        return SvIV(sv);
+    return 1;
+}
+
+static IV
+product_opt_slowops(pTHX)
+{
+    SV *sv = get_sv("Devel::NYTProfM::PRODUCT_SLOWOPS", 0);
+    if (sv != NULL && SvOK(sv))
+        return SvIV(sv);
+    return 2;
+}
+
+static void
+product_fill_cv_name(pTHX_ CV *cv, char *buf, size_t buflen)
+{
+    GV *gv;
+    HV *stash;
+    const char *pkg;
+    const char *name;
+
+    if (buf == NULL || buflen == 0)
+        return;
+    buf[0] = '\0';
+    if (cv == NULL) {
+        (void)snprintf(buf, buflen, "main::RUNTIME");
+        return;
+    }
+    gv = CvGV(cv);
+    stash = CvSTASH(cv);
+    pkg = (stash != NULL && HvNAME(stash)) ? HvNAME(stash) : "main";
+    name = (gv != NULL && GvNAME(gv)) ? GvNAME(gv) : "?";
+    (void)snprintf(buf, buflen, "%s::%s", pkg ? pkg : "main", name);
+}
+
+static void
+product_fill_perl_caller(pTHX_ char *buf, size_t buflen)
+{
+    I32 i;
+
+    (void)snprintf(buf, buflen, "main::RUNTIME");
+    for (i = cxstack_ix; i >= 0; i--) {
+        PERL_CONTEXT *cx = &cxstack[i];
+        CV *cv;
+        if (CxTYPE(cx) != CXt_SUB)
+            continue;
+        cv = cx->blk_sub.cv;
+        if (cv == NULL)
+            continue;
+        if (PL_debstash != NULL && CvSTASH(cv) == PL_debstash)
+            continue;
+        product_fill_cv_name(aTHX_ cv, buf, buflen);
+        return;
+    }
+}
+
+static void
+product_fill_slowop_name(pTHX_ U16 type, char *buf, size_t buflen)
+{
+    const char *pkg = CopSTASHPV(PL_curcop);
+    const char *opn = (type < OP_max && PL_op_name[type]) ? PL_op_name[type]
+                                                          : "unknown";
+    if (pkg == NULL || pkg[0] == '\0')
+        pkg = "main";
+    (void)snprintf(buf, buflen, "%s::CORE:%s", pkg, opn);
+}
+
+static OP *
+pp_product_slowop(pTHX)
+{
+    Perl_ppaddr_t orig = NULL;
+    U16 type = PL_op ? PL_op->op_type : 0;
+    IV calls;
+    IV slowops;
+    char name[256];
+    char caller[256];
+    UV fid = 1;
+    UV line = 1;
+    OP *ret;
+
+    if (type == OP_PRINT)
+        orig = product_orig_pp_print;
+    else if (type == OP_MATCH)
+        orig = product_orig_pp_match;
+    else
+        orig = product_orig_pp_print;
+
+    if (product_in_slowop || product_sink == NULL)
+        return orig ? orig(aTHX) : NORMAL;
+
+    slowops = product_opt_slowops(aTHX);
+    calls = product_opt_calls(aTHX);
+    if (slowops != 2 || calls < 1)
+        return orig ? orig(aTHX) : NORMAL;
+
+    product_in_slowop = 1;
+    product_fill_slowop_name(aTHX_ type, name, sizeof(name));
+    product_fill_perl_caller(aTHX_ caller, sizeof(caller));
+    if (PL_curcop != NULL) {
+        const char *file = OutCopFILE(PL_curcop);
+        SV *file_sv = newSVpv(file ? file : "-", 0);
+        fid = product_fid_for_filename(aTHX_ file_sv);
+        SvREFCNT_dec(file_sv);
+        line = (UV)CopLINE(PL_curcop);
+        if (line == 0)
+            line = 1;
+    }
+    if (calls >= 2)
+        (void)nytp_emit_sub_entry(product_sink, (nytp_fid)fid, (nytp_line)line);
+    ret = orig ? orig(aTHX) : NORMAL;
+    (void)nytp_emit_sub_return(product_sink, (nytp_depth)1, 0.0, 0.0,
+                               nytp_sv_cstr(name));
+    (void)nytp_emit_sub_callers(product_sink, (nytp_fid)fid, (nytp_line)line,
+                                1U, 0.0, 0.0, 0.0, 0U, nytp_sv_cstr(name),
+                                nytp_sv_cstr(caller));
+    product_in_slowop = 0;
+    return ret;
+}
+
+static int
+product_install_slowops(pTHX)
+{
+    PERL_UNUSED_CONTEXT;
+    if (product_slowops_installed)
+        return 0;
+    product_orig_pp_print = PL_ppaddr[OP_PRINT];
+    PL_ppaddr[OP_PRINT] = pp_product_slowop;
+    product_orig_pp_match = PL_ppaddr[OP_MATCH];
+    PL_ppaddr[OP_MATCH] = pp_product_slowop;
+    product_slowops_installed = 1;
+    return 0;
+}
+
+static int product_rebind_match_hits = 0;
+
+static void
+product_rebind_op(pTHX_ OP *o)
+{
+    OP *kid;
+
+    PERL_UNUSED_CONTEXT;
+    if (o == NULL)
+        return;
+    if (o->op_type == OP_PRINT)
+        o->op_ppaddr = pp_product_slowop;
+    else if (o->op_type == OP_MATCH) {
+        o->op_ppaddr = pp_product_slowop;
+        product_rebind_match_hits++;
+    }
+    if (o->op_flags & OPf_KIDS) {
+        for (kid = cUNOPx(o)->op_first; kid != NULL; kid = OpSIBLING(kid))
+            product_rebind_op(aTHX_ kid);
+    }
+}
+
+static void
+product_rebind_cv(pTHX_ CV *cv)
+{
+    OP *o;
+    int n;
+
+    if (cv == NULL)
+        return;
+    if (CvROOT(cv))
+        product_rebind_op(aTHX_ CvROOT(cv));
+    /* Execution chain (ck_match may leave MATCH off the kid walk). */
+    o = CvSTART(cv);
+    for (n = 0; o != NULL && n < 100000; n++, o = o->op_next) {
+        if (o->op_type == OP_PRINT)
+            o->op_ppaddr = pp_product_slowop;
+        else if (o->op_type == OP_MATCH) {
+            o->op_ppaddr = pp_product_slowop;
+            product_rebind_match_hits++;
+        }
+    }
+}
+
+static int
+product_rebind_stash_slowops(pTHX_ const char *name)
+{
+    HV *stash;
+    HE *he;
+    int cvs = 0;
+
+    product_rebind_match_hits = 0;
+    if (name == NULL || name[0] == '\0')
+        return 0;
+    stash = gv_stashpv(name, 0);
+    if (stash == NULL)
+        return -1;
+    hv_iterinit(stash);
+    while ((he = hv_iternext(stash)) != NULL) {
+        SV *sv = HeVAL(he);
+        GV *gv;
+        CV *cv;
+        if (sv == NULL || SvTYPE(sv) != SVt_PVGV)
+            continue;
+        gv = (GV *)sv;
+        cv = GvCV(gv);
+        if (cv != NULL) {
+            cvs++;
+            product_rebind_cv(aTHX_ cv);
+        }
+    }
+    (void)cvs;
+    return 0;
+}
+
 MODULE = Devel::NYTProfM  PACKAGE = DB
 
 PROTOTYPES: DISABLE
@@ -767,6 +995,21 @@ int
 install_product_stmt_ops()
     CODE:
         RETVAL = product_install_stmt_ops(aTHX);
+    OUTPUT:
+        RETVAL
+
+int
+install_product_slowops()
+    CODE:
+        RETVAL = product_install_slowops(aTHX);
+    OUTPUT:
+        RETVAL
+
+int
+rebind_stash_slowops(name)
+    const char *name
+    CODE:
+        RETVAL = product_rebind_stash_slowops(aTHX_ name);
     OUTPUT:
         RETVAL
 
@@ -1048,3 +1291,26 @@ overflow_probe()
         }
     OUTPUT:
         RETVAL
+
+SV *
+name_cv(cvsv)
+    SV *cvsv
+    CODE:
+        {
+            char buf[256];
+            CV *cv = NULL;
+            if (cvsv != NULL && SvROK(cvsv)
+                && SvTYPE(SvRV(cvsv)) == SVt_PVCV) {
+                cv = (CV *)SvRV(cvsv);
+            }
+            else if (cvsv != NULL && SvTYPE(cvsv) == SVt_PVCV) {
+                cv = (CV *)cvsv;
+            }
+            product_fill_cv_name(aTHX_ cv, buf, sizeof(buf));
+            RETVAL = newSVpv(buf, 0);
+        }
+    OUTPUT:
+        RETVAL
+
+BOOT:
+    product_install_slowops(aTHX);

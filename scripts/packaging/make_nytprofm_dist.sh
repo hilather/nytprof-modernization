@@ -36,6 +36,7 @@ fi
 cp -a "$ROOT/Changes" "$STAGE/Changes"
 cp -a "$ROOT/t/workload-calls1.pl" "$STAGE/t/workload-calls1.pl"
 cp -a "$ROOT/t/installed_attach.t" "$STAGE/t/installed_attach.t"
+cp -a "$ROOT/t/nytprof_v5_tag_table.inc" "$STAGE/t/nytprof_v5_tag_table.inc"
 
 # Minimal facade: identity only. %build does not run this for XS.
 cat > "$STAGE/Makefile.PL" <<'PL'

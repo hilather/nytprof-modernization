@@ -5,8 +5,9 @@
 
 package Devel::NYTProfM::Core;
 
-use strict;
-use warnings;
+# No `use warnings` before XSLoader — 6.15 Core.pm is the same. MATCH ops
+# compiled before PL_ppaddr[OP_MATCH] is redirected keep the original
+# op_ppaddr and never become warnings::CORE:match.
 
 use XSLoader;
 

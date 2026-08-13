@@ -11,7 +11,7 @@
 
 This contract extracts the binding drop-in DoD from the approved rev-4 design. It does **not** supersede the [program charter](https://github.com/hilather/nytprof-modernization/blob/main/docs/PROGRAM_CHARTER.md), accepted ADRs 0001–0009, or the residual matrix.
 
-**Explicit honesty:** G03a **load** is landed (`perl -d:NYTProf` loads product `Devel::NYTProf`; no `nytprof.out` on trivial `-e`). G03b–G03e **emit-MVP** remain. G04 **attach-MVP** is landed: live `perl -d:NYTProf` with `NYTPROF file=` on a default-calls1-shaped program writes `NYTProf 5`; shipped dump/report shows leaf **15** / mid **3** / mid→leaf **15**. This is Perl `DB::sub`/`DB::DB`, **not** full 6.15 opcode/`entersub`. G05 **options + format=v6** tests are landed: unknown keys and `format=dual` fail-closed; D1-B `format=v6` fail-closed (`v6_collect` rebuild text, no `NYTPROF6` file); D1-A `xs-nytprof-v6` writes `NYTPROF6`; default/`format=v5` live attach still leaf **15** / mid **3** / mid→leaf **15**. G06 **fork/`addpid` MVP** is landed: live `fork` + `addpid=1` writes parent `NYTProf 5` and `<file>.<childpid>` `NYTProf 5` via shipped `nytp_fork_*`. **Residuals:** mid-deflate continue-in-child, full TEST-018, `sigexit`, blocks-calls1 line5 **780**. Do **not** claim collection drop-in, CPAN-TRIAL, EL8 RPM, or full BUILD-003.
+**Explicit honesty:** G03a **load** is landed (`perl -d:NYTProf` loads product `Devel::NYTProf`; no `nytprof.out` on trivial `-e`). G03b–G03e **emit-MVP** remain. G04 **attach-MVP** is landed: live `perl -d:NYTProf` with `NYTPROF file=` on a default-calls1-shaped program writes `NYTProf 5`; shipped dump/report shows leaf **15** / mid **3** / mid→leaf **15**. This is Perl `DB::sub`/`DB::DB`, **not** full 6.15 opcode/`entersub`. G05 **options + format=v6** tests are landed: unknown keys and `format=dual` fail-closed; D1-B `format=v6` fail-closed (`v6_collect` rebuild text, no `NYTPROF6` file); D1-A `xs-nytprof-v6` writes `NYTPROF6`; default/`format=v5` live attach still leaf **15** / mid **3** / mid→leaf **15**. G06 **fork/`addpid` MVP** is landed: live `fork` + `addpid=1` writes parent `NYTProf 5` and `<file>.<childpid>` `NYTProf 5` via shipped `nytp_fork_*`. **Residuals:** mid-deflate continue-in-child, full TEST-018, `sigexit`. DI-01 live **780/810** and DI-02 live **27** + CORE: names are landed (not full opcode). Do **not** claim collection drop-in, CPAN-TRIAL, EL8 RPM, or full BUILD-003.
 
 ---
 
@@ -84,7 +84,7 @@ Sources: `baseline/6.15/src/NYTProf.xs` options table (~lines 249–283) + strin
 | `stmts` | statement profiling | **work** (G03b) | work | |
 | `blocks` | TIME_BLOCK | **live attach work** (DI-01 780/810; not full opcode) | work | G03b emit + PR-B1 live `blocks=1`; not DI-03 |
 | `subs` | sub profiling | **work** (G03c) | work | |
-| `calls` | 0/1/2 entry-return | **work** 0/1/2 on primary fixtures | work | XSUB/goto/exception residual OI-003-03 |
+| `calls` | 0/1/2 entry-return | **live attach work** (`calls=2` SUB_ENTRY **27** + CORE:print/match) | work | XSUB/goto/exception residual OI-003-03; not full opcode |
 | `leave` | leave correction | residual or work | work if green else residual | |
 | `slowops` | slow op profiling | residual | residual or work | fail-closed if unsupported |
 | `usecputime` | removed in 6.15 | fail-closed / warn like 6.15 | same | 6.15 warns removed |
