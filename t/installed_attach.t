@@ -55,9 +55,49 @@ print "OK: installed attach leaf=15 mid=3 edge=15\n";
     local $/;
     my $bytes = <$fh>;
     close $fh;
-    $bytes =~ /HASH\(/
+    die "omitted compress must write START_DEFLATE z\n"
+      unless defined $bytes && $bytes =~ /^NYTProf 5 0\n/ && index( $bytes, 'z' ) >= 0;
+    my $zi = index( $bytes, 'z' );
+    my $cmf = ord( substr( $bytes, $zi + 1, 1 ) );
+    die "omitted compress zlib CMF=$cmf want 0x78\n" unless $cmf == 0x78;
+    my $plain = substr( $bytes, 0, $zi ) . inflate_v5_zlib( substr( $bytes, $zi + 1 ) );
+    $plain =~ /HASH\(/
       and die "profile must not contain HASH( caller names\n";
 }
+
+# PR-S1/S2: omitted compress is zlib-6. Also assert explicit compress=1
+# (level 1) still yields 15/3/15 through the same inflater.
+{
+    my $zprofile = File::Spec->catfile( $tmp, 'nytprof.z.out' );
+    local $ENV{NYTPROF} = "file=$zprofile:compress=1";
+    local $ENV{PERL5OPT};
+    my $perl = $^X;
+    my @inc  = map { ( '-I', $_ ) } grep { defined && length } @INC;
+    my $rc   = system( $perl, @inc, '-d:NYTProfM', $workload );
+    die "installed perl -d:NYTProfM compress=1 failed (rc=$rc)\n" if $rc != 0;
+    -f $zprofile or die "compress=1 attach did not write $zprofile\n";
+    my ( $zl, $zm, $ze ) = scan_profile($zprofile);
+    die "compress=1 leaf SUB_RETURN=$zl want 15\n" unless $zl == 15;
+    die "compress=1 mid SUB_RETURN=$zm want 3\n"   unless $zm == 3;
+    die "compress=1 mid->leaf CALLERS=$ze want 15\n" unless $ze == 15;
+    print "OK: installed attach compress=1 leaf=15 mid=3 edge=15\n";
+}
+
+# aggregate=1 is residual (ADR-0013 proposed); must not silently no-op.
+{
+    my $agg = File::Spec->catfile( $tmp, 'nytprof.agg' );
+    local $ENV{NYTPROF} = "file=$agg:aggregate=1";
+    local $ENV{PERL5OPT};
+    my $perl = $^X;
+    my @inc  = map { ( '-I', $_ ) } grep { defined && length } @INC;
+    my $out  = `$perl @inc -d:NYTProfM -e 1 2>&1`;
+    my $rc   = $? >> 8;
+    die "aggregate=1 must fail (rc=$rc)\n" if $rc == 0;
+    $out =~ /ADR-0013/
+      or die "aggregate=1 error missing ADR-0013 text: $out\n";
+    die "aggregate=1 must not write $agg\n" if -e $agg;
+}
+print "OK: installed aggregate=1 fail-closed\n";
 
 # format=v6 must fail-closed on D1-B (no NYTPROF6 file).
 {
@@ -75,11 +115,46 @@ print "OK: installed attach leaf=15 mid=3 edge=15\n";
 print "OK: installed format=v6 fail-closed\n";
 exit 0;
 
+# Fail-closed inflate of a v5 START_DEFLATE member (windowBits=15 zlib).
+# Cap before allocating the inflated SV (SEC-004 spirit). Nested `z` is
+# rejected by scan_tags(..., forbid_z => 1).
+sub inflate_v5_zlib {
+    my ($src) = @_;
+    my $max = 64 * 1024 * 1024;
+    die "deflate member oversize\n" if length($src) > $max;
+    eval { require Compress::Raw::Zlib; 1 }
+      or die "Compress::Raw::Zlib required to parse compress=1 profiles: $@\n";
+    my ( $inf, $ist ) = Compress::Raw::Zlib::Inflate->new(
+        -WindowBits  => 15,
+        -Bufsize     => 65536,
+        -LimitOutput => 1,
+    );
+    die "inflate init failed ($ist)\n" unless $inf;
+    my $out   = '';
+    my $input = $src;
+    while ( length $input ) {
+        my $chunk = '';
+        my $st    = $inf->inflate( $input, $chunk );
+        $out .= $chunk if defined $chunk;
+        die "inflated profile exceeds 64 MiB\n" if length($out) > $max;
+        return $out if $st == Compress::Raw::Zlib::Z_STREAM_END();
+        die "inflate failed status=$st\n"
+          unless $st == Compress::Raw::Zlib::Z_OK();
+        last unless defined $chunk && length $chunk;
+    }
+    die "inflate incomplete (no Z_STREAM_END)\n";
+}
+
 sub scan_profile {
     my ($path) = @_;
     open my $fh, '<:raw', $path or die "open $path: $!\n";
     my $hdr = <$fh>;
     die "bad magic (not NYTProf 5)\n" unless defined $hdr && $hdr =~ /^NYTProf 5/;
+    return scan_tags( $fh, 0 );
+}
+
+sub scan_tags {
+    my ( $fh, $forbid_z ) = @_;
     my $leaf = 0;
     my $mid  = 0;
     my $edge = 0;
@@ -93,7 +168,17 @@ sub scan_profile {
             next;
         }
         if ( $tag eq 'z' ) {
-            die "START_DEFLATE not supported in installed tag parser\n";
+            die "nested START_DEFLATE (fail closed)\n" if $forbid_z;
+            local $/;
+            my $rest = <$fh>;
+            $rest = '' unless defined $rest;
+            my $body = inflate_v5_zlib($rest);
+            open my $inf, '<:raw', \$body or die "inflate fh: $!\n";
+            my ( $l2, $m2, $e2 ) = scan_tags( $inf, 1 );
+            $leaf += $l2;
+            $mid  += $m2;
+            $edge += $e2;
+            last;
         }
         if ( $tag eq '<' ) {
             read_u32($fh);    # depth (already consumed tag)

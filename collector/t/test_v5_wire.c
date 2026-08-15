@@ -776,6 +776,174 @@ static void test_no_seq_on_wire(void)
     nytp_sink_destroy(s);
 }
 
+static uint8_t *slurp_file(const char *path, size_t *n_out)
+{
+    FILE *fp = fopen(path, "rb");
+    long sz;
+    uint8_t *buf;
+    size_t n;
+    if (!fp) {
+        return NULL;
+    }
+    if (fseek(fp, 0, SEEK_END) != 0) {
+        fclose(fp);
+        return NULL;
+    }
+    sz = ftell(fp);
+    if (sz < 0) {
+        fclose(fp);
+        return NULL;
+    }
+    rewind(fp);
+    n = (size_t)sz;
+    buf = (uint8_t *)malloc(n ? n : 1);
+    if (!buf) {
+        fclose(fp);
+        return NULL;
+    }
+    if (n > 0 && fread(buf, 1, n, fp) != n) {
+        free(buf);
+        fclose(fp);
+        return NULL;
+    }
+    fclose(fp);
+    if (n_out) {
+        *n_out = n;
+    }
+    return buf;
+}
+
+static int disk_has_tag_z(const uint8_t *b, size_t n)
+{
+    size_t i;
+    if (!b || n < 13) {
+        return 0;
+    }
+    for (i = 12; i < n; i++) {
+        if (b[i] == 'z') {
+            return 1;
+        }
+    }
+    return 0;
+}
+
+static int disk_inflates_pid_end(const uint8_t *b, size_t n)
+{
+    size_t i;
+    size_t z_off = 0;
+    size_t blen = 0;
+    uint8_t *body;
+    int found = 0;
+    if (!b || n < 13) {
+        return 0;
+    }
+    for (i = 12; i < n; i++) {
+        if (b[i] == 'z') {
+            z_off = i;
+            break;
+        }
+    }
+    if (z_off == 0) {
+        return 0;
+    }
+    body = inflate_after_z(b, n, z_off, &blen);
+    if (!body) {
+        return 0;
+    }
+    for (i = 0; i < blen; i++) {
+        if (body[i] == 'p') {
+            found = 1;
+            break;
+        }
+    }
+    free(body);
+    return found;
+}
+
+static void test_durable_seal_then_close_stays_zlib(void)
+{
+    const char *path = "build/durable_seal_close.nytprof";
+    nytp_sink *s = nytp_v5_sink_create_ex(path, 6);
+    uint8_t *disk = NULL;
+    size_t dn = 0;
+    EXPECT(s != NULL, "create");
+    if (!s) {
+        return;
+    }
+    EXPECT(nytp_v5_sink_set_durable(s, 1) == NYTP_OK, "set durable");
+    EXPECT(nytp_sink_activate(s) == NYTP_OK, "act");
+    EXPECT(nytp_emit_pid_start(s, 7, 1, 0.0) == NYTP_OK, "pid");
+    EXPECT(nytp_v5_sink_mark_header_end(s) == NYTP_OK, "header_end");
+    EXPECT(nytp_v5_sink_header_end(s) > 12, "header_end > magic");
+    EXPECT(nytp_emit_time_line(s, 9, 1, 3) == NYTP_OK, "tl");
+    EXPECT(nytp_emit_pid_end(s, 7, 1.0) == NYTP_OK, "pid_end");
+    EXPECT(nytp_v5_seal_publish(s) == NYTP_OK, "seal");
+    EXPECT(nytp_sink_close(s) == NYTP_OK, "close after seal");
+    /* Live RAM stays uncompressed (no live z). */
+    EXPECT(!nytp_v5_sink_is_deflating(s), "live RAM not deflating");
+    nytp_sink_destroy(s);
+    disk = slurp_file(path, &dn);
+    EXPECT(disk != NULL && dn > 12, "disk present");
+    if (disk) {
+        EXPECT(memcmp(disk, "NYTProf 5 0\n", 12) == 0, "magic");
+        EXPECT(disk_has_tag_z(disk, dn), "sealed file has z");
+        EXPECT(disk_inflates_pid_end(disk, dn), "inflate to PID_END");
+        free(disk);
+    }
+}
+
+static void test_durable_seal_then_flush_stays_zlib(void)
+{
+    const char *path = "build/durable_seal_flush.nytprof";
+    nytp_sink *s = nytp_v5_sink_create_ex(path, 6);
+    uint8_t *disk = NULL;
+    size_t dn = 0;
+    EXPECT(s != NULL, "create");
+    if (!s) {
+        return;
+    }
+    EXPECT(nytp_v5_sink_set_durable(s, 1) == NYTP_OK, "durable");
+    EXPECT(nytp_sink_activate(s) == NYTP_OK, "act");
+    EXPECT(nytp_emit_pid_start(s, 8, 1, 0.0) == NYTP_OK, "pid");
+    EXPECT(nytp_v5_sink_mark_header_end(s) == NYTP_OK, "mark");
+    EXPECT(nytp_emit_time_line(s, 4, 1, 2) == NYTP_OK, "tl");
+    EXPECT(nytp_emit_pid_end(s, 8, 1.0) == NYTP_OK, "pe");
+    EXPECT(nytp_v5_seal_publish(s) == NYTP_OK, "seal");
+    EXPECT(nytp_sink_flush(s) == NYTP_OK, "flush after seal");
+    nytp_sink_destroy(s);
+    disk = slurp_file(path, &dn);
+    EXPECT(disk != NULL, "disk");
+    if (disk) {
+        EXPECT(disk_has_tag_z(disk, dn), "flush did not drop z");
+        EXPECT(disk_inflates_pid_end(disk, dn), "flush still inflates");
+        free(disk);
+    }
+}
+
+static void test_durable_fork_reinit_resets_cursors(void)
+{
+    const char *parent = "build/durable_fork_parent.nytprof";
+    const char *child = "build/durable_fork_child.nytprof";
+    nytp_sink *s = nytp_v5_sink_create_ex(parent, 6);
+    EXPECT(s != NULL, "create");
+    if (!s) {
+        return;
+    }
+    EXPECT(nytp_v5_sink_set_durable(s, 1) == NYTP_OK, "durable");
+    EXPECT(nytp_sink_activate(s) == NYTP_OK, "act");
+    EXPECT(nytp_emit_pid_start(s, 1, 0, 0.0) == NYTP_OK, "pid");
+    EXPECT(nytp_v5_sink_mark_header_end(s) == NYTP_OK, "mark");
+    EXPECT(nytp_v5_sink_header_end(s) > 12, "parent header_end");
+    EXPECT(nytp_v5_sink_fork_child_reinit(s, child) == NYTP_OK, "reinit");
+    EXPECT(nytp_v5_sink_header_end(s) == nytp_v5_sink_wire_len(s),
+           "child header_end == len");
+    EXPECT(nytp_v5_sink_wire_len(s) == 12, "child header-only");
+    EXPECT(nytp_v5_sink_len_at_last_seal(s) == 0, "seal cursor reset");
+    EXPECT(nytp_v5_seal_publish(s) == NYTP_OK, "child seal no overflow");
+    EXPECT(nytp_sink_close(s) == NYTP_OK, "close");
+    nytp_sink_destroy(s);
+}
+
 int main(void)
 {
     test_packed_u32_boundaries();
@@ -786,6 +954,9 @@ int main(void)
     test_null_string_view_no_partial_write();
     test_mid_deflate_flush_not_complete();
     test_no_seq_on_wire();
+    test_durable_seal_then_close_stays_zlib();
+    test_durable_seal_then_flush_stays_zlib();
+    test_durable_fork_reinit_resets_cursors();
 
     if (failures != 0) {
         fprintf(stderr, "test_v5_wire: %d failure(s)\n", failures);

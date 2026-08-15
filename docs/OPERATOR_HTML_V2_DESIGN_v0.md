@@ -252,29 +252,32 @@ flowchart LR
 
 Keep one `SHARED_STYLE_CSS` published as `style.css` (multi-file) / inlined (single-file). Rewrite the constant as **layered tokens + components**. Do not add a second stylesheet.
 
+**2026-08-15 visual refresh (CSS-only):** the constant was restyled in place — carded tables with hairline separators and sticky `thead th`, pill `← Index`, accent-bar `.index_summary`, `tr:target` line highlight, sort-affordance `⇅` hints, and a `prefers-color-scheme: dark` block that re-tunes the same tokens (heat included). **No selector, class, ID, or markup changed**; token names below are stable, values are the current light theme. Extra presentation tokens (`--nyt-surface`, `--nyt-row-hover`, `--nyt-target`, `--nyt-th-fg`, `--nyt-radius`, `--nyt-shadow`) may evolve without contract churn.
+
 ```css
 :root {
-  --nyt-font: system-ui, "Segoe UI", sans-serif;
+  --nyt-font: system-ui, "Segoe UI", sans-serif;   /* + -apple-system/Roboto fallbacks */
   --nyt-mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
-  --nyt-fg: #222;
-  --nyt-bg: #fff;
-  --nyt-link: #00c;          /* oracle a { color: blue } */
+  --nyt-fg: #1f2328;
+  --nyt-bg: #f6f8fa;        /* page; tables/cards sit on --nyt-surface #fff */
+  --nyt-link: #0563c1;      /* near-oracle blue */
   --nyt-link-visited: #6d00e6;
   --nyt-link-hover: #c00;
   --nyt-header-top: rgb(17, 136, 255);
   --nyt-header-bot: rgb(0, 68, 187);
   --nyt-header-fg: #fff;
-  --nyt-th: #ddd;
-  --nyt-th-border: #666;
-  --nyt-td-border: #ccc;
-  --nyt-caption: #ddd;
-  --nyt-footer: #ccc;
-  --nyt-calls: #666;
-  /* oracle get_css() c0–c3 (color-safe web palette) */
+  --nyt-th: #eef1f4;        /* softer than oracle #ddd */
+  --nyt-th-border: #d0d7de;
+  --nyt-td-border: #d8dee4;
+  --nyt-caption: #eef1f4;
+  --nyt-footer: #d0d7de;
+  --nyt-calls: #57606a;
+  /* oracle get_css() c0–c3 (color-safe web palette) — light theme */
   --nyt-c0: #ffb3b3; /* hottest */
   --nyt-c1: #ffd9b4;
   --nyt-c2: #ffffb4;
   --nyt-c3: #b4ffb4; /* coolest */
+  /* dark theme: same tokens overridden inside @media (prefers-color-scheme: dark) */
 }
 ```
 
@@ -301,15 +304,16 @@ Keep one `SHARED_STYLE_CSS` published as `style.css` (multi-file) / inlined (sin
 
 ```css
 .header {
-  background: linear-gradient(to bottom, var(--nyt-header-top), var(--nyt-header-bot));
+  background: linear-gradient(135deg, var(--nyt-header-top), var(--nyt-header-bot));
   color: var(--nyt-header-fg);
-  position: relative;
-  min-height: 7.5rem;
-  padding: 0.5rem 1rem 1rem;
+  padding: 1.15rem 1.5rem 1.35rem;
+  box-shadow: 0 2px 12px rgba(0, 32, 96, .3);
 }
 ```
 
-**Density:** oracle `th,td` padding `0 0.4em`; `th` `font-size: 0.8em`; `tr` `vertical-align: top`; source `.s` monospace pre. Match that density — current native `0.25rem 0.5rem` + 1.5rem body margin is too airy to “feel the same.”
+(Still **one** `linear-gradient` — direction refreshed to 135deg, fixed 7.5rem min-height dropped for a slimmer bar, 2026-08-15.)
+
+**Density:** oracle `th,td` padding `0 0.4em`; `th` `font-size: 0.8em`; `tr` `vertical-align: top`; source `.s` monospace pre. As of the 2026-08-15 refresh, native uses `.45em .75em` with **hairline-only horizontal separators** (no vertical grid): scanning ease now comes from whitespace + row hover instead of the oracle's 1px box grid, and tabular-nums + right-aligned numerics keep the dense numeric read.
 
 ### Sort JS (`nytprof-sort.js`)
 

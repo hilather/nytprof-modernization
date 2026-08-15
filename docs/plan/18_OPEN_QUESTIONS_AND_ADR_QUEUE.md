@@ -262,6 +262,15 @@ Record decisions that affect stable semantics, wire bytes, platform support, pac
 - **Recommended direction:** no automatic retirement; separate decisions per component after deprecation — **accepted in ADR-0009**; absence of retirement is valid success.
 - **Decision must specify:** warning period, alternatives, support end, file-format longevity — **process specified in ADR-0009** + per-component ADRs when (if ever) executed.
 
+### ADR-Q027 - v5 in-process coalesced checkpoints (charter exception)
+
+- **Status:** open (proposed vehicle: [ADR-0013](https://github.com/hilather/nytprof-modernization/blob/main/docs/adrs/0013-v5-coalesced-checkpoints.md))
+- **Blocks:** item-3 implementation (PR-C1 / PR-C2)
+- **Question:** May NYTProfM, under explicit `aggregate=1`, replace the ordered per-interval TIME_LINE / TIME_BLOCK / per-return SUB_CALLERS stream with in-memory maps and coalesced v5 records, violating charter #2–#4 and plan 01 A2/A4?
+- **Evidence required:** charter + plan 01 cites; model `LineTotal.calls` increment; di01 780 occupancy; installed_attach per-tag edge count; field file sizes (engineering only); owner identity for sign-off.
+- **Recommended direction:** allow **only** as an opt-in exception with default `aggregate=0`; dirty-delta emit; same-file v5 tags; no R4 flip.
+- **Decision must specify:** project-owner name, lost counts vs kept totals, fail-closed caps, test bars that stay on `aggregate=0`.
+
 ### BUILD-LAYOUT - Collector packaging / source-tree overlay (design-program OQ-8)
 
 - **Status:** accepted

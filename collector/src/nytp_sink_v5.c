@@ -7,11 +7,14 @@
  */
 #include "nytp_sink_v5.h"
 
+#include <errno.h>
+#include <fcntl.h>
 #include <limits.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <unistd.h>
 
 #include <zlib.h>
 
@@ -51,6 +54,10 @@ typedef struct v5_impl {
     int deflate_finished;
     int file_written;
     int header_ok;
+    int durable; /* 1 => flush/close are seal_publish; live RAM uncompressed */
+    size_t header_end;
+    size_t len_at_last_seal;
+    int last_seal_ok;
     z_stream zs;
 } v5_impl;
 
@@ -462,10 +469,238 @@ static nytp_status write_to_path(v5_impl *vi)
     return NYTP_OK;
 }
 
+static nytp_status atomic_replace_path(const char *path, const uint8_t *data,
+                                       size_t n)
+{
+    char tmp[4096];
+    int fd;
+    size_t off = 0;
+    int ntmp;
+
+    if (path == NULL) {
+        return NYTP_OK;
+    }
+    ntmp = snprintf(tmp, sizeof(tmp), "%s.tmp", path);
+    if (ntmp < 0 || (size_t)ntmp >= sizeof(tmp)) {
+        return NYTP_ERR_OVERFLOW;
+    }
+    fd = open(tmp, O_WRONLY | O_CREAT | O_TRUNC, 0644);
+    if (fd < 0) {
+        return NYTP_ERR_IO;
+    }
+    while (off < n) {
+        ssize_t w = write(fd, data + off, n - off);
+        if (w < 0) {
+            if (errno == EINTR) {
+                continue;
+            }
+            (void)close(fd);
+            (void)unlink(tmp);
+            return NYTP_ERR_IO;
+        }
+        off += (size_t)w;
+    }
+    if (fsync(fd) != 0) {
+        (void)close(fd);
+        (void)unlink(tmp);
+        return NYTP_ERR_IO;
+    }
+    if (close(fd) != 0) {
+        (void)unlink(tmp);
+        return NYTP_ERR_IO;
+    }
+    if (rename(tmp, path) != 0) {
+        (void)unlink(tmp);
+        return NYTP_ERR_IO;
+    }
+    return NYTP_OK;
+}
+
+static nytp_status sealed_zlib_copy(v5_impl *vi, uint8_t **outp, size_t *outn)
+{
+    size_t prefix = vi->header_end;
+    const uint8_t *body;
+    size_t blen;
+    int level;
+    z_stream zs;
+    uint8_t *out;
+    size_t cap;
+    size_t used;
+    int zst;
+
+    if (prefix > vi->len) {
+        return NYTP_ERR_OVERFLOW;
+    }
+    body = vi->buf + prefix;
+    blen = vi->len - prefix;
+    level = vi->compress_level > 0 ? vi->compress_level
+                                   : NYTP_V5_DEFAULT_COMPRESS;
+    cap = prefix + 1u + blen + 128u;
+    if (cap < prefix + 256u) {
+        cap = prefix + 256u;
+    }
+    out = (uint8_t *)malloc(cap);
+    if (!out) {
+        return NYTP_ERR_IO;
+    }
+    if (prefix > 0) {
+        memcpy(out, vi->buf, prefix);
+    }
+    out[prefix] = NYTP_TAG_START_DEFLATE;
+    used = prefix + 1u;
+    memset(&zs, 0, sizeof(zs));
+    zst = deflateInit2(&zs, level, Z_DEFLATED, 15, 8, Z_DEFAULT_STRATEGY);
+    if (zst != Z_OK) {
+        free(out);
+        return NYTP_ERR_IO;
+    }
+    zs.next_in = (Bytef *)(uintptr_t)body;
+    zs.avail_in = (uInt)blen;
+    for (;;) {
+        size_t room;
+        if (used + 256u > cap) {
+            size_t ncap = cap * 2u;
+            uint8_t *nbuf;
+            if (ncap < used + 256u) {
+                ncap = used + 256u;
+            }
+            nbuf = (uint8_t *)realloc(out, ncap);
+            if (!nbuf) {
+                (void)deflateEnd(&zs);
+                free(out);
+                return NYTP_ERR_IO;
+            }
+            out = nbuf;
+            cap = ncap;
+        }
+        room = cap - used;
+        zs.next_out = out + used;
+        zs.avail_out = (uInt)(room > 0xFFFFu ? 0xFFFFu : room);
+        zst = deflate(&zs, Z_FINISH);
+        used = (size_t)(zs.next_out - out);
+        if (zst == Z_STREAM_END) {
+            break;
+        }
+        if (zst != Z_OK && zst != Z_BUF_ERROR) {
+            (void)deflateEnd(&zs);
+            free(out);
+            return NYTP_ERR_IO;
+        }
+    }
+    (void)deflateEnd(&zs);
+    *outp = out;
+    *outn = used;
+    return NYTP_OK;
+}
+
+nytp_status nytp_v5_sink_set_durable(nytp_sink *sink, int durable)
+{
+    v5_impl *vi;
+    if (!nytp_v5_sink_is_v5(sink) || !sink->impl) {
+        return NYTP_ERR_NULL;
+    }
+    vi = (v5_impl *)sink->impl;
+    if (vi->deflating) {
+        return NYTP_ERR_STATE;
+    }
+    vi->durable = durable ? 1 : 0;
+    return NYTP_OK;
+}
+
+int nytp_v5_sink_is_durable(const nytp_sink *sink)
+{
+    v5_impl *vi;
+    if (!nytp_v5_sink_is_v5(sink) || !sink->impl) {
+        return 0;
+    }
+    vi = (v5_impl *)sink->impl;
+    return vi->durable;
+}
+
+nytp_status nytp_v5_sink_mark_header_end(nytp_sink *sink)
+{
+    v5_impl *vi;
+    if (!nytp_v5_sink_is_v5(sink) || !sink->impl) {
+        return NYTP_ERR_NULL;
+    }
+    vi = (v5_impl *)sink->impl;
+    vi->header_end = vi->len;
+    return NYTP_OK;
+}
+
+size_t nytp_v5_sink_header_end(const nytp_sink *sink)
+{
+    v5_impl *vi;
+    if (!nytp_v5_sink_is_v5(sink) || !sink->impl) {
+        return 0;
+    }
+    vi = (v5_impl *)sink->impl;
+    return vi->header_end;
+}
+
+size_t nytp_v5_sink_len_at_last_seal(const nytp_sink *sink)
+{
+    v5_impl *vi;
+    if (!nytp_v5_sink_is_v5(sink) || !sink->impl) {
+        return 0;
+    }
+    vi = (v5_impl *)sink->impl;
+    return vi->len_at_last_seal;
+}
+
+nytp_status nytp_v5_seal_publish(nytp_sink *sink)
+{
+    v5_impl *vi;
+    nytp_status st;
+    uint8_t *copy = NULL;
+    size_t copy_len = 0;
+    int need_free = 0;
+
+    if (!nytp_v5_sink_is_v5(sink) || !sink->impl) {
+        return NYTP_ERR_NULL;
+    }
+    vi = (v5_impl *)sink->impl;
+    if (vi->last_seal_ok && vi->len == vi->len_at_last_seal) {
+        return NYTP_OK;
+    }
+    if (vi->header_end > vi->len) {
+        return NYTP_ERR_OVERFLOW;
+    }
+    if (vi->compress_level > 0) {
+        st = sealed_zlib_copy(vi, &copy, &copy_len);
+        if (st != NYTP_OK) {
+            return st;
+        }
+        need_free = 1;
+    } else {
+        copy = vi->buf;
+        copy_len = vi->len;
+    }
+    if (vi->path) {
+        st = atomic_replace_path(vi->path, copy, copy_len);
+        if (st != NYTP_OK) {
+            if (need_free) {
+                free(copy);
+            }
+            return st;
+        }
+        vi->file_written = 1;
+    }
+    if (need_free) {
+        free(copy);
+    }
+    vi->len_at_last_seal = vi->len;
+    vi->last_seal_ok = 1;
+    return NYTP_OK;
+}
+
 static nytp_status v5_flush(nytp_sink *sink)
 {
     v5_impl *vi = vi_of(sink);
     nytp_status st;
+    if (vi->durable) {
+        return nytp_v5_seal_publish(sink);
+    }
     /*
      * Mid-stream flush does **not** call Z_FINISH. Path/buffer after flush
      * while deflating is an unfinished zlib snapshot — **not** decoder-ready.
@@ -484,7 +719,11 @@ static nytp_status v5_flush(nytp_sink *sink)
 static nytp_status v5_close(nytp_sink *sink)
 {
     v5_impl *vi = vi_of(sink);
-    nytp_status st = deflate_finish(vi);
+    nytp_status st;
+    if (vi->durable) {
+        return nytp_v5_seal_publish(sink);
+    }
+    st = deflate_finish(vi);
     if (st != NYTP_OK) {
         return st;
     }
@@ -915,6 +1154,9 @@ static nytp_status v5_emit_start_deflate(nytp_sink *sink)
     int zst;
     nytp_status st;
 
+    if (vi->durable) {
+        return NYTP_ERR_STATE;
+    }
     if (vi->deflating || vi->deflate_finished) {
         return NYTP_ERR_STATE;
     }
@@ -988,6 +1230,10 @@ static nytp_sink *v5_create_common(const char *path, int compress_level)
         return NULL;
     }
     vi->header_ok = 1;
+    vi->durable = 0;
+    vi->header_end = vi->len;
+    vi->len_at_last_seal = 0;
+    vi->last_seal_ok = 0;
     sink->ops = &v5_ops;
     sink->state = NYTP_SINK_OPEN;
     sink->impl = vi;
@@ -1156,5 +1402,8 @@ nytp_status nytp_v5_sink_fork_child_reinit(nytp_sink *sink, const char *new_path
         return st;
     }
     vi->header_ok = 1;
+    vi->header_end = vi->len;
+    vi->len_at_last_seal = 0;
+    vi->last_seal_ok = 0;
     return NYTP_OK;
 }

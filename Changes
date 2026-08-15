@@ -1,6 +1,11 @@
 Revision history for NYTProfM (product modernization)
 
 6.15  2026-08-15
+        v0.2.8 testdrive: omitted compress is zlib-6; opt-in durable=1
+        sealed publish; collection-only RPM 6.15-3 (nytprofm-cli, sits
+        beside stock nytprofhtml); aggregate=1 fail-closed (ADR-0013
+        proposed). Not PAUSE/COPR/GPG. Not default-on durable.
+
         v0.2.7 testdrive: operator HTML v2 (chrome/IA/sort/compact time),
         opt-in call-tree --flame (hover + click-to-source), live attach
         incl/excl (clock + pending child excl), Rocky dual-engine Docker

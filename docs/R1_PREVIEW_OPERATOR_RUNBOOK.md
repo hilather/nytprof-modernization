@@ -400,12 +400,13 @@ G01 landed the drop-in DoD, graft annex, and three isolation profiles. G02 lande
 | `G03C-SUB-EMIT` | **done** — `nytp_emit_sub_*` call path; dump SUB_ENTRY / SUB_RETURN; [g03c_sub_emit_smoke.sh](https://github.com/hilather/nytprof-modernization/blob/main/scripts/packaging/g03c_sub_emit_smoke.sh) |
 | `G03D-META-EMIT` | **done** — `nytp_emit_*` meta/finalize; dump ATTRIBUTE / OPTION / NEW_FID / SRC_LINE / SUB_INFO / PID_START / PID_END; [g03d_meta_emit_smoke.sh](https://github.com/hilather/nytprof-modernization/blob/main/scripts/packaging/g03d_meta_emit_smoke.sh) |
 | `G03E-COMPRESS-EMIT` | **done** — `nytp_emit_start_deflate`; dump/verify inflate recovers a post-deflate event; mid-deflate fork residual; [g03e_compress_emit_smoke.sh](https://github.com/hilather/nytprof-modernization/blob/main/scripts/packaging/g03e_compress_emit_smoke.sh) |
+| Product `compress` / `durable` | Omitted `compress` ⇒ zlib **level 6** (6.15 `HAS_ZLIB`). `compress=0` disables. `compress=1..9` is that zlib level. `durable=1` (default **0**) keeps live RAM uncompressed and publishes complete-record snapshots (`tmp`+`fsync`+`rename`; `z`+`Z_FINISH` copy when compress≠0). Mid-run `kill -9` after a seal is dumpable; torn live `z` is never verify `OK:`. [di_durable_kill_smoke.sh](https://github.com/hilather/nytprof-modernization/blob/main/scripts/packaging/di_durable_kill_smoke.sh). **Not** default-on durable; **not** `aggregate=1` (ADR-0013 proposed). |
 | `PRODUCT-XS-ATTACH-MVP` / collection attach | **done (MVP)** — [g04_v5_parity_smoke.sh](https://github.com/hilather/nytprof-modernization/blob/main/scripts/packaging/g04_v5_parity_smoke.sh) leaf **15** / mid **3** / edge **15**; not full opcode |
 | `PRODUCT-FORK-ADDPID-MVP` | **done (MVP)** — [g06_fork_addpid_smoke.sh](https://github.com/hilather/nytprof-modernization/blob/main/scripts/packaging/g06_fork_addpid_smoke.sh) parent + `<file>.<pid>` `NYTProf 5`; not TEST-018 / mid-deflate-in-child |
 | `product_attach_smoke.sh` | G03a load via real `-d:NYTProf` (no `file=`); not in `offline_gate.sh` |
 | `product_legacy_smoke.sh` | **I01 done (MVP)** — cargo-free prefix install + live attach 15/3/15; not in `offline_gate.sh`; S2 dual_path not claimed |
 | `I02-MAKEMAKER-NATIVE` | **done (MVP)** — [i02_makemaker_native_smoke.sh](https://github.com/hilather/nytprof-modernization/blob/main/scripts/packaging/i02_makemaker_native_smoke.sh): `NYTPROF_NATIVE=1` fail-closed without cargo; `auto`/`=0` cargo-free; cargo-present `nytprof-cli` 15/3/15 |
-| `I03-DIST-SCRIPTS` | **done (MVP)** — [install_product_scripts.sh](https://github.com/hilather/nytprof-modernization/blob/main/scripts/packaging/install_product_scripts.sh) + [i03_dist_scripts_smoke.sh](https://github.com/hilather/nytprof-modernization/blob/main/scripts/packaging/i03_dist_scripts_smoke.sh): cargo-free EngineDispatch + `nytprofhtml`/`nytprofcsv`; installed `query --json --jsonl` 15/3/15. **Not** 6.15 nytprofhtml DOM / S2 |
+| `I03-DIST-SCRIPTS` | **done (MVP)** — prefix/dev only ([install_product_scripts.sh](https://github.com/hilather/nytprof-modernization/blob/main/scripts/packaging/install_product_scripts.sh) + [i03_dist_scripts_smoke.sh](https://github.com/hilather/nytprof-modernization/blob/main/scripts/packaging/i03_dist_scripts_smoke.sh)). **Not** in the `perl-NYTProfM` module RPM (collection-only + `nytprofm-cli`). **Not** 6.15 nytprofhtml DOM / S2 |
 | `J01-CPAN-HYGIENE` | **done (MVP)** — [j01_cpan_hygiene_smoke.sh](https://github.com/hilather/nytprof-modernization/blob/main/scripts/packaging/j01_cpan_hygiene_smoke.sh): `Makefile.PL` MYMETA `NYTProfM` **6.15**; MANIFEST excludes `baseline/` `target/` `prefix/`. **Not** TRIAL/PAUSE |
 | `MIG01-MIGRATION-GUIDE` | **done (docs)** — [MIGRATION_DROP_IN_v0.md](https://github.com/hilather/nytprof-modernization/blob/main/docs/MIGRATION_DROP_IN_v0.md) Option B `perl-NYTProfM` / `-d:NYTProfM` |
 | `K03-PREBUILT-CLI-ADR` | **done (docs)** — [ADR-0010](https://github.com/hilather/nytprof-modernization/blob/main/docs/adrs/0010-signed-ci-prebuilt-native-cli.md); `EL8-RPM-TOOLS` residual |
@@ -572,7 +573,7 @@ Charter **R5** is **governance only** unless a later **per-component** ADR execu
 
 ### 7c.3 Rocky 8 Docker profile demo (testdrive HTML)
 
-End-to-end **unsigned testdrive** on `rockylinux:8`: install `perl-NYTProfM`, download [ack v3](https://beyondgrep.com/) plus a public-domain text corpus, run `perl -d:NYTProfM` on a **core-only** ~1-minute text analyzer, and write `nytprof.out` + native `nytprofhtml` into a host directory.
+End-to-end **unsigned testdrive** on `rockylinux:8`: install `perl-NYTProfM`, download [ack v3](https://beyondgrep.com/) plus a public-domain text corpus, run `perl -d:NYTProfM` on a **core-only** ~1-minute text analyzer, and write `nytprof.out` + native `nytprofm-cli html` into a host directory.
 
 **PR-7 landed:** `use Getopt::Long` / Exporter / Time::HiRes compile under product `-d:NYTProfM` (`INIT` `$DB::single` + `goto &$raw` for those modules; smoke [`g07_getopt_compile_smoke.sh`](https://github.com/hilather/nytprof-modernization/blob/main/scripts/packaging/g07_getopt_compile_smoke.sh)). The Rocky demo still profiles the **core-only** scanner — **ack is not the profiled process** until a later field retry. Historical fail-closed notes: [failed-attempts.md](https://github.com/hilather/nytprof-modernization/blob/main/docs/agent-notes/failed-attempts.md) (`rocky8-profile-ack-d-nytprofm`).
 
@@ -583,11 +584,11 @@ End-to-end **unsigned testdrive** on `rockylinux:8`: install `perl-NYTProfM`, do
 ./scripts/field/rocky8_docker_profile_demo.sh --out "$HOME/Downloads/nytprof-rocky8-demo"
 ```
 
-Uses the local [`dist/el8/perl-NYTProfM-6.15-2.el8.x86_64.rpm`](https://github.com/hilather/nytprof-modernization/blob/main/dist/el8/) when present; otherwise downloads the `v0.2.7` GitHub Release asset. **Not** mock-certified, **not** COPR, **not** a public performance claim. HTML is the product MVP (`nytprofhtml` → `nytprof-engine html`), not oracle DOM / tablesorter.
+Uses the local [`dist/el8/perl-NYTProfM-6.15-3.el8.x86_64.rpm`](https://github.com/hilather/nytprof-modernization/blob/main/dist/el8/) when present; otherwise downloads the GitHub Release asset. **Not** mock-certified, **not** COPR, **not** a public performance claim. HTML is `nytprofm-cli html` (module RPM is collection-only; no stock `nytprofhtml` overwrite). Not oracle DOM / tablesorter.
 
 Script: [rocky8_docker_profile_demo.sh](https://github.com/hilather/nytprof-modernization/blob/main/scripts/field/rocky8_docker_profile_demo.sh)
 
-**Integration smoke** (host scanner checks always; `rockylinux:8` + RPM + `-d:NYTProfM` + `nytprofhtml` when docker is usable; honest SKIP without docker). **Not** part of `offline_gate.sh`.
+**Integration smoke** (host scanner checks always; `rockylinux:8` + RPM + `-d:NYTProfM` + `nytprofm-cli html` when docker is usable; honest SKIP without docker or without `nytprofm-cli`). **Not** part of `offline_gate.sh`.
 
 ```sh
 ./scripts/field/rocky8_docker_profile_smoke.sh

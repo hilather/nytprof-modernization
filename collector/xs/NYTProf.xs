@@ -46,6 +46,7 @@
 
 #include "nytp_sink.h"
 #include "nytp_sink_v5.h"
+#include "nytp_batch.h"
 #include "nytp_clock.h"
 #include "nytp_fork.h"
 #ifdef NYTPROF_V6_COLLECT
@@ -75,6 +76,16 @@
 #endif
 
 static nytp_sink *product_sink = NULL;
+/* When durable, product_sink is the batch facade and product_v5 is the child. */
+static nytp_sink *product_v5 = NULL;
+static int product_durable = 0;
+static int product_compress_level = 0;
+
+static nytp_sink *
+product_v5_sink(void)
+{
+    return product_v5 != NULL ? product_v5 : product_sink;
+}
 
 /* First-seen fid table (6.15 get_file_id VIA_STMT, no eval fold). */
 static HV *product_fid_map = NULL;
@@ -108,6 +119,7 @@ static nytp_line product_last_site_block_line = 0;
 static nytp_line product_last_site_sub_line = 0;
 static int product_last_site_is_block = 0;
 static int product_has_last_site = 0;
+static nytp_ticks product_last_seal_abs = 0;
 
 /* 6.15 NYTP_OPTf_SAVESRC default on. file= apply uses the Perl macros
  * (PERLDBf_SAVESRC | PERLDBf_SAVESRC_NOSUBS), not $^P |= 0x400 alone. */
@@ -147,6 +159,7 @@ product_last_site_reset(void)
     product_last_site_sub_line = 0;
     product_last_site_is_block = 0;
     product_has_last_site = 0;
+    product_last_seal_abs = 0;
     product_pending_child_excl_reset();
 }
 
@@ -166,6 +179,70 @@ product_emit_last_site_elapsed(nytp_ticks elapsed)
     }
     return nytp_emit_time_line(product_sink, elapsed, product_last_site_fid,
                                product_last_site_line);
+}
+
+/* Periodic durable seal: reuse last-site `now`. Does not emit leftover last-site. */
+#define NYTP_PRODUCT_SEAL_DIRTY_MIN 262144u
+
+/* Drain batch then publish. Does not go through nytp_sink_flush, so a
+ * snapshot I/O error cannot sticky-fail the live sink. */
+static nytp_status
+product_durable_publish(void)
+{
+    nytp_sink *v5 = product_v5_sink();
+    nytp_batch *batch;
+    nytp_status st;
+
+    if (v5 == NULL) {
+        return NYTP_ERR_NULL;
+    }
+    batch = nytp_batch_sink_batch(product_sink);
+    if (batch != NULL) {
+        st = nytp_batch_flush(batch);
+        if (st != NYTP_OK) {
+            return st;
+        }
+    }
+    return nytp_v5_seal_publish(v5);
+}
+
+static nytp_status
+product_maybe_durable_seal(nytp_ticks now)
+{
+    nytp_sink *v5;
+    size_t live;
+    size_t last;
+    nytp_status st;
+    nytp_ticks t1 = 0;
+
+    if (!product_durable) {
+        return NYTP_OK;
+    }
+    v5 = product_v5_sink();
+    if (v5 == NULL) {
+        return NYTP_OK;
+    }
+    live = nytp_v5_sink_wire_len(v5);
+    last = nytp_v5_sink_len_at_last_seal(v5);
+    if (now < product_last_seal_abs) {
+        return NYTP_OK;
+    }
+    if (now - product_last_seal_abs < (nytp_ticks)NYTP_TICKS_PER_SEC) {
+        return NYTP_OK;
+    }
+    if (live < last || live - last < NYTP_PRODUCT_SEAL_DIRTY_MIN) {
+        return NYTP_OK;
+    }
+    st = product_durable_publish();
+    if (st != NYTP_OK) {
+        /* Snapshot is best-effort; keep emitting into live RAM. */
+        return NYTP_OK;
+    }
+    if (nytp_clock_now(&t1) == NYTP_OK && t1 > now) {
+        product_last_abs += (t1 - now);
+    }
+    product_last_seal_abs = now;
+    return NYTP_OK;
 }
 
 static nytp_status
@@ -224,7 +301,7 @@ product_emit_attributed_time_line(nytp_fid fid, nytp_line line)
     product_last_site_sub_line = 0;
     product_last_site_is_block = 0;
     product_has_last_site = 1;
-    return NYTP_OK;
+    return product_maybe_durable_seal(now);
 }
 
 /* BASE-003: attribute now-last to the previous site, then seed this COP. */
@@ -267,7 +344,7 @@ product_emit_attributed_time_block(nytp_fid fid, nytp_line line,
     product_last_site_sub_line = sub_line;
     product_last_site_is_block = 1;
     product_has_last_site = 1;
-    return NYTP_OK;
+    return product_maybe_durable_seal(now);
 }
 
 static nytp_status
@@ -285,12 +362,43 @@ product_emit_header_and_pid_start(void)
     if (st != NYTP_OK) {
         return st;
     }
+    if (product_compress_level > 0) {
+        char lvl[16];
+        (void)snprintf(lvl, sizeof(lvl), "%d", product_compress_level);
+        st = nytp_emit_option(product_sink, nytp_sv_cstr("compress"),
+                              nytp_sv_cstr(lvl));
+        if (st != NYTP_OK) {
+            return st;
+        }
+    }
     st = nytp_sink_activate(product_sink);
     if (st != NYTP_OK) {
         return st;
     }
-    return nytp_emit_pid_start(product_sink, (nytp_pid)getpid(),
-                               (nytp_pid)getppid(), 0.0);
+    st = nytp_emit_pid_start(product_sink, (nytp_pid)getpid(),
+                             (nytp_pid)getppid(), 0.0);
+    if (st != NYTP_OK) {
+        return st;
+    }
+    if (product_durable) {
+        nytp_batch *batch = nytp_batch_sink_batch(product_sink);
+        nytp_ticks now = 0;
+        /* Drain only — do not v5_flush/seal yet, or z would sit after magic. */
+        if (batch != NULL) {
+            st = nytp_batch_flush(batch);
+            if (st != NYTP_OK) {
+                return st;
+            }
+        }
+        st = nytp_v5_sink_mark_header_end(product_v5_sink());
+        if (st != NYTP_OK) {
+            return st;
+        }
+        if (nytp_clock_now(&now) == NYTP_OK) {
+            product_last_seal_abs = now;
+        }
+    }
+    return st;
 }
 
 static void
@@ -556,23 +664,54 @@ static void
 nytp_product_sink_drop(void)
 {
     if (product_sink == NULL) {
+        product_v5 = NULL;
         return;
     }
     (void)nytp_sink_close(product_sink);
     nytp_sink_destroy(product_sink);
     product_sink = NULL;
+    product_v5 = NULL;
 }
 
-/* Replace the held sink with a new v5 sink (path NULL = in-memory). */
+/* Replace the held sink with a new v5 sink (path NULL = in-memory).
+ * compress_level: 0 = zlib default 6 when deflate starts; 1..9 = that level.
+ * durable: wrap in nytp_batch (KD-D1); default 0 does not claim crash-safety.
+ */
 static nytp_status
-nytp_product_sink_hold(const char *path)
+nytp_product_sink_hold(const char *path, int compress_level, int durable)
 {
     dTHX;
+    nytp_sink *v5;
+
     nytp_product_sink_drop();
     product_fid_reset(aTHX);
-    product_sink = nytp_v5_sink_create(path);
-    if (product_sink == NULL) {
+    product_durable = durable ? 1 : 0;
+    product_compress_level = compress_level;
+    if (product_compress_level < 0 || product_compress_level > 9) {
+        return NYTP_ERR_OVERFLOW;
+    }
+    v5 = nytp_v5_sink_create_ex(path, compress_level);
+    if (v5 == NULL) {
         return NYTP_ERR_IO;
+    }
+    if (product_durable) {
+        if (nytp_v5_sink_set_durable(v5, 1) != NYTP_OK) {
+            nytp_sink_destroy(v5);
+            return NYTP_ERR_STATE;
+        }
+    }
+    product_v5 = v5;
+    if (product_durable) {
+        product_sink = nytp_batch_sink_create(
+            v5, NYTP_BATCH_DEFAULT_CAPACITY, NYTP_BATCH_DEFAULT_ARENA,
+            NYTP_BATCH_DEFAULT_CAPACITY, 1);
+        if (product_sink == NULL) {
+            nytp_sink_destroy(v5);
+            product_v5 = NULL;
+            return NYTP_ERR_IO;
+        }
+    } else {
+        product_sink = v5;
     }
     return NYTP_OK;
 }
@@ -590,7 +729,7 @@ nytp_product_sink_reopen_open(void)
 
     path_copy[0] = '\0';
     if (product_sink != NULL) {
-        path = nytp_v5_sink_path(product_sink);
+        path = nytp_v5_sink_path(product_v5_sink());
         if (path != NULL && path[0] != '\0') {
             size_t n = strlen(path);
             if (n >= sizeof(path_copy)) {
@@ -605,11 +744,8 @@ nytp_product_sink_reopen_open(void)
         dTHX;
         product_fid_reset(aTHX);
     }
-    product_sink = nytp_v5_sink_create(have_path ? path_copy : NULL);
-    if (product_sink == NULL) {
-        return NYTP_ERR_IO;
-    }
-    return NYTP_OK;
+    return nytp_product_sink_hold(have_path ? path_copy : NULL,
+                                  product_compress_level, product_durable);
 }
 
 static nytp_status
@@ -630,7 +766,7 @@ nytp_product_fork_resume_child(nytp_pid child_pid)
     } else
 #endif
     {
-        base = nytp_v5_sink_path(product_sink);
+        base = nytp_v5_sink_path(product_v5_sink());
     }
     if (base == NULL || base[0] == '\0') {
         return NYTP_ERR_STATE;
@@ -650,7 +786,7 @@ nytp_product_fork_resume_child(nytp_pid child_pid)
     } else
 #endif
     {
-        st = nytp_v5_sink_fork_child_reinit(product_sink, child_path);
+        st = nytp_v5_sink_fork_child_reinit(product_v5_sink(), child_path);
     }
     if (st != NYTP_OK) {
         return st;
@@ -1249,7 +1385,7 @@ init_profiler()
     CODE:
         /* G03a: hold in-memory v5 sink; never a path, never nytprof.out. */
         {
-            nytp_status st = nytp_product_sink_hold(NULL);
+            nytp_status st = nytp_product_sink_hold(NULL, 0, 0);
             if (st != NYTP_OK || product_sink == NULL) {
                 croak("DB::init_profiler: nytp_v5_sink_create(NULL) failed");
             }
@@ -1259,20 +1395,29 @@ init_profiler()
         RETVAL
 
 int
-enable_sink(path)
+enable_sink(path, compress_level = 0, durable = 0)
     const char *path
+    int compress_level
+    int durable
     CODE:
         if (path == NULL || path[0] == '\0') {
             croak("DB::enable_sink requires a non-empty path");
         }
         {
-            nytp_status st = nytp_product_sink_hold(path);
+            nytp_status st = nytp_product_sink_hold(path, compress_level, durable);
             if (st != NYTP_OK || product_sink == NULL) {
                 croak("DB::enable_sink: nytp_v5_sink_create(%s) failed", path);
             }
             product_last_site_reset();
             RETVAL = (int)product_emit_header_and_pid_start();
         }
+    OUTPUT:
+        RETVAL
+
+int
+durable_seal_now()
+    CODE:
+        RETVAL = (int)product_durable_publish();
     OUTPUT:
         RETVAL
 
@@ -1695,7 +1840,7 @@ is_deflating()
         if (product_sink == NULL) {
             RETVAL = 0;
         } else {
-            RETVAL = nytp_v5_sink_is_deflating(product_sink);
+            RETVAL = nytp_v5_sink_is_deflating(product_v5_sink());
         }
     OUTPUT:
         RETVAL

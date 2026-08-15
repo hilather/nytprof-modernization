@@ -360,66 +360,123 @@ enum HtmlJsMode<'a> {
 /// [`REPORT_HTML_RESIDUAL_INVENTORY_v0.md`](https://github.com/hilather/nytprof-modernization/blob/main/docs/contracts/REPORT_HTML_RESIDUAL_INVENTORY_v0.md).
 /// Heat class names stay `heat-*`; CSS variables `--nyt-c0`…`--nyt-c3` hold
 /// the oracle palette. Do **not** emit `.c0`–`.c3` class selectors.
+/// A `prefers-color-scheme: dark` block re-tunes the `--nyt-*` variables
+/// (including the heat hues) for dark displays; selectors are unchanged.
 pub const SHARED_STYLE_CSS: &str = r#"/* nytprof-report operator HTML v2 CSS (ADR-0012; not oracle get_css) */
 :root{
---nyt-font:system-ui,"Segoe UI",sans-serif;
---nyt-mono:ui-monospace,"SF Mono",Menlo,Consolas,monospace;
---nyt-fg:#222;
---nyt-bg:#fff;
---nyt-link:#00c;
+color-scheme:light;
+--nyt-font:system-ui,-apple-system,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif;
+--nyt-mono:ui-monospace,"SF Mono",Menlo,Consolas,"Liberation Mono",monospace;
+--nyt-fg:#1f2328;
+--nyt-bg:#f6f8fa;
+--nyt-surface:#fff;
+--nyt-link:#0563c1;
 --nyt-link-visited:#6d00e6;
 --nyt-link-hover:#c00;
 --nyt-header-top:rgb(17,136,255);
 --nyt-header-bot:rgb(0,68,187);
 --nyt-header-fg:#fff;
---nyt-th:#ddd;
---nyt-th-border:#666;
---nyt-td-border:#ccc;
---nyt-caption:#ddd;
---nyt-footer:#ccc;
---nyt-calls:#666;
+--nyt-th:#eef1f4;
+--nyt-th-fg:#57606a;
+--nyt-th-border:#d0d7de;
+--nyt-td-border:#d8dee4;
+--nyt-caption:#eef1f4;
+--nyt-footer:#d0d7de;
+--nyt-calls:#57606a;
+--nyt-row-hover:#eaf2fe;
+--nyt-target:#fff3bf;
+--nyt-radius:10px;
+--nyt-shadow:0 1px 2px rgba(31,35,40,.07),0 1px 3px rgba(31,35,40,.05);
 --nyt-c0:#ffb3b3;
 --nyt-c1:#ffd9b4;
 --nyt-c2:#ffffb4;
 --nyt-c3:#b4ffb4;
 }
-body{font-family:var(--nyt-font);margin:0;line-height:1.35;color:var(--nyt-fg);background:var(--nyt-bg)}
-a{color:var(--nyt-link)}
+body{font-family:var(--nyt-font);margin:0;line-height:1.45;color:var(--nyt-fg);background:var(--nyt-bg);-webkit-font-smoothing:antialiased}
+a{color:var(--nyt-link);text-decoration:none}
 a:visited{color:var(--nyt-link-visited)}
-a:hover{color:var(--nyt-link-hover)}
-.header{background:linear-gradient(to bottom,var(--nyt-header-top),var(--nyt-header-bot));color:#fff;min-height:7.5rem;position:relative;padding:0.5rem 1rem 1rem}
-.header_back a{color:#fff}
-.siteTitle{font-size:1.6rem;font-weight:700;margin:0.25rem 0}
-.siteSubtitle{font-size:0.95rem;opacity:0.95}
-.body_content{padding:0.75rem 1rem 2rem}
-.footer{color:#666;font-size:0.85rem;padding:1rem;border-top:1px solid var(--nyt-footer)}
-table{border-collapse:collapse;margin:0.75rem 0;width:auto;max-width:100%}
-th,td{border:1px solid var(--nyt-td-border);padding:0 0.4em;text-align:left;vertical-align:top}
-th{background:var(--nyt-th);border-color:var(--nyt-th-border);font-size:0.8em}
-caption{background:var(--nyt-caption);text-align:left;padding:0.2em 0.4em;font-weight:600}
-td.num{text-align:right;font-variant-numeric:tabular-nums}
+a:hover{color:var(--nyt-link-hover);text-decoration:underline}
+a:focus-visible{outline:2px solid var(--nyt-header-top);outline-offset:2px;border-radius:3px}
+.header{background:linear-gradient(135deg,var(--nyt-header-top),var(--nyt-header-bot));color:var(--nyt-header-fg);padding:1.15rem 1.5rem 1.35rem;box-shadow:0 2px 12px rgba(0,32,96,.3)}
+.header_back{margin-bottom:.45rem}
+.header_back a{color:#fff;border:1px solid rgba(255,255,255,.55);border-radius:999px;padding:.16rem .75rem;font-size:.8rem;letter-spacing:.03em;transition:background-color .15s ease,border-color .15s ease}
+.header_back a:hover{background:rgba(255,255,255,.16);border-color:#fff;color:#fff;text-decoration:none}
+.siteTitle{font-size:1.7rem;font-weight:700;letter-spacing:-.015em;margin:.1rem 0;text-shadow:0 1px 2px rgba(0,24,80,.25)}
+.siteSubtitle{font-size:.95rem;opacity:.92}
+.body_content{padding:1.1rem 1.5rem 2.5rem;max-width:80rem}
+.footer{color:var(--nyt-calls);font-size:.82rem;padding:1rem 1.5rem;border-top:1px solid var(--nyt-footer)}
+table{border-collapse:separate;border-spacing:0;margin:.4rem 0 1.1rem;width:auto;max-width:100%;background:var(--nyt-surface);border:1px solid var(--nyt-td-border);border-radius:var(--nyt-radius);box-shadow:var(--nyt-shadow)}
+caption{background:transparent;text-align:left;padding:.3em .1em;font-weight:600;font-size:.85rem;color:var(--nyt-calls);letter-spacing:.01em}
+th,td{border:0;border-bottom:1px solid var(--nyt-td-border);padding:.45em .75em;text-align:left;vertical-align:top}
+th{background:var(--nyt-th);font-size:.8em;font-weight:600}
+thead th{position:sticky;top:0;z-index:1;color:var(--nyt-th-fg);font-size:.72rem;text-transform:uppercase;letter-spacing:.05em;border-bottom:2px solid var(--nyt-th-border);white-space:nowrap}
+table>thead:first-child th:first-child,table>caption:first-child+thead th:first-child{border-top-left-radius:var(--nyt-radius)}
+table>thead:first-child th:last-child,table>caption:first-child+thead th:last-child{border-top-right-radius:var(--nyt-radius)}
+table>tbody:first-child tr:first-child th:first-child,table>tbody:first-child tr:first-child td:first-child{border-top-left-radius:var(--nyt-radius)}
+table>tbody:first-child tr:first-child th:last-child,table>tbody:first-child tr:first-child td:last-child{border-top-right-radius:var(--nyt-radius)}
+table>tbody:last-child tr:last-child th:first-child,table>tbody:last-child tr:last-child td:first-child{border-bottom-left-radius:var(--nyt-radius)}
+table>tbody:last-child tr:last-child th:last-child,table>tbody:last-child tr:last-child td:last-child{border-bottom-right-radius:var(--nyt-radius)}
+table>tfoot:last-child tr:last-child td:first-child{border-bottom-left-radius:var(--nyt-radius)}
+table>tfoot:last-child tr:last-child td:last-child{border-bottom-right-radius:var(--nyt-radius)}
+tbody tr:last-child th,tbody tr:last-child td,tfoot tr:last-child td{border-bottom:0}
+td.num{text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap}
 td.s,.s,pre,code,.sub_name{font-family:var(--nyt-mono)}
 td.s,.src-line{white-space:pre}
-.index_summary,.table_footer{margin:0.75rem 0}
-tbody tr:hover{background:#f5f8ff}
+td.s{font-size:.88rem;line-height:1.5}
+code{background:var(--nyt-caption);border-radius:4px;padding:.05em .35em;font-size:.92em}
+table.source thead th:first-child,table.source tbody td:first-child{background:var(--nyt-caption);color:var(--nyt-calls)}
+.index_summary{margin:0 0 1.25rem;padding:.8rem 1.1rem;background:var(--nyt-surface);border:1px solid var(--nyt-td-border);border-left:4px solid var(--nyt-header-top);border-radius:8px;box-shadow:var(--nyt-shadow);font-size:1.02rem}
+.table_footer{margin:0.9rem 0;font-size:.95rem}
+tbody tr{transition:background-color .12s ease-in-out}
+tbody tr:hover{background:var(--nyt-row-hover)}
+tr:target{background:var(--nyt-target)}
+tfoot td{font-weight:600;background:var(--nyt-caption)}
 td.num.heat-hot,tr.heat-hot{background:var(--nyt-c0)}
 td.num.heat-high,tr.heat-high{background:var(--nyt-c1)}
 td.num.heat-mid,tr.heat-mid{background:var(--nyt-c2)}
 td.num.heat-low,tr.heat-low{background:var(--nyt-c3)}
 th[data-sort]{cursor:pointer;user-select:none}
-th.sort-asc::after{content:" \25b2";font-size:0.7em}
-th.sort-desc::after{content:" \25bc";font-size:0.7em}
+th[data-sort]::after{content:" \21c5";font-size:.85em;font-weight:400;opacity:.4}
+th[data-sort]:hover{background:var(--nyt-row-hover)}
+th.sort-asc::after{content:" \25b2";font-size:0.7em;opacity:1}
+th.sort-desc::after{content:" \25bc";font-size:0.7em;opacity:1}
 section.flame,.flamegraph{margin:1.25rem 0}
 p.flame-links{font-size:0.95rem}
-.flame-svg-embed{max-width:100%;overflow:auto;border:1px solid #ddd;padding:0.5rem;background:#fafafa;position:relative}
+.flame-svg-embed{max-width:100%;overflow:hidden auto;border:1px solid var(--nyt-td-border);border-radius:var(--nyt-radius);padding:0.5rem;background:var(--nyt-surface);box-shadow:var(--nyt-shadow);position:relative}
 .flame-svg-embed svg,.flame-svg-embed img,img.flame-svg-embed{display:block;max-width:100%;width:100%;height:auto}
 .flame-svg-embed a.flame-link{cursor:pointer}
-#nytprof-flame-tip{position:fixed;z-index:40;display:none;background:#1b1b1b;color:#f4f4f4;font:12px var(--nyt-mono,ui-monospace,monospace);padding:0.4rem 0.55rem;border-radius:4px;white-space:pre;pointer-events:none;box-shadow:0 2px 8px rgba(0,0,0,.28);max-width:28rem}
+#nytprof-flame-tip{position:fixed;z-index:40;display:none;background:#1b1b1b;color:#f4f4f4;font:12px var(--nyt-mono,ui-monospace,monospace);padding:0.4rem 0.55rem;border-radius:6px;white-space:pre;pointer-events:none;box-shadow:0 2px 8px rgba(0,0,0,.28);max-width:28rem}
 p.profile-path code{word-break:break-all}
 p.source-link{margin:0.5rem 0}
-h1,h2{margin-top:1.25rem}
+h1,h2{margin-top:1.6rem;font-weight:600;letter-spacing:-.01em}
+h2{font-size:1.18rem;border-bottom:1px solid var(--nyt-td-border);padding-bottom:.3rem}
 .calls,.calls_in,.calls_out{color:var(--nyt-calls);font-size:0.85em;margin:0.15em 0}
 p.callgraph-links{margin:0.75rem 0}
+@media (prefers-color-scheme:dark){
+:root{
+color-scheme:dark;
+--nyt-fg:#dbe1e8;
+--nyt-bg:#101318;
+--nyt-surface:#1a1f26;
+--nyt-link:#7cb3ff;
+--nyt-link-visited:#c4a5ff;
+--nyt-link-hover:#a8ccff;
+--nyt-th:#242b34;
+--nyt-th-fg:#9aa7b4;
+--nyt-th-border:#38414c;
+--nyt-td-border:#2c343e;
+--nyt-caption:#21272f;
+--nyt-footer:#2c343e;
+--nyt-calls:#9aa7b4;
+--nyt-row-hover:#1c2530;
+--nyt-target:#3a3413;
+--nyt-shadow:0 1px 2px rgba(0,0,0,.4),0 1px 3px rgba(0,0,0,.3);
+--nyt-c0:#6e2b2b;
+--nyt-c1:#6e5224;
+--nyt-c2:#5f5f1e;
+--nyt-c3:#2d5a2d;
+}
+}
 "#;
 
 /// Canonical multi-file stylesheet filename (`style.css`).
@@ -2029,7 +2086,8 @@ fn flame_svg_from_model(model: &ProfileModel, multi_file: bool) -> String {
 <desc>Roots at the bottom; callees stack up. Width is inclusive time when known, else calls. Hover a frame for details; click to open source.</desc>\n\
 <style type=\"text/css\"><![CDATA[\n\
 .flame-link{{cursor:pointer}}\n\
-.flame-link:hover rect,.flame-frame:hover rect{{filter:brightness(1.18);stroke:#111;stroke-width:1.2px}}\n\
+.flame-frame rect{{transition:filter .12s ease-out}}\n\
+.flame-link:hover rect,.flame-frame:hover rect{{filter:brightness(1.06) saturate(1.2);stroke:#111;stroke-width:1.2px}}\n\
 ]]></style>\n",
         w = FLAME_SVG_W as u32,
         h = svg_h as u32,
@@ -2251,15 +2309,15 @@ fn push_flame_rect(out: &mut String, r: FlameRect<'_>) {
     out.push_str("</title>");
     let _ = write!(
         out,
-        "<rect x=\"{ix:.2}\" y=\"{iy:.2}\" width=\"{iw:.2}\" height=\"{ih:.2}\" fill=\"{fill}\" stroke=\"#333\" stroke-width=\"0.5\"/>"
+        "<rect x=\"{ix:.2}\" y=\"{iy:.2}\" width=\"{iw:.2}\" height=\"{ih:.2}\" rx=\"3\" fill=\"{fill}\" stroke=\"rgba(255,255,255,.45)\" stroke-width=\"1\"/>"
     );
     if r.width >= FLAME_MIN_LABEL_PX {
         let label = if r.name.is_empty() { "(anon)" } else { r.name };
-        let tx = r.x + 4.0;
+        let tx = r.x + 5.0;
         let ty = r.y + FLAME_ROW_H * 0.68;
         let _ = write!(
             out,
-            "<text x=\"{tx:.2}\" y=\"{ty:.2}\" font-family=\"ui-monospace,monospace\" font-size=\"11\" fill=\"#111\">"
+            "<text x=\"{tx:.2}\" y=\"{ty:.2}\" font-family=\"ui-monospace,monospace\" font-size=\"11\" fill=\"#111\" pointer-events=\"none\">"
         );
         escape_xml_into(out, label);
         out.push_str("</text>");

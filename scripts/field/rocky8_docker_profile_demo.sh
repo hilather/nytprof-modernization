@@ -10,15 +10,15 @@
 #   ./scripts/field/rocky8_docker_profile_demo.sh --inside /out
 #
 # Uses the unsigned testdrive RPM (local dist/el8 or a GitHub Release asset).
-# Not mock-certified, not COPR, not a perf claim. HTML is the product MVP
-# (nytprofhtml → nytprof-engine html), not oracle DOM / tablesorter.
+# Not mock-certified, not COPR, not a perf claim. HTML is nytprofm-cli html
+# (module RPM is collection-only; no stock nytprofhtml overwrite).
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 IMAGE="${NYTPROF_EL8_IMAGE:-rockylinux:8}"
 DEFAULT_OUT="${HOME}/Downloads/nytprof-rocky8-demo"
-RPM_NAME="perl-NYTProfM-6.15-2.el8.x86_64.rpm"
-RELEASE_TAG="${NYTPROF_DEMO_RELEASE:-v0.2.7}"
+RPM_NAME="perl-NYTProfM-6.15-3.el8.x86_64.rpm"
+RELEASE_TAG="${NYTPROF_DEMO_RELEASE:-v0.2.8}"
 RELEASE_RPM_URL="${NYTPROF_DEMO_RPM_URL:-https://github.com/hilather/nytprof-modernization/releases/download/${RELEASE_TAG}/${RPM_NAME}}"
 ACK_URL="${NYTPROF_DEMO_ACK_URL:-https://beyondgrep.com/ack-v3.7.0}"
 ACK_FALLBACK_URL="${NYTPROF_DEMO_ACK_FALLBACK_URL:-https://raw.githubusercontent.com/beyondgrep/ack3/3.7.0/ack}"
@@ -68,7 +68,7 @@ Env:
   NYTPROF_DEMO_ENGINE        native|oracle|both (overridden by --engine)
   NYTPROF_DEMO_RPM           host path to perl-NYTProfM *.x86_64.rpm
   NYTPROF_DEMO_RPM_URL       GitHub Release RPM if no local RPM
-  NYTPROF_DEMO_RELEASE       tag used to build the default RPM URL (v0.2.7)
+  NYTPROF_DEMO_RELEASE       tag used to build the default RPM URL (v0.2.8)
   NYTPROF_ORACLE_IMAGE       default same as NYTPROF_EL8_IMAGE (Rocky first)
 EOF
 }
@@ -110,10 +110,10 @@ Also in this directory:
 
 Commands used (inside rockylinux:8)
 -----------------------------------
-  rpm -Uvh --replacefiles ${RPM_NAME}
+  rpm -Uvh ${RPM_NAME}
   NYTPROF=file=/out/nytprof.out perl -d:NYTProfM \\
     app/minute_text_scanner.pl corpus ${TARGET_SECS}
-  nytprofhtml /out/nytprof.out --out-dir /out/html
+  nytprofm-cli html /out/nytprof.out --out-dir /out/html
 
 Honesty
 -------
@@ -156,12 +156,14 @@ run_inside() {
   fi
 
   log "installing $RPM_NAME"
-  rpm -Uvh --replacefiles "$rpm_file" >"$OUT/meta/rpm-install.log" 2>&1 \
+  rpm -Uvh "$rpm_file" >"$OUT/meta/rpm-install.log" 2>&1 \
     || fail "rpm install failed (see $OUT/meta/rpm-install.log)"
 
   command -v perl >/dev/null || fail "perl missing after install"
-  command -v nytprofhtml >/dev/null || fail "nytprofhtml missing after RPM install"
-  command -v nytprof-cli >/dev/null || fail "nytprof-cli missing after RPM install"
+  if ! command -v nytprofm-cli >/dev/null; then
+    echo "SKIP: nytprofm-cli not on PATH after RPM install (HTML residual)" \
+      >"$OUT/meta/html.skip"
+  fi
   perl -MDevel::NYTProfM -e 'print $Devel::NYTProfM::VERSION, "\n"' \
     >"$OUT/meta/nytprofm-version.txt" \
     || fail "Devel::NYTProfM did not load"
@@ -176,11 +178,11 @@ run_inside() {
     echo "=== rpm -q perl-NYTProfM ==="
     rpm -q perl-NYTProfM
     echo
-    echo "=== nytprof-cli capability ==="
-    nytprof-cli capability || true
+    echo "=== nytprofm-cli capability ==="
+    command -v nytprofm-cli >/dev/null && nytprofm-cli capability || echo "SKIP: no nytprofm-cli"
     echo
-    echo "=== nytprof-cli capability --json ==="
-    nytprof-cli capability --json || true
+    echo "=== nytprofm-cli capability --json ==="
+    command -v nytprofm-cli >/dev/null && nytprofm-cli capability --json || echo "SKIP: no nytprofm-cli"
   } >"$OUT/meta/environment.txt" 2>&1
 
   local seed="$OUT/meta/seed.txt"
@@ -334,20 +336,22 @@ run_inside() {
   log "generating HTML report"
   local html_start html_elapsed
   html_start=$(date +%s)
-  nytprofhtml "$OUT/nytprof.out" --out-dir "$OUT/html" \
-    >"$OUT/meta/nytprofhtml.out" 2>"$OUT/meta/nytprofhtml.err" \
-    || fail "nytprofhtml failed (see $OUT/meta/nytprofhtml.err)"
-  html_elapsed=$(( $(date +%s) - html_start ))
-  echo "html_secs=${html_elapsed}" >>"$OUT/meta/timings.txt"
-
-  [[ -f "$OUT/html/index.html" ]] \
-    || fail "nytprofhtml did not write html/index.html"
-
-  if command -v nytprof-cli >/dev/null; then
-    nytprof-cli report "$OUT/nytprof.out" \
+  if command -v nytprofm-cli >/dev/null; then
+    nytprofm-cli html "$OUT/nytprof.out" --out-dir "$OUT/html" \
+      >"$OUT/meta/nytprofm-cli-html.out" 2>"$OUT/meta/nytprofm-cli-html.err" \
+      || fail "nytprofm-cli html failed (see $OUT/meta/nytprofm-cli-html.err)"
+    html_elapsed=$(( $(date +%s) - html_start ))
+    echo "html_secs=${html_elapsed}" >>"$OUT/meta/timings.txt"
+    [[ -f "$OUT/html/index.html" ]] \
+      || fail "nytprofm-cli html did not write html/index.html"
+    nytprofm-cli report "$OUT/nytprof.out" \
       >"$OUT/meta/report.txt" 2>"$OUT/meta/report.err" || true
-    nytprof-cli verify "$OUT/nytprof.out" \
+    nytprofm-cli verify "$OUT/nytprof.out" \
       >"$OUT/meta/verify.txt" 2>"$OUT/meta/verify.err" || true
+  else
+    echo "SKIP: nytprofm-cli not on PATH — no native HTML from this RPM" \
+      | tee "$OUT/meta/html.skip"
+    echo "html_secs=0" >>"$OUT/meta/timings.txt"
   fi
 
   write_notes "$OUT"

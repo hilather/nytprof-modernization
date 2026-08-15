@@ -19,20 +19,26 @@ Implement **real NYTProf v5 wire encoding** behind the semantic sink API so `for
 |--------|------|
 | `nytp_v5_sink_create(path)` | Create wire sink; writes `NYTProf 5 0\n` immediately |
 | `nytp_v5_sink_create_ex(path, compress_level)` | Same; zlib level 1..9 for `START_DEFLATE` (0 → default 6) |
-| `nytp_v5_sink_wire` / `wire_len` | Borrow in-memory profile bytes (**decoder-ready only after `close`**) |
-| `nytp_v5_sink_file_written` | 1 after successful path write on flush/close |
-| `nytp_v5_sink_is_deflating` | 1 after `START_DEFLATE` (body is zlib) |
+| `nytp_v5_sink_wire` / `wire_len` | Borrow in-memory profile bytes (**decoder-ready only after `close`**, or after durable `seal_publish` for the on-disk snapshot) |
+| `nytp_v5_sink_file_written` | 1 after successful path write on flush/close/seal |
+| `nytp_v5_sink_is_deflating` | 1 after live `START_DEFLATE` (body is zlib). Durable sinks stay **0** (live RAM uncompressed). |
+| `nytp_v5_sink_set_durable` / `is_durable` | Durable mode: flush/close are idempotent `nytp_v5_seal_publish` |
+| `nytp_v5_sink_mark_header_end` | Cursor after uncompressed header tags (`PID_START` + `OPTION compress=`). Sealed copies insert `z` here. |
+| `nytp_v5_seal_publish` | Atomic `path.tmp` + `fsync` + `rename`. `compress_level>0` writes prefix + `z` + `Z_FINISH` **copy**; live buffer unchanged. |
 | `nytp_v5_sink_stats` | Counting-compatible multiplicities / seq ring |
 
 ### Flush vs close (decoder-ready)
 
-| Call | Deflating? | Path / buffer meaning |
-|------|------------|------------------------|
-| `nytp_sink_flush` mid-stream | yes | **Unfinished** zlib snapshot (`Z_FINISH` not called). **Not** a complete profile; Rust/6.15 verify may fail. |
-| `nytp_sink_flush` | no | Complete records so far (safe if no further emits required for your use). |
-| `nytp_sink_close` | any | Finishes deflate if active; **only post-close bytes are decoder-ready** for a finished stream. |
+| Call | Durable? | Deflating? | Path / buffer meaning |
+|------|----------|------------|------------------------|
+| `nytp_sink_flush` / `close` | yes | n/a (live RAM never deflates) | Same idempotent `seal_publish`. Disk is a complete-record snapshot (zlib `Z_FINISH` copy when compress≠0). Live RAM stays uncompressed. |
+| `nytp_sink_flush` mid-stream | no | yes | **Unfinished** zlib snapshot (`Z_FINISH` not called). **Not** a complete profile; Rust/6.15 verify may fail. |
+| `nytp_sink_flush` | no | no | Complete records so far (safe if no further emits required for your use). |
+| `nytp_sink_close` | no | any | Finishes deflate if active; **only post-close bytes are decoder-ready** for a finished stream. |
 
-Prefer reading `nytp_v5_sink_wire` / path after **`close`**.
+Prefer reading `nytp_v5_sink_wire` / path after **`close`**. Durable on-disk snapshots are decoder-ready after each successful seal; they are still a **prefix** (no `PID_END`) until finish.
+
+Product attach (`perl -d:NYTProfM`): omitted `compress` ⇒ zlib **level 6**; `compress=0` off; `compress=1..9` is that zlib level. `durable=1` (default **0**) wraps the product sink in `nytp_batch`, delays live `z` until seal, and publishes on timer (1 s ∧ ≥256 KiB dirty) plus `DB::durable_seal_now` (test hook). Fork child reinit resets `header_end=len`, `len_at_last_seal=0`, `last_seal_ok=0`. See [OPERATOR_PROFILE_SIZE_AND_DURABILITY_v0.md](https://github.com/hilather/nytprof-modernization/blob/main/docs/OPERATOR_PROFILE_SIZE_AND_DURABILITY_v0.md).
 
 ### Wire mapping (semantic → tag)
 
@@ -79,12 +85,15 @@ String views: `ptr == NULL && len > 0` is rejected with `NYTP_ERR_NULL` **before
 | Live Perl/XS opcode hooks | later COL / packaging |
 | C v6 writer | COL-007 |
 | Dual-sink product path | **rejected** (OQ-4) — COL-014 is test/dev-only; see [`collector-dual-sink-mvp-v0.md`](https://github.com/hilather/nytprof-modernization/blob/main/docs/schemas/collector-dual-sink-mvp-v0.md) |
+| Default `durable=1` | **not** flipped (D3): seal is opt-in; default attach stays close-only. See [`docs/BENCH_NOTES.md`](https://github.com/hilather/nytprof-modernization/blob/main/docs/BENCH_NOTES.md). |
+| `aggregate=1` / coalesced checkpoints | ADR-0013 `proposed` only (charter exception; not this MVP) |
 | BENCH certification of writer cost | BENCH-004 |
 | Byte-identical oracle files | optional diagnostic mode (not required) |
 | Multi-OS CI matrix for collector | BUILD-006 residual |
 
 ## Tests
 
-- `collector/t/test_v5_wire.c` — uncompressed full-tag mini, M4+zlib, overflow, null-string fail-closed (no partial write), mid-deflate flush residual, no seq on wire  
+- `collector/t/test_v5_wire.c` — uncompressed full-tag mini, M4+zlib, overflow, null-string fail-closed (no partial write), mid-deflate flush residual, no seq on wire; durable seal-then-close / seal-then-flush stay zlib; fork child reinit resets seal cursors  
 - `collector/t/test_fake_clock.c` — M4 via v5 wire (header present, file written)  
+- [`scripts/packaging/di_durable_kill_smoke.sh`](https://github.com/hilather/nytprof-modernization/blob/main/scripts/packaging/di_durable_kill_smoke.sh) — live `-d:NYTProfM` `durable=1` + `DB::durable_seal_now` + `kill -9` leaves dumpable `TIME_LINE`; torn live `z` never prints verify `OK:`  
 - Existing sink/lifecycle/batch tests still green with real writer backend  

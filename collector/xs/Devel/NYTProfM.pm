@@ -65,7 +65,11 @@ $Devel::NYTProfM::PRODUCT_STMT_EMIT     = 1;
 $Devel::NYTProfM::PRODUCT_SUB_EMIT      = 1;
 $Devel::NYTProfM::PRODUCT_META_EMIT     = 1;
 $Devel::NYTProfM::PRODUCT_COMPRESS_EMIT = 1;
-$Devel::NYTProfM::PRODUCT_COMPRESS      = 0;
+# Omitted NYTPROF compress ⇒ zlib level 6 (6.15). Stamp before parse is
+# overwritten in _product_apply_options. compress=0 remains the opt-out.
+$Devel::NYTProfM::PRODUCT_COMPRESS        = 1;
+$Devel::NYTProfM::PRODUCT_COMPRESS_LEVEL  = 6;
+$Devel::NYTProfM::PRODUCT_DURABLE         = 0;
 $Devel::NYTProfM::PRODUCT_V6_COLLECT    = DB::product_v6_collect() ? 1 : 0;
 $Devel::NYTProfM::PRODUCT_OPTIONS_PARSE = 1;
 $Devel::NYTProfM::PRODUCT_ADDPID        = 0;
@@ -117,6 +121,7 @@ sub DB {
 # 6.15 options[] + string options + product format=. Unknown keys croak.
 my %PRODUCT_NYTPROF_KNOWN = map { $_ => 1 } qw(
   file format start end compress stmts blocks subs calls leave slowops
+  durable aggregate
   usecputime clock trace findcaller forkdepth addpid nameevals nameanonsubs
   evals sigexit posix_exit perldb use_db_sub expand log optimize optimise
   savesrc endatexit libcexit addtimestamp
@@ -418,8 +423,24 @@ sub _product_install_fork_hook {
         die "unknown NYTPROF option: slowops\n";
     }
     $Devel::NYTProfM::PRODUCT_SLOWOPS = $slowops;
-    my $compress = _product_int_opt( $opts, 'compress', 0 );
-    $Devel::NYTProfM::PRODUCT_COMPRESS = $compress ? 1 : 0;
+    if ( exists $opts->{compress} ) {
+        my $compress = _product_int_opt( $opts, 'compress', 0 );
+        if ( $compress < 0 || $compress > 9 ) {
+            die "unknown NYTPROF option: compress\n";
+        }
+        $Devel::NYTProfM::PRODUCT_COMPRESS_LEVEL = $compress;
+        $Devel::NYTProfM::PRODUCT_COMPRESS       = $compress > 0 ? 1 : 0;
+    }
+    else {
+        $Devel::NYTProfM::PRODUCT_COMPRESS_LEVEL = 6;
+        $Devel::NYTProfM::PRODUCT_COMPRESS       = 1;
+    }
+    $Devel::NYTProfM::PRODUCT_DURABLE =
+      _product_int_opt( $opts, 'durable', 0 ) ? 1 : 0;
+    if ( _product_int_opt( $opts, 'aggregate', 0 ) ) {
+        die "aggregate=1 is residual until ADR-0013 is accepted; "
+          . "in-memory coalesced checkpoints are not implemented\n";
+    }
     my $usecpu = $opts->{usecputime};
     if ( defined $usecpu && $usecpu ne '' && $usecpu ne '0' ) {
         warn
@@ -446,11 +467,16 @@ init_profiler();    # G03a: hold in-memory v5 sink — never writes nytprof.out
             }
         }
         else {
-            $st = enable_sink($path);
+            my $lvl = $Devel::NYTProfM::PRODUCT_COMPRESS
+              ? $Devel::NYTProfM::PRODUCT_COMPRESS_LEVEL
+              : 0;
+            my $dur = $Devel::NYTProfM::PRODUCT_DURABLE ? 1 : 0;
+            $st = enable_sink( $path, $lvl, $dur );
             if ( $st != 0 ) {
                 die "DB::enable_sink($path) status=$st\n";
             }
-            if ( $Devel::NYTProfM::PRODUCT_COMPRESS ) {
+            # durable=1 delays z until seal (D2). Until then, live z at enable.
+            if ( $Devel::NYTProfM::PRODUCT_COMPRESS && !$dur ) {
                 $st = emit_start_deflate();
                 if ( $st != 0 ) {
                     die "DB::emit_start_deflate status=$st\n";

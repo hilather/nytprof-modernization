@@ -46,16 +46,18 @@ if grep -Eiq 'dnf copr enable' "$README"; then
 fi
 ok "README unsigned-bootstrap runbook"
 
-grep -F -q 'nytprofhtml' "$MIG" \
-  || fail "MIG01 missing product nytprofhtml in the module RPM"
-if grep -Eiq 'module RPM is attach-only' "$MIG"; then
-  fail "MIG01 still says the module RPM is attach-only (scripts now ship)"
+if grep -Eiq 'replacefiles' "$MIG"; then
+  fail "MIG01 must not teach rpm -Uvh --replacefiles for stock nytprofhtml"
 fi
+grep -Eiq 'collection-only|does not install nytprofhtml' "$MIG" \
+  || fail "MIG01 must say the module RPM is collection-only (no I03 overwrite)"
+grep -F -q 'nytprofm-cli' "$MIG" \
+  || fail "MIG01 missing nytprofm-cli as the module native HTML entry"
 grep -Eiq 'unsigned internal bootstrap|not a production policy' "$MIG" \
   || fail "MIG01 missing unsigned-bootstrap / not-production-policy wording"
 grep -F -q 'gpgcheck=0' "$MIG" \
   || fail "MIG01 missing gpgcheck=0 bootstrap recipe"
-ok "MIG01 product nytprofhtml in module RPM + unsigned bootstrap"
+ok "MIG01 collection-only module RPM + unsigned bootstrap"
 
 echo "NOT-YET: A5b live rpmsign / COPR / gpgcheck=1"
 echo "NOT-YET: C1 signed nytprof-cli pipeline"

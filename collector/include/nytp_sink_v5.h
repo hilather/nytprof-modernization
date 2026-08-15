@@ -103,6 +103,20 @@ nytp_status nytp_v5_sink_rebind_path(nytp_sink *sink, const char *path);
  */
 nytp_status nytp_v5_sink_fork_child_reinit(nytp_sink *sink, const char *new_path);
 
+/*
+ * Durable sealed publish (item 2 / D2):
+ * Live RAM stays uncompressed. flush/close become this publish when
+ * nytp_v5_sink_set_durable(sink, 1). Snapshot is tmp+fsync+rename.
+ * compress_level > 0 inserts `z` + Z_FINISH copy; live buffer is unchanged.
+ * Idempotent when live length equals the last successful seal.
+ */
+nytp_status nytp_v5_sink_set_durable(nytp_sink *sink, int durable);
+int nytp_v5_sink_is_durable(const nytp_sink *sink);
+nytp_status nytp_v5_sink_mark_header_end(nytp_sink *sink);
+size_t nytp_v5_sink_header_end(const nytp_sink *sink);
+size_t nytp_v5_sink_len_at_last_seal(const nytp_sink *sink);
+nytp_status nytp_v5_seal_publish(nytp_sink *sink);
+
 #ifdef __cplusplus
 }
 #endif

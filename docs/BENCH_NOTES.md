@@ -171,6 +171,8 @@ claim: none
 
 Re-run after collector/decode/report changes and append a new raw block (or `OUT=` file). Compare directionally only; never publish “% faster” from this log.
 
+**2026-08-15 output-size note (HTML report CSS refresh):** `SHARED_STYLE_CSS` was restyled (modern tables/header, `prefers-color-scheme: dark` block). Published `style.css` on `fixtures/v5/default-calls1`: **2,989 → 6,990 bytes** (+4,001 B, one shared asset per multi-file site; single-file summaries inline the same text once). Same-day flame polish (rounded frames, separator stroke, `pointer-events` labels): `all_stacks_by_time.svg` **4,481 → 4,854 bytes** (+373 B ≈ 31 B/frame on this 12-frame fixture; index.html grows the same +373 B from the inlined copy). No fixture or timing change; direction: intentional one-time growth for theming, bounded (constant per site / linear in painted frames, which are themselves capped).
+
 ---
 
 ## Command sketches (manual / deeper)
@@ -268,6 +270,43 @@ claim: none  # keep "none" until BENCH-001 certification package
 ```
 
 Keep raw samples with the command line. Do not promote means or “% faster” without the plan harness and an ADR on thresholds.
+
+---
+
+## D3 durable-seal cost (engineering only — not certification)
+
+**Date:** 2026-08-15  
+**Host:** local Linux x86_64  
+**Commit:** `10e9137` + uncommitted D2/D3 tree  
+**Command:** dest `collector/build/xs-nytprof` + `t/workload-calls1.pl`  
+`NYTPROF=file=…:compress=6:durable=0` vs `:durable=1`  
+**Samples (one run each):** both `elapsed_s=0.02`; RSS 7088 vs 7320 KiB; profile 10131 vs 10099 bytes.  
+**Direction:** close-only cost on this tiny stream is noise (file ≪ 256 KiB dirty, so no periodic seal).  
+**Gates:** `g09_tokenize_excl_smoke.sh` and `di01_blocks_780_smoke.sh` green with dest `.so`.  
+**Default:** **`durable` stays 0.** KD-D5 requires a 25s-scanner seal-cost sample plus those gates before flipping; this note is not that sample.  
+**claim:** none
+
+Copy of the local snippet: `/tmp/grok-goal-0641539d8045/implementer/bench-note.txt` (not in-tree).
+
+---
+
+## Field 25s scanner — zlib default vs compress=0 (engineering only)
+
+**Date:** 2026-08-15  
+**Host:** local Linux x86_64  
+**Command:** `./scripts/field/compare_oracle_native_reports.sh --seconds 25 --out ~/Downloads/nytprof-compare-apples`  
+plus same corpus `NYTPROF=file=…:compress=0` native control.  
+**Samples (one run each):**
+
+| Side | `nytprof.out` | zlib | passes |
+|------|---------------|------|--------|
+| oracle 6.15 default | 6,063,503 | yes | 821 |
+| native omitted (`compress=6`) | 472,181 | yes | 2328 |
+| native `compress=0` | 2,895,334 | no | 2500 |
+
+**Direction:** omitted-compress native is **−83.7%** vs the same-run `compress=0` file (~6.1×). Previous inspectable native pair was 4.2 MiB uncompressed (different pass count). Oracle was already zlib; oracle vs native size is not a codec-only compare.  
+**claim:** none  
+**Artifacts:** `~/Downloads/nytprof-compare-apples/SIZE_COMPARE.txt`
 
 ---
 

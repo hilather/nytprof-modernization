@@ -9,7 +9,7 @@
 
 Name:           perl-NYTProfM
 Version:        6.15
-Release:        2%{?dist}
+Release:        3%{?dist}
 Summary:        NYTProfM 6.15 collection (D1-B v5-only default; -d:NYTProfM)
 License:        GPL+ or Artistic
 URL:            https://github.com/hilather/nytprof-modernization
@@ -24,6 +24,7 @@ BuildRequires:  perl-devel
 BuildRequires:  perl-generators
 BuildRequires:  perl(ExtUtils::ParseXS)
 BuildRequires:  perl(ExtUtils::Embed)
+BuildRequires:  perl(Compress::Raw::Zlib)
 BuildRequires:  zlib-devel
 BuildRequires:  binutils
 # Module path is cargo-free. Do not BuildRequire cargo, rustc, or rustup.
@@ -39,18 +40,20 @@ Requires:       libzstd
 Requires:       lz4
 %endif
 
-# I03 wrappers + unsigned Rocky 8 nytprof-cli ELF (prebuilt/el8-x86_64/).
-# %build stays cargo-free. Sibling /usr/bin/nytprof-cli makes nytprofhtml work.
-# Overwrites stock /usr/bin/nytprofhtml on clash (rpm -Uvh --replacefiles).
-# Does not Obsoletes perl-Devel-NYTProf. Signing / COPR not required (test-drive).
+# Collection-only: Devel::NYTProfM + XS + optional nytprofm-cli ELF.
+# Does NOT install stock-named nytprofhtml/nytprofcsv/nytprofcg/nytprof-engine
+# and does NOT package Devel::NYTProf::* report facades (I03 stays prefix/dev).
+# Sits beside perl-Devel-NYTProf; no stock /usr/bin name clash.
+# %build stays cargo-free. Signing / COPR not required (test-drive).
 
 %description
-NYTProfM 6.15 (Devel::NYTProfM) product module for Rocky 8 / EL8 (advertised
+NYTProfM 6.15 (Devel::NYTProfM) collection module for Rocky 8 / EL8 (advertised
 stream: base Perl 5.26). Operators use perl -d:NYTProfM (not -d:NYTProf).
-Also installs nytprof-engine, familiar nytprofhtml/nytprofcsv/nytprofcg
-wrappers, and an unsigned Rocky 8 nytprof-cli next to them so html/csv work
-without a second RPM. Overwrites stock /usr/bin names if they clash. Default
-build is D1-B: v5-only collector linked with -lz. No cargo in %%build.
+This RPM is collection-only: the debugger + XS. It does not install
+nytprofhtml / nytprofcsv / nytprofcg / nytprof-engine and does not overwrite
+stock /usr/bin names. Native report/html is nytprofm-cli (unsigned Rocky 8
+ELF) or stock nytprofhtml from perl-Devel-NYTProf. Default build is D1-B:
+v5-only collector linked with -lz. No cargo in %%build.
 
 format=v6 on this default flavor fail-closes with:
   format=v6 requires v6-enabled build (install v6_collect package or rebuild with --with v6_collect)
@@ -82,38 +85,20 @@ install -m 644 ${src}/Devel/NYTProfM.pm ${instlib}/Devel/NYTProfM.pm
 install -m 644 ${src}/Devel/NYTProfM/Core.pm ${instlib}/Devel/NYTProfM/Core.pm
 install -m 755 ${src}/auto/Devel/NYTProfM/NYTProfM.so \
   ${instarch}/auto/Devel/NYTProfM/NYTProfM.so
-# I03 report wrappers (product, not oracle 6.15 nytprofhtml).
-mkdir -p ${instlib}/Devel/NYTProf %{buildroot}%{_bindir}
-install -m 644 perl/lib/Devel/NYTProf/EngineDispatch.pm \
-  ${instlib}/Devel/NYTProf/EngineDispatch.pm
-install -m 644 perl/lib/Devel/NYTProf/JsonlData.pm \
-  ${instlib}/Devel/NYTProf/JsonlData.pm
-install -m 644 perl/lib/Devel/NYTProf/JsonlReadStream.pm \
-  ${instlib}/Devel/NYTProf/JsonlReadStream.pm
-install -m 644 perl/lib/Devel/NYTProf/LegacyBridge.pm \
-  ${instlib}/Devel/NYTProf/LegacyBridge.pm
-install -m 644 perl/lib/Devel/NYTProf/Data.pm \
-  ${instlib}/Devel/NYTProf/Data.pm
-install -m 644 perl/lib/Devel/NYTProf/ReadStream.pm \
-  ${instlib}/Devel/NYTProf/ReadStream.pm
-install -m 755 perl/bin/nytprof-engine %{buildroot}%{_bindir}/nytprof-engine
-install -m 755 perl/bin/nytprofhtml %{buildroot}%{_bindir}/nytprofhtml
-install -m 755 perl/bin/nytprofcsv %{buildroot}%{_bindir}/nytprofcsv
-install -m 755 perl/bin/nytprofcg %{buildroot}%{_bindir}/nytprofcg
-# Unsigned Rocky 8 prebuilt (not compiled in mock).
+# Native CLI under nytprofm* only (sits beside stock nytprofhtml).
+mkdir -p %{buildroot}%{_bindir}
 test -x prebuilt/el8-x86_64/nytprof-cli
-install -m 755 prebuilt/el8-x86_64/nytprof-cli %{buildroot}%{_bindir}/nytprof-cli
-ln -sf nytprof-cli %{buildroot}%{_bindir}/nytprof-dump
+install -m 755 prebuilt/el8-x86_64/nytprof-cli \
+  %{buildroot}%{_bindir}/nytprofm-cli
+ln -sf nytprofm-cli %{buildroot}%{_bindir}/nytprofm-dump
 
 %check
-# mock/EL8 %%check (default = D1-B): no cargo. Drive installed files only.
+# mock/EL8 %%check (default = D1-B): no cargo. Collection attach only.
 # Dual PERL5LIB so DynaLoader finds vendorarch .so (KD-R12).
 export PERL5LIB=%{buildroot}%{perl_vendorarch}:%{buildroot}%{perl_vendorlib}
 %{__perl} t/installed_attach.t
-export NYTPROF_BINDDIR=%{buildroot}%{_bindir}
-%{__perl} t/installed_scripts.t
-test -x %{buildroot}%{_bindir}/nytprof-cli
-%{buildroot}%{_bindir}/nytprof-cli capability --json | grep -F '"collection_default":"v5"'
+test -x %{buildroot}%{_bindir}/nytprofm-cli
+%{buildroot}%{_bindir}/nytprofm-cli capability --json | grep -F '"collection_default":"v5"'
 # D1-B: no libzstd / liblz4
 if readelf -d %{buildroot}%{perl_vendorarch}/auto/Devel/NYTProfM/NYTProfM.so \
     | grep -E -q 'NEEDED.*lib(zstd|lz4)'; then
@@ -125,16 +110,14 @@ fi
 %license Changes
 %{perl_vendorlib}/Devel/NYTProfM.pm
 %{perl_vendorlib}/Devel/NYTProfM/
-%{perl_vendorlib}/Devel/NYTProf/
 %{perl_vendorarch}/auto/Devel/NYTProfM/
-%{_bindir}/nytprof-engine
-%{_bindir}/nytprofhtml
-%{_bindir}/nytprofcsv
-%{_bindir}/nytprofcg
-%{_bindir}/nytprof-cli
-%{_bindir}/nytprof-dump
+%{_bindir}/nytprofm-cli
+%{_bindir}/nytprofm-dump
 
 %changelog
+* Sat Aug 15 2026 nytprof-modernization <devnull@example.com> - 6.15-3
+- Collection-only module RPM: no I03 Perl wrappers or Devel::NYTProf::*
+- Native CLI as nytprofm-cli / nytprofm-dump (no stock nytprofhtml clash)
 * Sat Aug 15 2026 nytprof-modernization <devnull@example.com> - 6.15-2
 - Operator HTML v2 + opt-in call-tree --flame (hover/click)
 - Live attach incl/excl (clock + pending child excl)

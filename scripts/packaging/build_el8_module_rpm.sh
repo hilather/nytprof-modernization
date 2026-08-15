@@ -53,6 +53,7 @@ command -v rpmbuild >/dev/null 2>&1 || {
     gcc make binutils \
     perl-devel perl-generators perl-ExtUtils-MakeMaker \
     perl-ExtUtils-ParseXS \
+    perl-Compress-Raw-Zlib \
     zlib-devel \
     which
   # perl(ExtUtils::Embed) is usually perl-devel; install by capability if present.

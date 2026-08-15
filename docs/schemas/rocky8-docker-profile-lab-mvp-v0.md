@@ -60,7 +60,7 @@ Honest **SKIP** of the docker half when the RPM is not on disk and not downloada
 | Non-goal | Notes |
 |----------|-------|
 | Join `offline_gate.sh` | Needs docker + yum + `rockylinux:8` pull — not an offline R1 step |
-| Mock / COPR / signed RPM | Testdrive `rpm -Uvh --replacefiles` only |
+| Mock / COPR / signed RPM | Testdrive `rpm -Uvh` only (collection-only; no stock bindir clash) |
 | Profile ack / Getopt::Long | Product `DB::sub` residual (`&$raw`, not `goto`) |
 | Public perf / 60s in CI | Lab uses 3s; operator demo stays ~60s |
 | Oracle DOM / tablesorter | Native MVP HTML only |

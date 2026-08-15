@@ -17,7 +17,7 @@
 - Advertised stream: Rocky 8 **base Perl 5.26**
 - `format=v6` fail-closed with the `v6_collect` rebuild string
 - Live attach (when CC/XS present) leaf **15** / mid **3** / mid→leaf **15** via shipped G05 / `t/installed_attach.t`
-- **Scripts:** `%{_bindir}/nytprofhtml` / `nytprofcsv` / `nytprofcg` / `nytprof-engine` plus `Devel::NYTProf::{EngineDispatch,JsonlData,…}` and bundled unsigned Rocky 8 `%{_bindir}/nytprof-cli`. Overwrites stock `/usr/bin` names on clash. `%build` does not run cargo. Signing not required for test-drive.
+- **Collection-only bindir:** `%{_bindir}/nytprofm-cli` + `nytprofm-dump` (unsigned Rocky 8 ELF). Does **not** install `nytprofhtml` / `nytprofcsv` / `nytprofcg` / `nytprof-engine` or `Devel::NYTProf::*` report facades. Sits beside stock `/usr/bin/nytprofhtml`. `%build` does not run cargo. Signing not required for test-drive.
 
 `--with v6_collect` is documented D1-A, not default K01 green.
 

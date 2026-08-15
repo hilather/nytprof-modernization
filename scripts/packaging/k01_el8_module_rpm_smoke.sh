@@ -60,14 +60,23 @@ grep -F -q 'perl(ExtUtils::Embed)' "$SPEC" \
   || fail "spec missing BuildRequires perl(ExtUtils::Embed)"
 grep -F -q 'binutils' "$SPEC" \
   || fail "spec missing BuildRequires binutils"
-grep -F -q '%{_bindir}/nytprofhtml' "$SPEC" \
-  || fail "spec must install %{_bindir}/nytprofhtml (product I03 wrapper)"
-grep -F -q '%{_bindir}/nytprof-engine' "$SPEC" \
-  || fail "spec must install %{_bindir}/nytprof-engine"
-grep -F -q 't/installed_scripts.t' "$SPEC" \
-  || fail "spec %check must drive t/installed_scripts.t"
-grep -F -q '%{_bindir}/nytprof-cli' "$SPEC" \
-  || fail "spec must install bundled EL8 nytprof-cli next to nytprofhtml"
+if grep -E -q '%\{_bindir\}/nytprof(html|csv|cg)|%\{_bindir\}/nytprof-engine' "$SPEC"; then
+  fail "spec must not install stock nytprofhtml/csv/cg or nytprof-engine (collection-only)"
+fi
+if grep -F -q 't/installed_scripts.t' "$SPEC"; then
+  fail "spec %check must not require I03 t/installed_scripts.t"
+fi
+if grep -F -q '%{perl_vendorlib}/Devel/NYTProf/' "$SPEC"; then
+  fail "spec must not package Devel::NYTProf::* report facades"
+fi
+if grep -Eiq 'replacefiles' "$SPEC"; then
+  fail "spec must not instruct --replacefiles (no stock bindir clash)"
+fi
+grep -F -q '%{_bindir}/nytprofm-cli' "$SPEC" \
+  || fail "spec must install bundled EL8 CLI as nytprofm-cli"
+if grep -E -q '%\{_bindir\}/nytprof-cli$' "$SPEC"; then
+  fail "spec must not install stock-named nytprof-cli (use nytprofm-cli)"
+fi
 if awk '/^%build/,/^%install/' "$SPEC" | grep -v '^#' | grep -Eiq 'cargo |rustc |rustup'; then
   fail "module spec %build must not invoke cargo/rustc/rustup (prebuilt only)"
 fi

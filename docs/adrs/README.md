@@ -18,6 +18,7 @@ Queue: [`docs/plan/18_OPEN_QUESTIONS_AND_ADR_QUEUE.md`](https://github.com/hilat
 | [0010](https://github.com/hilather/nytprof-modernization/blob/main/docs/adrs/0010-signed-ci-prebuilt-native-cli.md) | Signed CI prebuilt `nytprof-cli` for EL8 tools RPM (KD-13) | **accepted (policy)**; pipeline / K02 **not implemented** (**PR-K03** / ADR-Q016 EL8 slice) |
 | [0011](https://github.com/hilather/nytprof-modernization/blob/main/docs/adrs/0011-native-operator-html-v1.md) | Native operator HTML v1 (heat / links / vanilla sort) | **accepted (policy)**; does **not** un-waive M01 jquery/tablesorter; implementation PR-2..PR-6 |
 | [0012](https://github.com/hilather/nytprof-modernization/blob/main/docs/adrs/0012-native-operator-html-v2.md) | Native operator HTML v2 (oracle look/feel/nav; modern JS/CSS) | **accepted (policy)**; does **not** un-waive M01; design [`OPERATOR_HTML_V2_DESIGN_v0.md`](https://github.com/hilather/nytprof-modernization/blob/main/docs/OPERATOR_HTML_V2_DESIGN_v0.md) |
+| [0013](https://github.com/hilather/nytprof-modernization/blob/main/docs/adrs/0013-v5-coalesced-checkpoints.md) | In-memory v5 coalesced checkpoints (`aggregate=1`) | **proposed** (charter / plan-01 exception; ADR-Q027; **not accepted**; no C1/C2 until owner sign-off) |
 
 **Numbering map (coordinate across parallel PRs):**
 
@@ -35,6 +36,7 @@ Queue: [`docs/plan/18_OPEN_QUESTIONS_AND_ADR_QUEUE.md`](https://github.com/hilat
 | **0010** | Signed CI prebuilt `nytprof-cli` (EL8 tools) | Product-completion K-track — **PR-K03** (hard-gates K02) |
 | **0011** | Native operator HTML v1 | Live-metrics / HTML program — **PR-0** |
 | **0012** | Native operator HTML v2 | HTML-OP-V2 chrome / IA / dual-docker lab |
+| **0013** | In-memory v5 coalesced checkpoints | Profile size item 3 — **PR-A13** (`proposed` only) |
 
 ### Related (not ADRs)
 

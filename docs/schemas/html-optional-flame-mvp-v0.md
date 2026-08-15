@@ -56,6 +56,8 @@ Default (no `--flame`) layout is unchanged — **no** `all_stacks_by_time.*` fil
 | `all_stacks_by_time.folded` | Same text as `render_folded_stacks`; default-calls1 includes `main::mid;main::leaf 15` |
 | `all_stacks_by_time.svg` | Well-formed SVG; **call-tree** stacked `rect`s (roots at the bottom); same caller is **one** frame (not a column per outgoing edge); widths proportional to inclusive time when known, else count (not all equal when weights differ); labels include `main::leaf` / `main::mid`; count **15** visible for mid→leaf (`calls: 15` in `<title>`). Frames with a `sub_def` (or `CORE:` / `RUNTIME`) wrap in `<a class="flame-link" href="file-{fid}.html#L{line}">`. `<title>` lists name, calls, inclusive, exclusive. Sub-pixel frames omitted. |
 | Index `section.flame` | `p.flame-links` with relative `href` to both files; **inlined** sibling SVG (same body) so hover + click work under `file://`; `#nytprof-flame-tip` vanilla tooltip; **not** `<img>` / `<object>` |
+
+**Presentation (2026-08-15 refresh, not contract):** frames use rounded corners (`rx="3"`), a translucent white separator stroke, `pointer-events="none"` labels (hover/click always lands on the frame), and a CSS `transition` on hover. These attributes are visual polish only — tests must keep asserting structure (`<rect `, names, counts, `flame-link`, `<title>` fields), never stroke/radius values.
 | Atomic publish | Flame files written in the same temp-then-rename path as `style.css` |
 | stderr listing | CLI lists flame paths with other published files when flame is on |
 

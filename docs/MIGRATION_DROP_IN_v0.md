@@ -26,9 +26,9 @@ This guide is **docs-landed**. It is **not** a CPAN TRIAL upload, **not** a publ
 |---------|----------------|--------------|
 | **CPAN (primary)** | Dist **`NYTProfM`**, module **`Devel::NYTProfM`**, product `$VERSION` **6.15** | Identity frozen (Option B / KD-16/17 superseded). **`CPAN-TRIAL-READY` is notes-ready** — no TRIAL upload, no `cpanm NYTProfM` of this tree from PAUSE yet |
 | **Rocky / EL8 RPM (companion)** | `dnf install perl-NYTProfM` | Spec MVP (`EL8-RPM-MODULE`). **Not** mock-certified / public COPR unless those rows land. Same sources as CPAN |
-| **Rocky 8 testdrive (unsigned GitHub Release)** | `rpm -Uvh --replacefiles perl-NYTProfM-6.15-2.el8.x86_64.rpm` | Download the `v*` release asset. Workflow [`.github/workflows/release-el8-rpm.yml`](https://github.com/hilather/nytprof-modernization/blob/main/.github/workflows/release-el8-rpm.yml). **Not** mock-certified / signed / COPR |
+| **Rocky 8 testdrive (unsigned GitHub Release)** | `rpm -Uvh perl-NYTProfM-6.15-3.el8.x86_64.rpm` | Download the `v*` release asset. Workflow [`.github/workflows/release-el8-rpm.yml`](https://github.com/hilather/nytprof-modernization/blob/main/.github/workflows/release-el8-rpm.yml). **Not** mock-certified / signed / COPR |
 
-Testdrive (no yum repo yet): download `perl-NYTProfM-6.15-2.el8.x86_64.rpm` from the GitHub Release and `sudo rpm -Uvh --replacefiles` that file. `--replacefiles` overwrites stock `/usr/bin/nytprofhtml` if `perl-Devel-NYTProf` is present.
+Testdrive (no yum repo yet): download `perl-NYTProfM-6.15-3.el8.x86_64.rpm` from the GitHub Release and `sudo rpm -Uvh` that file. The module RPM is **collection-only** — it does **not** install `nytprofhtml` and does **not** overwrite stock `/usr/bin` names. Sit beside `perl-Devel-NYTProf`. Native HTML is `nytprofm-cli html`.
 
 Local **Rocky 8 Docker** walkthrough (install testdrive RPM, download [ack v3](https://beyondgrep.com/) + a Gutenberg corpus, profile a core-only ~1-minute analyzer, write HTML): [`scripts/field/rocky8_docker_profile_demo.sh`](https://github.com/hilather/nytprof-modernization/blob/main/scripts/field/rocky8_docker_profile_demo.sh) — default output `~/Downloads/nytprof-rocky8-demo/`. Integration smoke (same path, `--lab`, honest docker SKIP): [`scripts/field/rocky8_docker_profile_smoke.sh`](https://github.com/hilather/nytprof-modernization/blob/main/scripts/field/rocky8_docker_profile_smoke.sh). See [R1_PREVIEW_OPERATOR_RUNBOOK.md](https://github.com/hilather/nytprof-modernization/blob/main/docs/R1_PREVIEW_OPERATOR_RUNBOOK.md) § Rocky 8 Docker profile demo. Ack itself is **not** the profiled process (product `DB::sub` residual on Getopt::Long / Exporter). **Not** mock-certified / not a perf claim.
 
@@ -50,9 +50,9 @@ cpanm NYTProfM                # or: cpanm Devel::NYTProfM
 dnf install perl-NYTProfM
 ```
 
-The EL8 **module RPM** ships collection **and** I03 report wrappers: `nytprof-engine`, `nytprofhtml`, `nytprofcsv`, `nytprofcg`. Those names overwrite stock `/usr/bin/nytprofhtml` (etc.) if `perl-Devel-NYTProf` is also installed — test-drive with `rpm -Uvh --replacefiles` if `dnf` reports a file conflict. The RPM does **not** Obsoletes stock.
+The EL8 **module RPM** is **collection-only**: `Devel::NYTProfM` + XS + `nytprofm-cli` / `nytprofm-dump`. It does **not** install `nytprofhtml` / `nytprofcsv` / `nytprofcg` / `nytprof-engine` and does **not** package `Devel::NYTProf::*` report facades. It sits beside stock `perl-Devel-NYTProf`. The RPM does **not** Obsoletes stock.
 
-`nytprofhtml` is the **product** wrapper (exec sibling `nytprof-engine html`), **not** a new 6.15 DOM `nytprofhtml`. The same RPM ships an **unsigned Rocky 8** `nytprof-cli` next to the wrappers so native `html`/`csv` work without a second package. Cargo-free proof is still `nytprof-engine query --json --jsonl`. RPM signing / public COPR is **not** required for this test-drive.
+Native HTML from this RPM: `nytprofm-cli html nytprof.out --out-dir ./report`. Stock `nytprofhtml` remains the 6.15 reader if that package is installed. I03 Perl wrappers stay a **prefix/dev** path (`install_product_scripts.sh`), not this RPM. RPM signing / public COPR is **not** required for this test-drive.
 
 Optional native (when BUILD-003 / I02 path is used): `NYTPROF_NATIVE=0` (default, cargo-free collection + legacy report), `=1` (require cargo/prebuilt), `=auto` (install CLI if present).
 
@@ -144,24 +144,20 @@ Advertised-options vs residual rows live in [`docs/contracts/DROP_IN_DOD_v0.md`]
 
 | Entry | Role |
 |-------|------|
-| `nytprofhtml` / `nytprofcsv` | Familiar 6.15 names. After **I03**, product wrappers `exec` sibling `nytprof-engine html` / `csv`. Default engine is **native** — those actions need a discoverable `nytprof-cli`. Cargo-free I03 proof is `nytprof-engine query --json --jsonl`. Not 6.15 `nytprofhtml` DOM |
-| `nytprof-engine` | Perl facade: `--engine=native\|legacy\|auto` for `report` / `verify` / `html` / `csv` / `query` / exports |
-| `nytprof-cli html` (also `report`, `csv`, `verify`, `dump`, …) | Native CLI (tools companion / optional `NYTPROF_NATIVE`) |
+| `nytprofm-cli` / `nytprofm-dump` | Native CLI from the **module RPM** (unsigned EL8 ELF). `html` / `report` / `csv` / `verify` / `dump` / `capability`. Does not clash with stock `nytprofhtml`. |
+| `nytprofhtml` (stock) | 6.15 reader from `perl-Devel-NYTProf` if that package remains. Not shipped by `perl-NYTProfM`. |
+| `nytprof-engine` / I03 wrappers | Prefix/dev only (`install_product_scripts.sh`). **Not** in the module RPM. |
 
 ```sh
-# Cargo-free query (I03 prefix; no nytprof-cli required)
-nytprof-engine query --json --jsonl readstream.jsonl
+# Module RPM — native HTML (sits beside stock nytprofhtml)
+nytprofm-cli html nytprof.out --out-dir ./report
+nytprofm-cli capability --json   # collection_default: v5
 
-# Familiar names — default engine=native; need nytprof-cli on PATH / prefix/bin
+# Stock 6.15 reader, if perl-Devel-NYTProf is also installed
 nytprofhtml nytprof.out
-nytprofcsv  nytprof.out
 
-# Explicit engines
-nytprof-engine --engine=legacy report nytprof.out
-nytprof-engine --engine=native  html nytprof.out
-
-# Native CLI directly
-nytprof-cli html nytprof.out --out-dir ./report
+# Cargo-free query (I03 prefix; not the module RPM)
+nytprof-engine query --json --jsonl readstream.jsonl
 ```
 
 `engine=legacy` is the one-step report escape (oracle / product-legacy path). Native HTML is MVP (CSS + excl + optional flame) — **not** oracle DOM. Tablesorter / shared JS are **WAIVE** for GA-candidate (M01), not CLOSE.

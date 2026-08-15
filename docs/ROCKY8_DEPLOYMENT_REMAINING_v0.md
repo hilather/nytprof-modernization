@@ -9,7 +9,7 @@
 | **Baseline commit** | `main` @ `236d81e` (`docs: Option B operator identity (MIG01 / S0-S3 / RPM-08)`) |
 | **Does not supersede** | [`docs/PROGRAM_CHARTER.md`](https://github.com/hilather/nytprof-modernization/blob/main/docs/PROGRAM_CHARTER.md), [`docs/plan/01_NON_NEGOTIABLES_AND_COMPATIBILITY_CONTRACT.md`](https://github.com/hilather/nytprof-modernization/blob/main/docs/plan/01_NON_NEGOTIABLES_AND_COMPATIBILITY_CONTRACT.md), accepted ADRs 0001–0010, [`docs/contracts/DROP_IN_DOD_v0.md`](https://github.com/hilather/nytprof-modernization/blob/main/docs/contracts/DROP_IN_DOD_v0.md), [`docs/contracts/R1_RESIDUAL_READINESS_MATRIX_v0.md`](https://github.com/hilather/nytprof-modernization/blob/main/docs/contracts/R1_RESIDUAL_READINESS_MATRIX_v0.md), [`AGENTS.md`](https://github.com/hilather/nytprof-modernization/blob/main/AGENTS.md) |
 | **Historical + still-binding KDs** | [`docs/DROP_IN_RPM_COMPLETION_v0.md`](https://github.com/hilather/nytprof-modernization/blob/main/docs/DROP_IN_RPM_COMPLETION_v0.md) (rev 4). **Do not rewrite that file in place.** This document is the remaining-work plan after attach-preview, B-collection, Option B identity, and A4 operator docs landed. |
-| **User override (2026-08-13)** | **KD-R2 superseded:** `perl-NYTProfM` ships I03 `nytprofhtml` / `nytprof-engine` **and** an unsigned Rocky 8 `nytprof-cli` ELF (`packaging/prebuilt/el8-x86_64/`). Overwrites stock `/usr/bin` names. Signing/COPR still not required (test-drive). |
+| **User override (2026-08-15)** | **KD-R2 reversed:** `perl-NYTProfM` is **collection-only** (`Devel::NYTProfM` + XS + `nytprofm-cli`). Does **not** ship I03 `nytprofhtml` / `nytprof-engine`. Sits beside stock `/usr/bin` names. Signing/COPR still not required (test-drive). |
 | **Board rows** | `EL8-RPM-MODULE` (spec MVP; **not** mock-certified), `EL8-RPM-TOOLS` (spec MVP; pipeline residual), `DROP-IN-REMAINING` (collection integers landed; publish/mock residual), `NS-NYTPROFM-IDENTITY` (done), `DROP-IN-RPM-COMPLETION` (docs rev 4; A3/A5 residual) |
 
 Agents own **tasks**. This document does not override fixtures, ADRs, the charter, or the frozen KDs in the completion design (KD-1 through KD-36, M01/Q4).
@@ -44,6 +44,7 @@ Rev-4 [`docs/PRODUCT_COMPLETION_DROP_IN_v0.md`](https://github.com/hilather/nytp
 | DI-04 | `scripts/packaging/di04_mini_kinds_smoke.sh` | Product-defined projected kinds; **not** raw `compare_jsonl` |
 | DI-08 | `scripts/packaging/di08_sigexit_smoke.sh` | TERM flush; **`_exit` residual** (verify fail-closed / empty) |
 | DI-09 subset | `scripts/packaging/di09_options_subset_smoke.sh` | `compress=1` START_DEFLATE; `slowops=0/1/2` policy |
+| Durable seal (opt-in) | `scripts/packaging/di_durable_kill_smoke.sh` | `durable=1` sealed publish + `kill -9`; default `durable` stays **0** |
 | RPM-01 | `make_nytprofm_dist.sh` + `rpm01_make_dist_smoke.sh` | Real `NYTProfM-6.15.tar.gz`; no `baseline/` / `crates/` |
 | RPM-03 | `perl-NYTProfM.spec` `%check` = `t/installed_attach.t` | Installed-tree 15/3/15 + `format=v6` fail-closed |
 | A2 host proof | `a2_installed_attach_smoke.sh` | Prefix install + same test; not an EL8 chroot |
@@ -558,7 +559,7 @@ sequenceDiagram
 | Ubuntu rust-smoke binary used as EL8 tools input | **High** | C1 builder is `rockylinux:8` + in-job `ldd` / `capability` / tiny report; KD-28 |
 | Stub GPG key treated as live | **High** | Sentinel `NYTPROFM-GPG-STUB`; verify script refuses stub |
 | `gpgcheck=0` left as fleet default | **Med** | Runbook titled **unsigned internal bootstrap — not a production policy** |
-| `%check` breaks if default `compress=1` | **Med** | Parser dies on `z`; keep default compress off; do not mix compress-default into A3 |
+| `%check` + default `compress=1` | **landed (parser + D2 opt-in)** | `t/installed_attach.t` inflates `z` (`Compress::Raw::Zlib`, 64 MiB cap, nested `z` fail-closed). Omitted `compress` is zlib level **6**. `durable=1` sealed publish is opt-in (default **0**). Residual: default-on durable; `aggregate=1` (ADR-0013 proposed, fail-closed). |
 | `.so` under vendorlib surprises `perl-generators` / debuginfo | **High** | KD-R12: `.so` in **vendorarch**; `%check` PERL5LIB = vendorarch:vendorlib |
 | Naive cargo grep reds on spec comments | **High** | Grep `root.log` installs + `build.log` invoke lines only |
 | Claim never flips because no mock host is named | **Med** | KD-R13 packager Rocky 8 VM is a claim-stamp prerequisite |
@@ -670,7 +671,7 @@ New decisions for **this remaining-work delta** only:
 | ID | Decision | Rationale |
 |----|----------|-----------|
 | **KD-R1** | Rocky **collection drop-in** claim = shipped B-collection + shipped RPM-01/03 + shipped A4 + **A4b DoD/P01 honesty** + **A3 maintainer-mock** + **A5a unsigned-bootstrap yum/stub honesty**. Module RPM is **attach-only**. | Matches DoD “Drop-in collection on Rocky 8 default RPM” = D1-B green **after A4b updates the living header**; does not wait for D1-A, tools, or opcode. |
-| **KD-R2** | **Superseded (user 2026-08-13):** I03 `nytprofhtml` / `nytprof-engine` **are** in `perl-NYTProfM` and overwrite stock `/usr/bin` names. Tools RPM remains a companion for native `html` (needs `nytprof-cli`). Signing not required for test-drive. | Operator asked for scripts in the module RPM; PATH clash is overwrite, not Obsoletes stock. |
+| **KD-R2** | **Superseded (user 2026-08-15):** module RPM is **collection-only**. Native CLI is `nytprofm-cli` (no stock `nytprofhtml` clash). I03 wrappers stay prefix/dev. | Operator does not want Perl report scripts in the RPM; sit beside `perl-Devel-NYTProf`. |
 | **KD-R3** | S2 / `BUILD-003-FULL` / PAUSE are **B-ship residuals**, not Rocky-deployment gates. | RPM `%build` already is `make -C collector xs-nytprof`. Dual_path primary is a CI-smoke concern, not `dnf install`. |
 | **KD-R4** | `_exit`, mid-deflate-in-child, `leave`/`findcaller`, DI-03 opcode **do not block** the Rocky collection claim if named. | Advertised-options tier is green-row subset. DI-08 already documents `_exit`. |
 | **KD-R5** | Mock chroot remains **`rocky+epel-8-x86_64`**; D1-B BRs stay BaseOS+AppStream-only **and explicitly include** `perl(ExtUtils::ParseXS)` + `perl(ExtUtils::Embed)` + `binutils`; fallback `rocky-8-x86_64` via `NYTPROF_MOCK_ROOT`. | `xs-nytprof` invokes ParseXS/Embed; do not assume `perl-devel` pulls them. EPEL not required. |
