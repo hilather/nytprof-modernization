@@ -692,7 +692,15 @@ run_oracle_host() {
   mkdir -p "$dest"
   [[ -f "$ARCHIVE" ]] || fail "missing oracle archive $ARCHIVE"
   [[ -f "$SCANNER" ]] || fail "missing $SCANNER"
-  [[ -f "$WHICH_PM" ]] || fail "missing File::Which at $WHICH_PM"
+  if [[ ! -f "$WHICH_PM" ]]; then
+    # test-deps/ is gitignored; GHA checkouts do not have File::Which.
+    log "SKIP: File::Which not in checkout ($WHICH_PM) — oracle half not run"
+    mkdir -p "$dest/meta"
+    echo "oracle_skip=1 missing File::Which (baseline test-deps gitignored)" \
+      >"$dest/meta/oracle-skip.txt"
+    echo "oracle_skip=1" >>"$dest/meta/timings.txt"
+    return 0
+  fi
 
   log "re-exec oracle in $ORACLE_IMAGE → $dest"
   # Isolation: archive + scanner + File::Which only — never the repo root.
