@@ -21,6 +21,8 @@ User-final **Q-prebuilt** / **KD-13** already froze the direction: EL8 `nytprof-
 
 **Residual honesty:** signed artifact **pipeline** is still **not implemented**. K02 landed [`packaging/rpm/nytprof-cli.spec`](https://github.com/hilather/nytprof-modernization/blob/main/packaging/rpm/nytprof-cli.spec) on this contract (unpack + fail-closed verify; no rustup-in-mock). Live signed tarball / publish job remains residual.
 
+**Amendment 2026-08-15 (test-drive freshness gate, not signing):** v0.2.8 shipped a stale committed prebuilt (built 2026-08-13, two days before the HTML v2 styling commit) because nothing verified binary-vs-source freshness. Mitigation landed in v0.2.9: [`scripts/packaging/cli_source_sha256.sh`](https://github.com/hilather/nytprof-modernization/blob/main/scripts/packaging/cli_source_sha256.sh) hashes `crates/` + workspace manifests; `build_el8_nytprof_cli.sh` records it in `packaging/prebuilt/el8-x86_64/nytprof-cli.source-sha256`; `release-el8-rpm.yml` **fails closed** before rpmbuild on mismatch. This is a freshness gate only — it does **not** sign, verify authenticity, or close the signed-pipeline residual above.
+
 Numbering coordination (PLAN `8c9b1a63` + product-completion K-track):
 
 | Number | Owner | Topic |

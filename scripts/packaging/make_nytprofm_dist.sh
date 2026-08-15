@@ -63,6 +63,10 @@ if [[ -f "$ROOT/packaging/prebuilt/el8-x86_64/README.md" ]]; then
   cp -a "$ROOT/packaging/prebuilt/el8-x86_64/README.md" \
     "$STAGE/prebuilt/el8-x86_64/README.md"
 fi
+if [[ -f "$ROOT/packaging/prebuilt/el8-x86_64/nytprof-cli.source-sha256" ]]; then
+  cp -a "$ROOT/packaging/prebuilt/el8-x86_64/nytprof-cli.source-sha256" \
+    "$STAGE/prebuilt/el8-x86_64/nytprof-cli.source-sha256"
+fi
 
 # Minimal facade: identity only. %build does not run this for XS.
 cat > "$STAGE/Makefile.PL" <<'PL'

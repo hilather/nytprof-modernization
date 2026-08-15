@@ -9,7 +9,7 @@
 
 Name:           perl-NYTProfM
 Version:        6.15
-Release:        3%{?dist}
+Release:        4%{?dist}
 Summary:        NYTProfM 6.15 collection (D1-B v5-only default; -d:NYTProfM)
 License:        GPL+ or Artistic
 URL:            https://github.com/hilather/nytprof-modernization
@@ -115,6 +115,12 @@ fi
 %{_bindir}/nytprofm-dump
 
 %changelog
+* Sat Aug 15 2026 nytprof-modernization <devnull@example.com> - 6.15-4
+- Refresh bundled nytprof-cli: operator HTML v2 visual refresh (carded tables,
+  sticky thead, prefers-color-scheme dark) + flame frame polish actually ship
+  (6.15-3 RPM packaged a prebuilt CLI from before the v0.2.8 styling commit)
+- Freshness contract: nytprof-cli.source-sha256 marker; release workflow fails
+  closed on a stale prebuilt (ADR-0010 test-drive gate)
 * Sat Aug 15 2026 nytprof-modernization <devnull@example.com> - 6.15-3
 - Collection-only module RPM: no I03 Perl wrappers or Devel::NYTProf::*
 - Native CLI as nytprofm-cli / nytprofm-dump (no stock nytprofhtml clash)

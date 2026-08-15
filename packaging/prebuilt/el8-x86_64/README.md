@@ -7,3 +7,5 @@
 ```
 
 That runs `cargo build --release -p nytprof-cli` inside `rockylinux:8` and writes `nytprof-cli` here (stripped). `perl-NYTProfM` `%install` copies it to `%{_bindir}/nytprof-cli`. Module `%build` stays cargo-free.
+
+**Freshness marker (2026-08-15):** the build script also writes `nytprof-cli.source-sha256` (hash of `crates/` + workspace manifests, via `scripts/packaging/cli_source_sha256.sh`). The `release-el8-rpm.yml` tag workflow **fails closed** when the committed marker does not match the tagged source — commit binary **and** marker together, or the tag build aborts.

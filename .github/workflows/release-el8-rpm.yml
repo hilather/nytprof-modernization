@@ -28,6 +28,22 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      # Fail closed when the committed EL8 prebuilt CLI was not rebuilt from the
+      # tagged source (marker written by build_el8_nytprof_cli.sh). Test-drive
+      # gate for the ADR-0010 signed-prebuilt residual.
+      - name: Verify EL8 prebuilt CLI freshness
+        run: |
+          set -euo pipefail
+          marker=packaging/prebuilt/el8-x86_64/nytprof-cli.source-sha256
+          test -f "$marker" || { echo "::error::missing $marker — rerun ./scripts/packaging/build_el8_nytprof_cli.sh and commit binary + marker"; exit 1; }
+          want="$(cat "$marker")"
+          got="$(bash scripts/packaging/cli_source_sha256.sh)"
+          if [[ "$want" != "$got" ]]; then
+            echo "::error::stale EL8 prebuilt nytprof-cli (marker $want != source $got) — rerun ./scripts/packaging/build_el8_nytprof_cli.sh and commit binary + marker"
+            exit 1
+          fi
+          echo "OK: prebuilt nytprof-cli matches source hash $got"
+
       - name: rpmbuild perl-NYTProfM
         run: |
           set -euo pipefail
@@ -35,7 +51,7 @@ jobs:
             scripts/packaging/make_nytprofm_dist.sh
           ./scripts/packaging/build_el8_module_rpm.sh dist/el8
           ls -la dist/el8
-          test -f dist/el8/perl-NYTProfM-6.15-3.el8.x86_64.rpm
+          test -f dist/el8/perl-NYTProfM-6.15-4.el8.x86_64.rpm
 
       - name: Upload RPM artifacts
         uses: actions/upload-artifact@v4
@@ -66,4 +82,4 @@ jobs:
           name: ${{ github.ref_name }} — Rocky 8 testdrive RPM
           files: dist/el8/*.rpm
           fail_on_unmatched_files: true
-          body_path: docs/RELEASE_NOTES_v0.2.8.md
+          body_path: docs/RELEASE_NOTES_v0.2.9.md

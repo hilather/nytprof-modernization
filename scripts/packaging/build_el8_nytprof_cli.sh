@@ -40,5 +40,9 @@ docker run --rm \
 [[ -x "$OUT_DIR/nytprof-cli" ]] || fail "docker build did not write $OUT_DIR/nytprof-cli"
 file "$OUT_DIR/nytprof-cli"
 ldd "$OUT_DIR/nytprof-cli" || true
+# Freshness marker: release-el8-rpm.yml fails closed when the committed marker
+# does not match the tag's source hash (ADR-0010 test-drive gate).
+"$ROOT/scripts/packaging/cli_source_sha256.sh" > "$OUT_DIR/nytprof-cli.source-sha256"
 ok "EL8 prebuilt → $OUT_DIR/nytprof-cli"
+ok "source hash marker → $OUT_DIR/nytprof-cli.source-sha256 ($(cat "$OUT_DIR/nytprof-cli.source-sha256"))"
 printf '%s\n' "$OUT_DIR/nytprof-cli"
