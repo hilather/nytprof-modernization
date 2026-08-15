@@ -56,8 +56,25 @@ Project global rule also applies: structured code review after non-trivial chang
 | **Vs Perl / 6.15 oracle** | When changing decode, model, report, export, or collector-adjacent paths that affect wall time, CPU, peak memory, or output size, refresh or extend comparisons against the **pinned oracle** path (`baseline/6.15/`, isolated `PERL5LIB` — **never** put `crates/` on oracle `PERL5LIB`). |
 | **Vs previous versions** | Keep engineering baselines current against **prior native builds/tags** (or the last recorded harness snapshot in `docs/BENCH_NOTES.md` / plan BENCH tasks) so regressions are visible over time. |
 | **Same workload** | Use the same fixtures and feature options on both sides of a comparison. |
+| **Apples-to-apples reports** | Inspectable oracle vs native **HTML/profile** comparisons (Downloads, dual-docker lab, design evidence) must use the **same** scanner script, **same** `--seconds`, **same** corpus tree, and the **same** host class. Do **not** compare a 25s oracle site to a 60s native site, or 2-file lab seed to a 12-copy Gutenberg demo, and then discuss exclusive ranking as if it were the same run. Use [`scripts/field/compare_oracle_native_reports.sh`](https://github.com/hilather/nytprof-modernization/blob/main/scripts/field/compare_oracle_native_reports.sh). Dual-docker `--engine both` already shares `TARGET_SECS` and corpus — keep it that way. Residual exclusive-math differences may remain; duration/corpus must not. |
+| **How to read speed / time gaps** | See [Interpreting oracle vs native times](#interpreting-oracle-vs-native-times) below. Same wall budget does **not** mean the same amount of application work or the same exclusive seconds. |
 | **Record results** | Update `docs/BENCH_NOTES.md` (or the certified bench package when present) with command, host notes, and direction of change — without inventing certification claims. |
 | **Harness** | Local light harness: `./tools/bench/light_bench.sh`. Full certification remains plan WP-13 / `docs/plan/11_BENCHMARKING_AND_PERFORMANCE_GATES.md`. |
+
+#### Interpreting oracle vs native times
+
+Even a correctly paired run (same script, seconds, corpus, host) will **not** show the same exclusive seconds. That is expected. Do not “fix” HTML units or rescale native ticks to match 6.15.
+
+| What you see | What it means |
+|--------------|----------------|
+| Same `--seconds`, native did **more scanner passes** (e.g. 3788 vs 1151 in 25s) | Devel::NYTProf **6.15 is heavier** (C `entersub` / stmt / slowops). NYTProfM’s `DB::sub` + MATCH/PRINT wrap lets the app finish more work in the same wall budget. |
+| Native `CORE:match` exclusive is several times oracle’s (e.g. 15.5s vs 4.47s) on that pair | Scale by **work**, not wall: match calls / scanner `passes=`. 15.5/4.47 ≈ 3788/1151. Per-match cost is similar; native is not 3× “too large.” |
+| Oracle “Profile of … for **9.08s (of 24.2s)**” vs native “**24.2s**” | 6.15 `profiler_active` vs process wall. Native summary is **Σ statement ticks** / `ticks_per_sec` (often ≈ requested wall). Different numerator — do not treat 9s vs 24s as a clock bug. |
+| Oracle `tokenize` excl **137ms** / incl **4.61s**; native **470ms** / **16.0s** | **Shape** must match: parent exclusive is a **small remainder** after MATCH/PRINT (`excl ≈ incl − children`). Inclusive tracks the extra passes. |
+| Native `tokenize` excl ≈ `CORE:match` excl (old Rocky 60s demo: 39.6s ≈ 38.6s) | **Broken exclusive split** on that profile (child slowop not subtracted), or a pre-fix `nytprof.out`. Re-profile with current attach; do not re-render HTML and claim a timing fix. |
+| Mixed 25s oracle vs 60s native, or 2-file vs 12-copy corpus | **Not a comparison.** Re-run [`compare_oracle_native_reports.sh`](https://github.com/hilather/nytprof-modernization/blob/main/scripts/field/compare_oracle_native_reports.sh). |
+
+Native finishing more work in N seconds is **engineering observation**, not a certified public perf claim (still plan `BENCH-*`). `collection_default` stays v5.
 
 ### 6. Failed attempts and language semantics (save automatically)
 
@@ -91,11 +108,12 @@ Negative knowledge is part of the repo. Agents **must** automatically record fai
 1. Prefer small, mergeable slices that keep the offline gate green.  
 2. Never put `crates/` on oracle `PERL5LIB`.  
 3. Derive counts and aggregates from dump/model/JsonlData — do not invent fixture constants detached from real loads.  
-4. Provisional v6 preflight (`nytprof-format-v6`, `docs/schemas/v6-*-provisional-v0.md`) is **not** a wire freeze and does **not** complete COL-007 (C v6 writer).  
-5. Stop and escalate when observed 6.15 behavior contradicts frozen specs; do not guess wire or timing semantics.  
-6. Handoffs include commits, commands, artifacts, open questions, and known limitations.  
-7. **Automatically** append light rows under `docs/agent-notes/` for abandoned attempts (incl. failed perf) and corrected Perl/Rust misunderstandings; open a `details/<slug>.md` only when the light row is not enough.  
-8. **After any push to `main`, tag, or GitHub Release: watch CI until green** (see [Releases and CI watch](#releases-and-ci-watch) below). Do not declare a release done while Actions is red or unwatched.
+4. Oracle vs native **report** comparisons are apples-to-apples only: same script, same seconds, same corpus (quality bar §5). Never present mixed-duration sites as the same profile.  
+5. Provisional v6 preflight (`nytprof-format-v6`, `docs/schemas/v6-*-provisional-v0.md`) is **not** a wire freeze and does **not** complete COL-007 (C v6 writer).  
+6. Stop and escalate when observed 6.15 behavior contradicts frozen specs; do not guess wire or timing semantics.  
+7. Handoffs include commits, commands, artifacts, open questions, and known limitations.  
+8. **Automatically** append light rows under `docs/agent-notes/` for abandoned attempts (incl. failed perf) and corrected Perl/Rust misunderstandings; open a `details/<slug>.md` only when the light row is not enough.  
+9. **After any push to `main`, tag, or GitHub Release: watch CI until green** (see [Releases and CI watch](#releases-and-ci-watch) below). Do not declare a release done while Actions is red or unwatched.
 
 ## Releases and CI watch
 
@@ -152,3 +170,4 @@ gh run view <run-id> --log-failed | tail -200
 | Agent work packages | [`docs/plan/14_AGENT_WORK_PACKAGES_AND_HANDOFFS.md`](https://github.com/hilather/nytprof-modernization/blob/main/docs/plan/14_AGENT_WORK_PACKAGES_AND_HANDOFFS.md) |
 | Bench notes | [`docs/BENCH_NOTES.md`](https://github.com/hilather/nytprof-modernization/blob/main/docs/BENCH_NOTES.md) |
 | Agent notes (failed attempts + language) | [`docs/agent-notes/README.md`](https://github.com/hilather/nytprof-modernization/blob/main/docs/agent-notes/README.md) |
+| Oracle vs native paired reports | [`scripts/field/compare_oracle_native_reports.sh`](https://github.com/hilather/nytprof-modernization/blob/main/scripts/field/compare_oracle_native_reports.sh) |

@@ -82,7 +82,7 @@ fn html_out_dir_writes_index_subs_excl_and_lists_on_stderr() {
     );
     let excl = fs::read_to_string(&excl_path).expect("read index-subs-excl.html");
     assert!(
-        excl.contains("class=\"subs-excl\""),
+        excl.contains("class=\"subs-excl"),
         "excl page structure:\n{excl}"
     );
     assert!(

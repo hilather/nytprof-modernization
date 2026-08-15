@@ -98,6 +98,21 @@ jobs:
             --no-deps \
             -- -D warnings
 
+  # Rocky 8 testdrive install + live -d:NYTProfM + nytprofhtml.
+  # Honest SKIP inside the smoke if docker is unusable. Not offline_gate.
+  rocky8-docker-lab:
+    name: Rocky 8 Docker lab
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Rocky 8 Docker profile smoke
+        run: |
+          set -euo pipefail
+          ./scripts/field/rocky8_docker_profile_smoke.sh
+
   offline-gate-matrix:
     name: offline_gate (${{ matrix.label }})
     needs: [rust-smoke]

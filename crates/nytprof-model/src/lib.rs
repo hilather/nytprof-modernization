@@ -106,6 +106,22 @@ pub struct CallEdgeTotal {
     pub sites: u64,
 }
 
+/// Site-level `SUB_CALLERS` row (`fid`/`line` of the **caller**).
+///
+/// Additive; not part of A7 semantic equality / JsonlData / FFI.
+/// Keyed on [`ProfileModel::call_sites`] as `(caller, called, fid, line)`.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Serialize, Deserialize)]
+pub struct CallSite {
+    pub fid: u32,
+    pub line: u32,
+    pub count: u64,
+    pub incl: f64,
+    pub excl: f64,
+}
+
+/// Bound unique caller sites retained on the model (fail-closed beyond this).
+pub const MAX_CALL_SITES: usize = 250_000;
+
 /// Subroutine definition range from `SUB_INFO` events (A9).
 ///
 /// ReadStream args order: `[fid, first_line, last_line, name]`. Last write
@@ -162,6 +178,9 @@ pub struct ProfileModel {
     pub sub_return_totals: HashMap<String, SubTotal>,
     /// A7 — `(caller, called) → CallEdgeTotal` from `SUB_CALLERS`.
     pub call_edges: HashMap<(String, String), CallEdgeTotal>,
+    /// Site-level `SUB_CALLERS` (caller fid/line). Off semantic equality.
+    #[serde(default)]
+    pub call_sites: HashMap<(String, String, u32, u32), CallSite>,
     /// A8 — `(fid, line) → source text` from `SRC_LINE` (last write wins).
     pub source_lines: HashMap<(u32, u32), String>,
     /// A9 — `subname → { fid, first_line, last_line }` from `SUB_INFO`
@@ -272,6 +291,8 @@ impl ProfileModel {
             tags::SUB_CALLERS => {
                 // Args: fid, line, count, incl, excl, reci, rec_depth, called, caller
                 self.sub_callers_events = self.sub_callers_events.saturating_add(1);
+                let fid = as_u32(&ev.args, 0, &ev.tag, ev.seq)?;
+                let line = as_u32(&ev.args, 1, &ev.tag, ev.seq)?;
                 let count = as_u64(&ev.args, 2, &ev.tag, ev.seq)?;
                 let incl = as_f64(&ev.args, 3, &ev.tag, ev.seq)?;
                 let excl = as_f64(&ev.args, 4, &ev.tag, ev.seq)?;
@@ -281,7 +302,7 @@ impl ProfileModel {
                 let caller = as_str(&ev.args, 8, &ev.tag, ev.seq)?;
                 let entry = self
                     .call_edges
-                    .entry((caller, called))
+                    .entry((caller.clone(), called.clone()))
                     .or_default();
                 entry.count = entry.count.saturating_add(count);
                 entry.incl += incl;
@@ -291,6 +312,21 @@ impl ProfileModel {
                     entry.max_rec_depth = rec_depth;
                 }
                 entry.sites = entry.sites.saturating_add(1);
+                let site_key = (caller, called, fid, line);
+                if self.call_sites.contains_key(&site_key)
+                    || self.call_sites.len() < MAX_CALL_SITES
+                {
+                    let site = self.call_sites.entry(site_key).or_insert(CallSite {
+                        fid,
+                        line,
+                        count: 0,
+                        incl: 0.0,
+                        excl: 0.0,
+                    });
+                    site.count = site.count.saturating_add(count);
+                    site.incl += incl;
+                    site.excl += excl;
+                }
             }
             tags::SRC_LINE => {
                 // Args: fid, line, text — last write wins on duplicate keys.

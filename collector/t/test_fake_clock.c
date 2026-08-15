@@ -230,8 +230,18 @@ static void test_m4_mini_sample_v5_wire(void)
     nytp_sink_destroy(s);
 }
 
+static void test_production_clock_now(void)
+{
+    nytp_ticks a = 0;
+    nytp_ticks b = 0;
+    EXPECT(nytp_clock_now(NULL) == NYTP_ERR_NULL, "clock_now null");
+    EXPECT(nytp_clock_now(&a) == NYTP_OK && a > 0, "clock_now a");
+    EXPECT(nytp_clock_now(&b) == NYTP_OK && b >= a, "clock_now monotonic");
+}
+
 int main(void)
 {
+    test_production_clock_now();
     test_fake_clock_script_and_exhaust();
     test_stmt_driver_attribution();
     test_stmt_driver_no_clock_consume_on_emit_fail();

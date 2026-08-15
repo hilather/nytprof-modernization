@@ -1,9 +1,9 @@
 # Product XS attach MVP (v0) — G02 scaffold + G03a load + G03b/G03c/G03d/G03e emit-MVP
 
 **Board IDs:** `G02-V5-PRODUCT-LINK` (scaffold), `G03A-LOAD-ONLY` (debugger load), `G03B-STMT-EMIT` (stmt emit-MVP), `G03C-SUB-EMIT` (sub emit-MVP), `G03D-META-EMIT` (meta/finalize emit-MVP), `G03E-COMPRESS-EMIT` (compress emit-MVP), `PRODUCT-XS-ATTACH-MVP` (G04 attach-MVP landed)  
-**Status:** **G04 attach-MVP landed.** `NYTPROF file=` + Perl `DB::sub`/`DB::DB` emit `SUB_RETURN` / `SUB_CALLERS` / `TIME_LINE` through shipped `nytp_emit_*`. Live `perl -d:NYTProf` on default-calls1-shaped work; shipped dump/report of those bytes: leaf **15** / mid **3** / mid→leaf **15**. G03a trivial `-e` (no `file=`) still writes no `nytprof.out`. G03b–G03e emit-MVP remain. G05 options/`format=v6` tests landed separately. **Not** G06 fork or full 6.15 opcode/`entersub`.  
+**Status:** **G04 attach-MVP landed; live times measured (PR-1); live finish emits SRC_LINE/SUB_INFO (PR-3); C stmt-ops / PRINT-MATCH slowops measured (PR-8); PR-9 real `SUB_CALLERS` fid/line + parent excl = incl − slowop children (`g09_tokenize_excl_smoke.sh`).** `NYTPROF file=` + Perl `DB::sub`/`DB::DB` emit `SUB_RETURN` / `SUB_CALLERS` / `TIME_LINE` through shipped `nytp_emit_*`. Incl/excl and statement ticks come from `nytp_clock_now` (CLOCK_MONOTONIC, 10M ticks/s), not hardcoded `0.0` / visit-`1`. `finish_profiler` flushes the last site, `begin_finalize`s, walks `product_fid_map` for `SRC_LINE` (no `HAS_SRC`) and `%DB::sub` for lookup-only `SUB_INFO` (no `NEW_FID` after finalize), then `PID_END`. `savesrc` default **on**; `PL_perldb |= PERLDBf_SAVESRC | PERLDBf_SAVESRC_NOSUBS` at `file=` (not `$^P |= 0x400`). Live `perl -d:NYTProfM` on default-calls1-shaped work; shipped dump/report of those bytes: leaf **15** / mid **3** / mid→leaf **15**, `main::leaf` incl **> 0**, `src_line_events > 0`, `sub_def` for `main::leaf` / `main::mid`, no `HASH(` callers, `verify` OK (PID pair). G03a trivial `-e` (no `file=`) still writes no `nytprof.out`. **PR-8:** `blocks=1` stmt-ops attribute `now-last` on `TIME_BLOCK` (same last-site clock as `TIME_LINE`; first hit seeds; `now < last` → `NYTP_ERR_OVERFLOW`, no wrap). Thin `OP_PRINT`/`OP_MATCH` emit NV incl/excl (`excl = incl`) from `nytp_clock_now` around the original ppaddr. **Still not** full 6.15 opcode/`entersub` / `goto` / full `slowops.h`.  
 **Annex:** [product-xs-graft-annex-v0.md](https://github.com/hilather/nytprof-modernization/blob/main/docs/schemas/product-xs-graft-annex-v0.md) A.3 / A.4 / A.5 / A.6  
-**Smokes:** [g02_v5_product_link_smoke.sh](https://github.com/hilather/nytprof-modernization/blob/main/scripts/packaging/g02_v5_product_link_smoke.sh) · [product_attach_smoke.sh](https://github.com/hilather/nytprof-modernization/blob/main/scripts/packaging/product_attach_smoke.sh) · [g03b_stmt_emit_smoke.sh](https://github.com/hilather/nytprof-modernization/blob/main/scripts/packaging/g03b_stmt_emit_smoke.sh) · [g03c_sub_emit_smoke.sh](https://github.com/hilather/nytprof-modernization/blob/main/scripts/packaging/g03c_sub_emit_smoke.sh) · [g03d_meta_emit_smoke.sh](https://github.com/hilather/nytprof-modernization/blob/main/scripts/packaging/g03d_meta_emit_smoke.sh) · [g03e_compress_emit_smoke.sh](https://github.com/hilather/nytprof-modernization/blob/main/scripts/packaging/g03e_compress_emit_smoke.sh) · [g04_v5_parity_smoke.sh](https://github.com/hilather/nytprof-modernization/blob/main/scripts/packaging/g04_v5_parity_smoke.sh)  
+**Smokes:** [g02_v5_product_link_smoke.sh](https://github.com/hilather/nytprof-modernization/blob/main/scripts/packaging/g02_v5_product_link_smoke.sh) · [product_attach_smoke.sh](https://github.com/hilather/nytprof-modernization/blob/main/scripts/packaging/product_attach_smoke.sh) · [g03b_stmt_emit_smoke.sh](https://github.com/hilather/nytprof-modernization/blob/main/scripts/packaging/g03b_stmt_emit_smoke.sh) · [g03c_sub_emit_smoke.sh](https://github.com/hilather/nytprof-modernization/blob/main/scripts/packaging/g03c_sub_emit_smoke.sh) · [g03d_meta_emit_smoke.sh](https://github.com/hilather/nytprof-modernization/blob/main/scripts/packaging/g03d_meta_emit_smoke.sh) · [g03e_compress_emit_smoke.sh](https://github.com/hilather/nytprof-modernization/blob/main/scripts/packaging/g03e_compress_emit_smoke.sh) · [g04_v5_parity_smoke.sh](https://github.com/hilather/nytprof-modernization/blob/main/scripts/packaging/g04_v5_parity_smoke.sh) · [g08_slowops_times_smoke.sh](https://github.com/hilather/nytprof-modernization/blob/main/scripts/packaging/g08_slowops_times_smoke.sh) · [g09_tokenize_excl_smoke.sh](https://github.com/hilather/nytprof-modernization/blob/main/scripts/packaging/g09_tokenize_excl_smoke.sh) · [di01_blocks_780_smoke.sh](https://github.com/hilather/nytprof-modernization/blob/main/scripts/packaging/di01_blocks_780_smoke.sh)  
 **Attach smoke schema:** [product-attach-smoke-mvp-v0.md](https://github.com/hilather/nytprof-modernization/blob/main/docs/schemas/product-attach-smoke-mvp-v0.md)
 
 ## What G02 shipped
@@ -90,19 +90,20 @@
 | `NYTPROF file=` | Parsed like 6.15 (colon-separated, backslash-escapes). **No default `nytprof.out`** — absent `file=` keeps G03a in-memory |
 | `DB::enable_sink` on `file=` | Replaces the held sink; activate; `$PRODUCT_XS_ATTACH=1` for that session only |
 | `$^P \|= 0x01` | Sub enter/exit → `DB::sub` |
-| `$^P \|= 0x02` + `$DB::single=1` | Line-by-line → `DB::DB` (`pp_dbstate` only calls `DB::DB` when `$DB::single` is true) |
+| `$^P \|= 0x02` + `$DB::single=1` in `INIT` | Line-by-line → `DB::DB` (`pp_dbstate` only calls `DB::DB` when `$DB::single` is true). **PR-7:** do **not** set `$DB::single` at `file=` enable — `INIT` turns it on after `use`/`BEGIN` compile. Smoke [`g07_getopt_compile_smoke.sh`](https://github.com/hilather/nytprof-modernization/blob/main/scripts/packaging/g07_getopt_compile_smoke.sh). |
 | `DB::sub` | Emits `SUB_RETURN` + `SUB_CALLERS` via shipped `DB::emit_*` → `nytp_emit_*` |
 | `DB::emit_sub_callers` | Call **only** shipped `nytp_emit_sub_callers` |
 | `DB::DB` | Emits `TIME_LINE` via shipped `nytp_emit_time_line` |
-| `END { finish_profiler }` | Closes the held sink (second call is a no-op) |
-| Smoke | [`g04_v5_parity_smoke.sh`](https://github.com/hilather/nytprof-modernization/blob/main/scripts/packaging/g04_v5_parity_smoke.sh) — real `perl -d:NYTProf` on `fixtures/v5/default-calls1/workload.pl`; dump/report of **those** bytes: leaf **15** / mid **3** / mid→leaf **15** |
+| `END { finish_profiler }` | **PR-1:** `flush_last_site` → `PID_END` → drop. **PR-3:** after flush, `begin_finalize` + `SRC_LINE` (fid-map walk) + lookup-only `SUB_INFO` **before** `PID_END`. Second call is a no-op. **Still not** full opcode finalize. |
+| `savesrc` / `PL_perldb` | Default **1**. `file=` calls `DB::set_savesrc` → `PL_perldb \|= PERLDBf_SAVESRC \| PERLDBf_SAVESRC_NOSUBS`. `savesrc=0` skips file `SRC_LINE`. |
+| Smoke | [`g04_v5_parity_smoke.sh`](https://github.com/hilather/nytprof-modernization/blob/main/scripts/packaging/g04_v5_parity_smoke.sh) — real `perl -d:NYTProfM` on `fixtures/v5/default-calls1/workload.pl`; dump/report of **those** bytes: leaf **15** / mid **3** / mid→leaf **15**; live `SRC_LINE` / `SUB_INFO` + `sub_def` leaf/mid |
 | Attach stamp | `$PRODUCT_XS_ATTACH` is **1** only when `file=` is set; G03a trivial `-e` stays **0** |
 
 ## Explicit non-claims
 
 | Residual | Rule |
 |----------|------|
-| Full 6.15 opcode / `entersub` / XSUB / goto | **Not** grafted |
+| Full 6.15 opcode / `entersub` / XSUB / goto / full `slowops.h` | **Not** grafted. PR-8 measures the **thin** PRINT/MATCH + stmt-ops `TIME_BLOCK` last-site path only. |
 | G05 `format=v6` D1-A / D1-B fail-closed | **Landed** — [`g05_options_format_smoke.sh`](https://github.com/hilather/nytprof-modernization/blob/main/scripts/packaging/g05_options_format_smoke.sh) |
 | G06 fork / `addpid` / mid-deflate continue-in-child | **Residual** |
 | blocks-calls1 line5 **780** | **Not** claimed |
@@ -157,8 +158,22 @@ PERL5LIB=collector/build/xs-nytprof perl -Icollector/build/xs-nytprof \
 
 ```text
 ./scripts/packaging/g04_v5_parity_smoke.sh
-# NYTPROF=file=… perl -d:NYTProf fixtures/v5/default-calls1/workload.pl
+# NYTPROF=file=… perl -d:NYTProfM fixtures/v5/default-calls1/workload.pl
 # → NYTProf 5; report --json leaf_returns=15 mid_returns=3 mid_leaf_edge=15
+# → dump SRC_LINE + SUB_INFO; sub_def_leaf / sub_def_mid present; verify OK
+```
+
+## PR-8 proof (stmt-ops TIME_BLOCK + slowops times)
+
+```text
+./scripts/packaging/di01_blocks_780_smoke.sh
+# NYTPROF=file=…:blocks=1 perl -d:NYTProfM fixtures/v5/blocks-calls1/workload.pl
+# → TIME_BLOCK present; line5=780 block4=810; 15/3/15
+# → TIME_BLOCK args[0] ticks not identically 1 (last-site clock)
+
+./scripts/packaging/g08_slowops_times_smoke.sh
+# NYTPROF=file=… perl -d:NYTProfM -e 'print; "foo" =~ /foo/'
+# → dump/report CORE:print and/or CORE:match incl/excl not both 0
 ```
 
 G05 `format=v6` tests landed. G06 fork/`addpid` and full 6.15 opcode/`entersub` remain residual.

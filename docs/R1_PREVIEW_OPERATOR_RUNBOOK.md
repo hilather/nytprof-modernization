@@ -570,6 +570,33 @@ Charter **R5** is **governance only** unless a later **per-component** ADR execu
 - **Absence of retirement is valid success** for the modernization program.
 - Any future retirement is **per-component** under REL-012 + a dedicated component ADR — never silent, never bulk-auto.
 
+### 7c.3 Rocky 8 Docker profile demo (testdrive HTML)
+
+End-to-end **unsigned testdrive** on `rockylinux:8`: install `perl-NYTProfM`, download [ack v3](https://beyondgrep.com/) plus a public-domain text corpus, run `perl -d:NYTProfM` on a **core-only** ~1-minute text analyzer, and write `nytprof.out` + native `nytprofhtml` into a host directory.
+
+**PR-7 landed:** `use Getopt::Long` / Exporter / Time::HiRes compile under product `-d:NYTProfM` (`INIT` `$DB::single` + `goto &$raw` for those modules; smoke [`g07_getopt_compile_smoke.sh`](https://github.com/hilather/nytprof-modernization/blob/main/scripts/packaging/g07_getopt_compile_smoke.sh)). The Rocky demo still profiles the **core-only** scanner — **ack is not the profiled process** until a later field retry. Historical fail-closed notes: [failed-attempts.md](https://github.com/hilather/nytprof-modernization/blob/main/docs/agent-notes/failed-attempts.md) (`rocky8-profile-ack-d-nytprofm`).
+
+```sh
+./scripts/field/rocky8_docker_profile_demo.sh
+# default:
+#   ~/Downloads/nytprof-rocky8-demo/html/index.html
+./scripts/field/rocky8_docker_profile_demo.sh --out "$HOME/Downloads/nytprof-rocky8-demo"
+```
+
+Uses the local [`dist/el8/perl-NYTProfM-6.15-2.el8.x86_64.rpm`](https://github.com/hilather/nytprof-modernization/blob/main/dist/el8/) when present; otherwise downloads the `v0.2.7` GitHub Release asset. **Not** mock-certified, **not** COPR, **not** a public performance claim. HTML is the product MVP (`nytprofhtml` → `nytprof-engine html`), not oracle DOM / tablesorter.
+
+Script: [rocky8_docker_profile_demo.sh](https://github.com/hilather/nytprof-modernization/blob/main/scripts/field/rocky8_docker_profile_demo.sh)
+
+**Integration smoke** (host scanner checks always; `rockylinux:8` + RPM + `-d:NYTProfM` + `nytprofhtml` when docker is usable; honest SKIP without docker). **Not** part of `offline_gate.sh`.
+
+```sh
+./scripts/field/rocky8_docker_profile_smoke.sh
+# after perl Makefile.PL:
+# make rocky8-docker-lab-smoke
+```
+
+Schema: [rocky8-docker-profile-lab-mvp-v0.md](https://github.com/hilather/nytprof-modernization/blob/main/docs/schemas/rocky8-docker-profile-lab-mvp-v0.md). GHA job **Rocky 8 Docker lab** on `ubuntu-latest` (timeout ≥45). Native operator HTML v2 ([ADR-0012](https://github.com/hilather/nytprof-modernization/blob/main/docs/adrs/0012-native-operator-html-v2.md)): oracle-shaped chrome/IA via modern CSS + `nytprof-sort.js`. jquery/tablesorter remain **WAIVE** (M01). Dual lab: `--engine native|oracle|both` (smoke uses `--both`; `$OUT/html` is a symlink to `native/html`). Both engines share `--seconds` and the same corpus (apples-to-apples). Host-side paired reports: [`compare_oracle_native_reports.sh`](https://github.com/hilather/nytprof-modernization/blob/main/scripts/field/compare_oracle_native_reports.sh). Oracle container builds 6.15 from the committed archive with **no** `crates/` on `PERL5LIB`.
+
 ### `fixtures/v5/default-calls1` (leaf / mid)
 
 | Check | Expected |

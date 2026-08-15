@@ -18,6 +18,7 @@ Oracle `nytprofhtml` writes a full exclusive-time subroutine ranking page named 
   source.html             # primary workload alias
   file-<fid>.html         # per-fid pages
   style.css               # SHARED_STYLE_CSS
+  nytprof-sort.js         # SHARED_SORT_JS (vanilla; not jquery)
 ```
 
 ## Page requirements (`index-subs-excl.html`)
@@ -26,11 +27,12 @@ Oracle `nytprofhtml` writes a full exclusive-time subroutine ranking page named 
 |-------------|--------|
 | Document shell | `<!DOCTYPE html>`, `<html lang="en">`, `<meta charset="utf-8">`, title mentioning exclusive index / profile basename |
 | CSS | `<link rel="stylesheet" href="style.css">` — **no** multi-file inline `<style>` |
-| Navigation | Link back to `index.html` |
+| Sort JS | `<script src="nytprof-sort.js" defer></script>` — vanilla; **not** jquery/tablesorter |
+| Navigation | `.header_back` `← Index` → `index.html`; `.siteTitle` **Performance Profile Subroutine Index** |
 | Profile path | `p.profile-path` with escaped profile path |
-| Ranking table | `<h2>Subroutines by exclusive time</h2>` + `table.subs-excl` |
-| Columns | name, returns, incl, excl |
-| Sort | Exclusive ticks descending, then name ascending (stable) |
+| Ranking table | `table#subs_table.subs-excl.sortable` (heat on positive excl cells + compact time + `model.sub_def` name links) |
+| Columns | Calls, P, F, Exclusive Time, Inclusive Time, Subroutine |
+| Sort | Emitted exclusive-desc then name; `data-sort-default="desc"` on Exclusive Time (JS re-applies on load) |
 | Coverage | Every key in `ProfileModel::sub_return_totals` appears once |
 | Escape | All names/paths via `escape_html` |
 | Semantic (default-calls1) | `main::leaf` returns **15**, `main::mid` returns **3** |
@@ -39,8 +41,8 @@ Oracle `nytprofhtml` writes a full exclusive-time subroutine ranking page named 
 
 Multi-file `index.html` must include a relative link to the exclusive page:
 
-- Marker: `p.subs-excl-link` with `href="index-subs-excl.html"`
-- Placed after the summary “Top exclusive” section (summary table remains)
+- Marker: `div.table_footer` / `p.subs-excl-link` “See all N subroutines” with `href="index-subs-excl.html"`
+- Placed after the index `#subs_table` (top 15), **before** `#filestable`
 
 Single-file `render_html_summary` does **not** emit a separate exclusive page (self-contained summary keeps the embedded “Top exclusive” table only).
 
@@ -56,7 +58,7 @@ Single-file `render_html_summary` does **not** emit a separate exclusive page (s
 
 ## Explicit non-requirements (still residual)
 
-- Oracle `subroutine_table` DOM, MAD severity coloring, tablesorter / floatHeaders  
+- Oracle `subroutine_table` DOM, MAD severity coloring, jquery / tablesorter / floatHeaders  
 - Inclusive-time alternate index page (oracle only emits excl sort page by default)  
 - Treemap / Graphviz / flame  
 - Shared JS  

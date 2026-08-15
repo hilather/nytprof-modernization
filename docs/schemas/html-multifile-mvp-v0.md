@@ -1,7 +1,7 @@
 # Multi-file HTML report MVP (v0)
 
 **Status:** implemented (MVP)  
-**Complements:** single-file `html` stdout/`-o` (still supported); shared CSS + structure in [html-shared-css-structure-mvp-v0.md](https://github.com/hilather/nytprof-modernization/blob/main/docs/schemas/html-shared-css-structure-mvp-v0.md)
+**Complements:** single-file `html` stdout/`-o` (still supported); shared CSS + structure in [html-shared-css-structure-mvp-v0.md](https://github.com/hilather/nytprof-modernization/blob/main/docs/schemas/html-shared-css-structure-mvp-v0.md); operator v2 IA in [html-operator-v2-mvp-v0.md](https://github.com/hilather/nytprof-modernization/blob/main/docs/schemas/html-operator-v2-mvp-v0.md)
 
 **Library:** `nytprof_report::{HtmlSite, render_html_site, write_html_site, SHARED_STYLE_CSS, STYLE_CSS_FILENAME}`  
 **CLI:** `nytprof-cli html <profile.out> --out-dir DIR` (alias `--dir`; mutually exclusive with `-o`)
@@ -29,19 +29,23 @@ When `--out-dir DIR` is set:
    - **`DIR/file-<fid>.html`** for each eligible fid (source and/or line/block totals) — see [html-per-file-mvp-v0.md](https://github.com/hilather/nytprof-modernization/blob/main/docs/schemas/html-per-file-mvp-v0.md).
    - **`DIR/source.html`** as a copy of the primary workload `file-<fid>.html` (back-compat).
    - **`DIR/style.css`** — shared MVP stylesheet (`SHARED_STYLE_CSS`); all HTML pages use `<link rel="stylesheet" href="style.css">` (no multi-file inline `<style>`). See [html-shared-css-structure-mvp-v0.md](https://github.com/hilather/nytprof-modernization/blob/main/docs/schemas/html-shared-css-structure-mvp-v0.md).
-4. Index links to all `file-*.html` pages (and to `source.html` as primary alias).
+   - **`DIR/nytprof-sort.js`** — vanilla sort (`SHARED_SORT_JS`); pages use `<script src="nytprof-sort.js" defer></script>`. **Not** jquery / tablesorter. See [html-sort-js-mvp-v0.md](https://github.com/hilather/nytprof-modernization/blob/main/docs/schemas/html-sort-js-mvp-v0.md).
+   - **`DIR/packages-callgraph.dot`** / **`DIR/subs-callgraph.dot`** — Graphviz source from `call_edges` (not `dot` PNG). Index links both.
+4. Index first screen: chrome → `div.index_summary` → (optional `--flame`) → `table#subs_table` (top 15 exclusive-desc) → “See all N” → `table#filestable` → greppable `href="source.html"`. Event counts, call-edges, and sub-defs stay **below** the files table.
 5. Do **not** require writing stdout HTML when `--out-dir` is used (print the DIR path or file list is fine; include `style.css` in the written-path list when listing files).
 
 Mid-write failures must not leave a half-written final `DIR`. Same-filesystem sibling temp is preferred so `std::fs::rename` is atomic on Linux.
 
 ## index.html required content
 
-- Profile path (escaped)
-- `time_line_events` and/or `time_block_events`
-- Subroutines table with `main::leaf` / `main::mid` and **returns 15 and 3** on default-calls1
-- Optional: call edges / exclusive ranking (nice-to-have if already easy)
-- Link to source page, e.g. `<a href="source.html">` or `file-1.html`
-- If SUB_INFO present: show definition fid/first/last for leaf/mid (optional but preferred)
+- Chrome: `.siteTitle` **Performance Profile Index**; subtitle `For {application basename}`
+- `div.index_summary` (“Profile of …”)
+- `table#subs_table` (Calls / P / F / Exclusive / Inclusive / Subroutine); **default-calls1** leaf/mid **15** / **3**
+- `div.table_footer` “See all N subroutines” → `index-subs-excl.html`
+- `table#filestable` (Stmts, Exclusive Time, Reports `line`, Source File)
+- Greppable `href="source.html"`
+- `time_line_events` (and/or `time_block_events`) **below** the files table
+- Call edges / sub-defs after files (when present)
 
 ## source.html required content
 
@@ -60,6 +64,8 @@ pub struct HtmlSite {
   pub file_pages: Vec<(String, String)>, // ("file-N.html", html)...
   pub style_css: String,             // SHARED_STYLE_CSS body
   pub style_filename: String,        // "style.css"
+  pub sort_js: String,               // SHARED_SORT_JS body
+  pub sort_js_filename: String,      // "nytprof-sort.js"
 }
 pub fn render_html_site(model: &ProfileModel, profile_path: &str) -> HtmlSite
 pub fn write_html_site(...) -> Result<HtmlSite> // temp-then-rename → index + file-*.html + source.html + style.css

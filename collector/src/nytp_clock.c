@@ -2,6 +2,9 @@
  *
  * TEST-003 / PR-B03 fake-clock + BASE-003 statement driver + M4 mini sample.
  */
+#ifndef _POSIX_C_SOURCE
+#define _POSIX_C_SOURCE 200809L
+#endif
 #include "nytp_clock.h"
 
 #include "nytp_sink_counting.h"
@@ -9,6 +12,29 @@
 
 #include <stddef.h>
 #include <string.h>
+#include <time.h>
+
+nytp_status nytp_clock_now(nytp_ticks *out)
+{
+    struct timespec ts;
+    int rc;
+
+    if (!out) {
+        return NYTP_ERR_NULL;
+    }
+#ifdef CLOCK_MONOTONIC
+    rc = clock_gettime(CLOCK_MONOTONIC, &ts);
+#else
+    rc = clock_gettime(CLOCK_REALTIME, &ts);
+#endif
+    if (rc != 0) {
+        return NYTP_ERR_IO;
+    }
+    /* sec * 10M + nsec / 100. 10M ticks/s = 100 ns per tick. */
+    *out = (nytp_ticks)ts.tv_sec * (nytp_ticks)NYTP_TICKS_PER_SEC +
+           (nytp_ticks)(ts.tv_nsec / 100);
+    return NYTP_OK;
+}
 
 void nytp_fake_clock_init(nytp_fake_clock *fc, const nytp_ticks *script,
                           size_t len)

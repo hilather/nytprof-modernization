@@ -21,6 +21,8 @@
 #   ./scripts/packaging/packaging_gate.sh
 # Dual-path only:
 #   ./scripts/packaging/dual_path_smoke.sh
+# Field lab (not re-run here; honest docker SKIP):
+#   ./scripts/field/rocky8_docker_profile_smoke.sh
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"

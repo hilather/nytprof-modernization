@@ -138,7 +138,7 @@ LIBS = -lz
 
 **G03e ≠ attach:** compress emit-MVP via `nytp_emit_start_deflate` (`$PRODUCT_COMPRESS_EMIT=1`). Smoke [`g03e_compress_emit_smoke.sh`](https://github.com/hilather/nytprof-modernization/blob/main/scripts/packaging/g03e_compress_emit_smoke.sh). Dump/verify inflate recovers a post-deflate event. Mid-deflate fork residual.
 
-**G04 attach-MVP:** `NYTPROF file=` enables the file sink + `$^P` 0x01/0x02 + `$DB::single`. Live `perl -d:NYTProf` on `fixtures/v5/default-calls1/workload.pl`. Smoke [`g04_v5_parity_smoke.sh`](https://github.com/hilather/nytprof-modernization/blob/main/scripts/packaging/g04_v5_parity_smoke.sh). `$PRODUCT_XS_ATTACH=1` only when `file=` is set. **Not** G05/G06/full opcode.
+**G04 attach-MVP:** `NYTPROF file=` enables the file sink + `$^P` 0x01/0x02/0x20. **PR-7:** `$DB::single=1` is set in `INIT` (not at enable). Live `perl -d:NYTProf` on `fixtures/v5/default-calls1/workload.pl`. Smoke [`g04_v5_parity_smoke.sh`](https://github.com/hilather/nytprof-modernization/blob/main/scripts/packaging/g04_v5_parity_smoke.sh). Getopt/Exporter compile: [`g07_getopt_compile_smoke.sh`](https://github.com/hilather/nytprof-modernization/blob/main/scripts/packaging/g07_getopt_compile_smoke.sh). `$PRODUCT_XS_ATTACH=1` only when `file=` is set. **Not** G05/G06/full opcode.
 
 ---
 

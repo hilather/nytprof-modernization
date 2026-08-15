@@ -11,6 +11,7 @@ Hybrid modernization of [Devel::NYTProf](https://metacpan.org/dist/Devel-NYTProf
 | [`docs/FIRST_SLICE_BOARD.md`](https://github.com/hilather/nytprof-modernization/blob/main/docs/FIRST_SLICE_BOARD.md) | Ordered first-slice work board |
 | [`docs/RELEASE_NOTES_R2_PREVIEW.md`](https://github.com/hilather/nytprof-modernization/blob/main/docs/RELEASE_NOTES_R2_PREVIEW.md) | **R2-preview** packaging notes (v6 **opt-in only**; not R3 / R4) |
 | [`docs/RELEASE_NOTES_R2_STABLE.md`](https://github.com/hilather/nytprof-modernization/blob/main/docs/RELEASE_NOTES_R2_STABLE.md) | **R2-stable** packaging notes (Phase C tools + residual honesty; not R3/R4; public perf waived) |
+| [`docs/RELEASE_NOTES_v0.2.7.md`](https://github.com/hilather/nytprof-modernization/blob/main/docs/RELEASE_NOTES_v0.2.7.md) | **v0.2.7** testdrive: operator HTML v2 + live attach times + Rocky lab (unsigned EL8 RPM 6.15-2) |
 | [`docs/R4_FIELD_WINDOW.md`](https://github.com/hilather/nytprof-modernization/blob/main/docs/R4_FIELD_WINDOW.md) | R4 `format=v6` field-window evidence pack (no runtime flip; PR-E01) |
 | [`docs/adrs/0008-r4-v6-output-default-promotion.md`](https://github.com/hilather/nytprof-modernization/blob/main/docs/adrs/0008-r4-v6-output-default-promotion.md) | **ADR-0008** R4 product format default promotion policy (gated; flip not executed; PR-E02) |
 | [`docs/R4_DEFAULT_FLIP.md`](https://github.com/hilather/nytprof-modernization/blob/main/docs/R4_DEFAULT_FLIP.md) | R4 flip execution + rollback checklist |
@@ -29,7 +30,7 @@ baseline/       immutable oracle pin, inventories, manifests
 fixtures/       golden profiles and expected dumps
 tools/oracle/   scripts to build oracle, dump fixtures, compare
 tools/bench/    light offline timing harness (not certification)
-scripts/        baseline build/test helpers + packaging smokes + `ci/offline_gate.sh` + `field/` R4 evidence pack
+scripts/        baseline build/test helpers + packaging smokes + `ci/offline_gate.sh` + `field/` R4 evidence pack + Rocky 8 Docker profile lab
 Makefile.PL     candidate dual-path packaging entry (not full XS CPAN)
 crates/         Rust workspace (v5 reader, provisional v6 preflight crate, compact model, report MVP) — not required for oracle
 perl/           candidate Perl engine-dispatch facade (nytprof-engine) — not used by oracle builds
@@ -172,6 +173,7 @@ perl Makefile.PL && make offline-gate          # CI-OFFLINE-GATE wrapper
 ./scripts/packaging/g04_v5_parity_smoke.sh     # OK: G04 live -d:NYTProf 15/3/15
 ./scripts/packaging/g05_options_format_smoke.sh # OK: G05 unknown/dual/D1-B v6 fail-closed; D1-A NYTPROF6
 ./scripts/packaging/g06_fork_addpid_smoke.sh    # OK: G06 live fork+addpid parent + <file>.<pid> NYTProf 5
+./scripts/packaging/g07_getopt_compile_smoke.sh # OK: PR-7 Getopt/Exporter compile under -d:NYTProfM
 ./scripts/packaging/product_legacy_smoke.sh    # I01: cargo-free prefix install + live attach 15/3/15
 ./scripts/packaging/install_product_xs.sh      # I01: install product Devel::NYTProf (no cargo)
 ./scripts/packaging/i02_makemaker_native_smoke.sh # I02: NYTPROF_NATIVE=1 fail-closed; auto/0 cargo-free; CLI 15/3/15

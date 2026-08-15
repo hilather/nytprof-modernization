@@ -28,7 +28,7 @@ This schema does **not** claim D1 collection attach green.
 | **G03c (separate smoke)** | `g03c_sub_emit_smoke.sh` — explicit `nytp_emit_sub_*` + dump; not this attach smoke | 0 on emit-MVP |
 | **G03d (separate smoke)** | `g03d_meta_emit_smoke.sh` — explicit `nytp_emit_*` meta/finalize + dump; not this attach smoke | 0 on emit-MVP |
 | **G03e (separate smoke)** | `g03e_compress_emit_smoke.sh` — explicit `nytp_emit_start_deflate` + dump inflate; not this attach smoke | 0 on emit-MVP |
-| **G04** | Separate [`g04_v5_parity_smoke.sh`](https://github.com/hilather/nytprof-modernization/blob/main/scripts/packaging/g04_v5_parity_smoke.sh): live `-d:NYTProf` + `file=` + dump/report **15/3/15** | 0 on attach-parity |
+| **G04** | Separate [`g04_v5_parity_smoke.sh`](https://github.com/hilather/nytprof-modernization/blob/main/scripts/packaging/g04_v5_parity_smoke.sh): live `-d:NYTProfM` + `file=` + dump/report **15/3/15**; **PR-3** also `SRC_LINE` / `SUB_INFO` + `sub_def` leaf/mid; `verify` still **OK:**. **Still not** full opcode. | 0 on attach-parity |
 
 **Hard rules:**
 
@@ -76,8 +76,9 @@ Live attach lives in [`g04_v5_parity_smoke.sh`](https://github.com/hilather/nytp
 
 | Check | Pass |
 |-------|------|
-| Collection attach | `NYTPROF file=` + live `-d:NYTProf` writes `NYTProf 5`; dump/report leaf **15** / mid **3** / mid→leaf **15** |
+| Collection attach | `NYTPROF file=` + live `-d:NYTProfM` writes `NYTProf 5`; dump/report leaf **15** / mid **3** / mid→leaf **15** |
 | Stamp | `$PRODUCT_XS_ATTACH=1` only in the `file=` session; G03a no-`file=` stays 0 |
 | Flavor | D1-B: `format=v5` (this MVP). `format=v6` fail-closed remains G05 |
+| Live finish (PR-3) | Dump `SRC_LINE` count **> 0** and `SUB_INFO` for `main::leaf` / `main::mid`; report `sub_def_leaf` / `sub_def_mid` present; `verify` still **OK:**. `savesrc=0` skips file source. **Still not** full 6.15 opcode / eval source / XSUB package-filename cache. |
 
-**Residuals:** G06 fork, full 6.15 opcode/`entersub`, blocks-calls1 line5 **780**. G05 options/`format=v6` tests: [`g05_options_format_smoke.sh`](https://github.com/hilather/nytprof-modernization/blob/main/scripts/packaging/g05_options_format_smoke.sh).
+**Residuals:** G06 fork, full 6.15 opcode/`entersub` / full `slowops.h`, `goto &$raw`. PR-8 measured stmt-ops `TIME_BLOCK` + PRINT/MATCH times ([`g08_slowops_times_smoke.sh`](https://github.com/hilather/nytprof-modernization/blob/main/scripts/packaging/g08_slowops_times_smoke.sh), [`di01_blocks_780_smoke.sh`](https://github.com/hilather/nytprof-modernization/blob/main/scripts/packaging/di01_blocks_780_smoke.sh) tick diversity). G05 options/`format=v6` tests: [`g05_options_format_smoke.sh`](https://github.com/hilather/nytprof-modernization/blob/main/scripts/packaging/g05_options_format_smoke.sh).

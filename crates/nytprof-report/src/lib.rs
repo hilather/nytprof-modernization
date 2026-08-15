@@ -1,19 +1,26 @@
 //! Native report rendering (text summary + CSV tabular + HTML MVP + exports).
 //!
+//! Multi-file HTML is **operator HTML v2** (ADR-0012): chrome, index IA,
+//! six-column source, compact `fmt_time` units, vanilla sort. See
+//! `docs/schemas/html-operator-v2-mvp-v0.md`. jquery / tablesorter stay WAIVE.
+//!
 //! Content requirements: `docs/schemas/aggregate-comparison-v0.md`,
 //! `docs/schemas/html-report-mvp-v0.md`,
 //! `docs/schemas/html-multifile-mvp-v0.md`,
 //! `docs/schemas/html-per-file-mvp-v0.md` (A4b block_line_totals),
 //! `docs/schemas/html-outdir-safety-mvp-v0.md`,
 //! `docs/schemas/html-shared-css-structure-mvp-v0.md` (shared CSS + structure),
+//! `docs/schemas/html-sort-js-mvp-v0.md` (vanilla sort JS; not jquery/tablesorter),
+//! `docs/schemas/html-operator-v2-mvp-v0.md` (chrome / IA / compact time),
 //! `docs/schemas/export-formats-mvp-v0.md`,
 //! `docs/schemas/export-semantic-parity-mvp-v0.md`,
 //! `docs/schemas/verify-cli-mvp-v0.md`,
 //! `docs/schemas/report-semantic-parity-mvp-v0.md`,
 //! `docs/schemas/blocks-semantic-parity-mvp-v0.md`.
 
-use std::collections::BTreeSet;
+use std::collections::{BTreeMap, BTreeSet};
 use std::error::Error;
+use std::fmt::Write as _;
 use std::fs;
 use std::io;
 use std::path::{Component, Path, PathBuf};
@@ -284,6 +291,15 @@ pub struct HtmlSite {
     /// Relative filename of the shared stylesheet (must match page `<link href>`;
     /// always [`STYLE_CSS_FILENAME`] / `"style.css"` from [`render_html_site`]).
     pub style_filename: String,
+    /// Vanilla sort script body written as [`HtmlSite::sort_js_filename`].
+    ///
+    /// Same text as [`SHARED_SORT_JS`]. Multi-file pages link it via
+    /// `<script src="nytprof-sort.js" defer>`; single-file summaries inline
+    /// the same source. **Not** jquery / tablesorter.
+    pub sort_js: String,
+    /// Relative filename of the sort script (must match page `<script src>`;
+    /// always [`SORT_JS_FILENAME`] / `"nytprof-sort.js"` from [`render_html_site`]).
+    pub sort_js_filename: String,
     /// Optional folded-stack body for flame tools (`None` when flame is off).
     ///
     /// Same text as [`render_folded_stacks`]. Published as
@@ -293,11 +309,19 @@ pub struct HtmlSite {
     pub flame_folded_filename: Option<String>,
     /// Optional native flame SVG body (`None` when flame is off).
     ///
-    /// From [`render_flame_svg`] (folded-based icicle; **not** oracle
+    /// From [`render_flame_svg`] (call-tree flame by inclusive time; **not** oracle
     /// `flamegraph.pl`). Published as [`HtmlSite::flame_svg_filename`].
     pub flame_svg: Option<String>,
     /// Relative SVG filename (e.g. [`FLAME_SVG_FILENAME`]) when flame is on.
     pub flame_svg_filename: Option<String>,
+    /// Graphviz inter-package call graph (always published; not `dot` PNG).
+    pub packages_callgraph_dot: String,
+    /// Relative filename ([`PACKAGES_CALLGRAPH_FILENAME`]).
+    pub packages_callgraph_filename: String,
+    /// Graphviz inter-subroutine call graph (always published; not `dot` PNG).
+    pub subs_callgraph_dot: String,
+    /// Relative filename ([`SUBS_CALLGRAPH_FILENAME`]).
+    pub subs_callgraph_filename: String,
 }
 
 /// How a document loads the shared MVP stylesheet.
@@ -315,36 +339,201 @@ enum HtmlCssMode<'a> {
     LinkedStyleSheet(&'a str),
 }
 
-/// Shared MVP stylesheet for native HTML reports.
+/// How a document loads the vanilla sort script ([`SHARED_SORT_JS`]).
+///
+/// See `docs/schemas/html-sort-js-mvp-v0.md`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum HtmlJsMode<'a> {
+    /// Single-file / stdout summary: embed [`SHARED_SORT_JS`] in a `<script>`
+    /// tag so the document is self-contained.
+    Inline,
+    /// Multi-file site: sibling [`SORT_JS_FILENAME`] with `defer`.
+    LinkedScript(&'a str),
+}
+
+/// Shared operator HTML v2 stylesheet (ADR-0012).
 ///
 /// **Policy:** multi-file sites write this as `style.css` and link to it;
 /// single-file `render_html_summary` embeds the **same** text inline. This is
 /// **not** oracle `get_css()` / tablesorter CSS parity — residual honesty for
 /// full DOM/JS remains in
 /// [`REPORT_HTML_RESIDUAL_INVENTORY_v0.md`](https://github.com/hilather/nytprof-modernization/blob/main/docs/contracts/REPORT_HTML_RESIDUAL_INVENTORY_v0.md).
-pub const SHARED_STYLE_CSS: &str = "\
-/* nytprof-report shared MVP CSS (not oracle style.css / tablesorter) */\n\
-body{font-family:system-ui,sans-serif;margin:1.5rem;line-height:1.4;color:#111}\n\
-table{border-collapse:collapse;margin:0.75rem 0;width:auto;max-width:100%}\n\
-th,td{border:1px solid #ccc;padding:0.25rem 0.5rem;text-align:left}\n\
-th{background:#f0f0f0}\n\
-tbody tr:nth-child(even){background:#fafafa}\n\
-tbody tr:hover{background:#f5f8ff}\n\
-td.num{text-align:right;font-variant-numeric:tabular-nums}\n\
-pre,code{font-family:ui-monospace,monospace}\n\
-.src-line{white-space:pre}\n\
-h1,h2{margin-top:1.25rem}\n\
-p.profile-path code{word-break:break-all}\n\
-ul.source-files{list-style:disc;margin-left:1.25rem}\n\
-a{color:#0645ad}\n\
-section.flame{margin:1.25rem 0}\n\
-p.flame-links{font-size:0.95rem}\n\
-.flame-svg-embed{max-width:100%;overflow:auto;border:1px solid #ddd;padding:0.5rem;background:#fafafa}\n\
-.flame-svg-embed svg{display:block;max-width:100%;height:auto}\n\
-";
+/// Heat class names stay `heat-*`; CSS variables `--nyt-c0`…`--nyt-c3` hold
+/// the oracle palette. Do **not** emit `.c0`–`.c3` class selectors.
+pub const SHARED_STYLE_CSS: &str = r#"/* nytprof-report operator HTML v2 CSS (ADR-0012; not oracle get_css) */
+:root{
+--nyt-font:system-ui,"Segoe UI",sans-serif;
+--nyt-mono:ui-monospace,"SF Mono",Menlo,Consolas,monospace;
+--nyt-fg:#222;
+--nyt-bg:#fff;
+--nyt-link:#00c;
+--nyt-link-visited:#6d00e6;
+--nyt-link-hover:#c00;
+--nyt-header-top:rgb(17,136,255);
+--nyt-header-bot:rgb(0,68,187);
+--nyt-header-fg:#fff;
+--nyt-th:#ddd;
+--nyt-th-border:#666;
+--nyt-td-border:#ccc;
+--nyt-caption:#ddd;
+--nyt-footer:#ccc;
+--nyt-calls:#666;
+--nyt-c0:#ffb3b3;
+--nyt-c1:#ffd9b4;
+--nyt-c2:#ffffb4;
+--nyt-c3:#b4ffb4;
+}
+body{font-family:var(--nyt-font);margin:0;line-height:1.35;color:var(--nyt-fg);background:var(--nyt-bg)}
+a{color:var(--nyt-link)}
+a:visited{color:var(--nyt-link-visited)}
+a:hover{color:var(--nyt-link-hover)}
+.header{background:linear-gradient(to bottom,var(--nyt-header-top),var(--nyt-header-bot));color:#fff;min-height:7.5rem;position:relative;padding:0.5rem 1rem 1rem}
+.header_back a{color:#fff}
+.siteTitle{font-size:1.6rem;font-weight:700;margin:0.25rem 0}
+.siteSubtitle{font-size:0.95rem;opacity:0.95}
+.body_content{padding:0.75rem 1rem 2rem}
+.footer{color:#666;font-size:0.85rem;padding:1rem;border-top:1px solid var(--nyt-footer)}
+table{border-collapse:collapse;margin:0.75rem 0;width:auto;max-width:100%}
+th,td{border:1px solid var(--nyt-td-border);padding:0 0.4em;text-align:left;vertical-align:top}
+th{background:var(--nyt-th);border-color:var(--nyt-th-border);font-size:0.8em}
+caption{background:var(--nyt-caption);text-align:left;padding:0.2em 0.4em;font-weight:600}
+td.num{text-align:right;font-variant-numeric:tabular-nums}
+td.s,.s,pre,code,.sub_name{font-family:var(--nyt-mono)}
+td.s,.src-line{white-space:pre}
+.index_summary,.table_footer{margin:0.75rem 0}
+tbody tr:hover{background:#f5f8ff}
+td.num.heat-hot,tr.heat-hot{background:var(--nyt-c0)}
+td.num.heat-high,tr.heat-high{background:var(--nyt-c1)}
+td.num.heat-mid,tr.heat-mid{background:var(--nyt-c2)}
+td.num.heat-low,tr.heat-low{background:var(--nyt-c3)}
+th[data-sort]{cursor:pointer;user-select:none}
+th.sort-asc::after{content:" \25b2";font-size:0.7em}
+th.sort-desc::after{content:" \25bc";font-size:0.7em}
+section.flame,.flamegraph{margin:1.25rem 0}
+p.flame-links{font-size:0.95rem}
+.flame-svg-embed{max-width:100%;overflow:auto;border:1px solid #ddd;padding:0.5rem;background:#fafafa;position:relative}
+.flame-svg-embed svg,.flame-svg-embed img,img.flame-svg-embed{display:block;max-width:100%;width:100%;height:auto}
+.flame-svg-embed a.flame-link{cursor:pointer}
+#nytprof-flame-tip{position:fixed;z-index:40;display:none;background:#1b1b1b;color:#f4f4f4;font:12px var(--nyt-mono,ui-monospace,monospace);padding:0.4rem 0.55rem;border-radius:4px;white-space:pre;pointer-events:none;box-shadow:0 2px 8px rgba(0,0,0,.28);max-width:28rem}
+p.profile-path code{word-break:break-all}
+p.source-link{margin:0.5rem 0}
+h1,h2{margin-top:1.25rem}
+.calls,.calls_in,.calls_out{color:var(--nyt-calls);font-size:0.85em;margin:0.15em 0}
+p.callgraph-links{margin:0.75rem 0}
+"#;
 
 /// Canonical multi-file stylesheet filename (`style.css`).
 pub const STYLE_CSS_FILENAME: &str = "style.css";
+
+/// Canonical multi-file vanilla sort script filename (`nytprof-sort.js`).
+///
+/// **Not** jquery / tablesorter. See `docs/schemas/html-sort-js-mvp-v0.md`.
+pub const SORT_JS_FILENAME: &str = "nytprof-sort.js";
+
+/// Vanilla table-sort script (reorder existing `tbody` rows only).
+///
+/// Multi-file sites write this as [`SORT_JS_FILENAME`]; single-file summaries
+/// inline the same text. Never assigns `innerHTML` from profile data.
+pub const SHARED_SORT_JS: &str = r#"/* nytprof-report vanilla column sort */
+(function () {
+  "use strict";
+  function cellSortValue(cell) {
+    if (!cell) return "";
+    var raw = cell.getAttribute("data-sort-value");
+    if (raw !== null && raw !== "") {
+      var n = Number(raw);
+      if (!isNaN(n)) return n;
+      return raw;
+    }
+    return (cell.textContent || "").replace(/^\s+|\s+$/g, "");
+  }
+  function compareValues(a, b) {
+    var an = typeof a === "number";
+    var bn = typeof b === "number";
+    if (an && bn) return a - b;
+    if (an) return -1;
+    if (bn) return 1;
+    if (a < b) return -1;
+    if (a > b) return 1;
+    return 0;
+  }
+  function sortTable(table, col, th, forceDir) {
+    var tbody = table.tBodies && table.tBodies[0];
+    if (!tbody) return;
+    var rows = [];
+    var i;
+    for (i = 0; i < tbody.rows.length; i++) {
+      var tr = tbody.rows[i];
+      if (typeof tr._nytprofOrig !== "number") tr._nytprofOrig = i;
+      rows.push(tr);
+    }
+    var headers = table.querySelectorAll("thead th");
+    var hasSort = th.classList.contains("sort-asc") || th.classList.contains("sort-desc");
+    var desc;
+    if (forceDir === "desc") {
+      desc = true;
+    } else if (forceDir === "asc") {
+      desc = false;
+    } else if (!hasSort) {
+      desc = th.getAttribute("data-sort") === "num";
+    } else {
+      desc = th.classList.contains("sort-asc");
+    }
+    for (i = 0; i < headers.length; i++) {
+      headers[i].classList.remove("sort-asc", "sort-desc");
+      headers[i].setAttribute("aria-sort", "none");
+    }
+    th.classList.add(desc ? "sort-desc" : "sort-asc");
+    th.setAttribute("aria-sort", desc ? "descending" : "ascending");
+    rows.sort(function (ra, rb) {
+      var cmp = compareValues(
+        cellSortValue(ra.cells[col]),
+        cellSortValue(rb.cells[col])
+      );
+      if (cmp === 0) return ra._nytprofOrig - rb._nytprofOrig;
+      return desc ? -cmp : cmp;
+    });
+    for (i = 0; i < rows.length; i++) {
+      tbody.appendChild(rows[i]);
+    }
+  }
+  function bindTable(table) {
+    var ths = table.querySelectorAll("thead th[data-sort]");
+    if (!ths.length) return;
+    if ((" " + table.className + " ").indexOf(" sortable ") === -1) {
+      table.className = (table.className ? table.className + " " : "") + "sortable";
+    }
+    var c;
+    for (c = 0; c < ths.length; c++) {
+      (function (th, col) {
+        th.addEventListener("click", function () {
+          sortTable(table, col, th);
+        });
+      })(ths[c], ths[c].cellIndex);
+    }
+    var d;
+    for (d = 0; d < ths.length; d++) {
+      var dir = ths[d].getAttribute("data-sort-default");
+      if (dir === "desc" || dir === "asc") {
+        sortTable(table, ths[d].cellIndex, ths[d], dir);
+        break;
+      }
+    }
+  }
+  function nytprofSortInit() {
+    var tables = document.getElementsByTagName("table");
+    var i;
+    for (i = 0; i < tables.length; i++) {
+      bindTable(tables[i]);
+    }
+  }
+  if (document.readyState === "loading") {
+    document.addEventListener("DOMContentLoaded", nytprofSortInit);
+  } else {
+    nytprofSortInit();
+  }
+})();
+"#;
 
 /// Canonical multi-file exclusive-time sub index filename (`index-subs-excl.html`).
 ///
@@ -352,6 +541,10 @@ pub const STYLE_CSS_FILENAME: &str = "style.css";
 /// subroutine index. Native page is MVP (stable structure classes, not oracle
 /// DOM/tablesorter). See `docs/schemas/html-subs-excl-index-mvp-v0.md`.
 pub const INDEX_SUBS_EXCL_FILENAME: &str = "index-subs-excl.html";
+
+/// Index `#subs_table` top-N (oracle `$max_subs = 15`). Full list is
+/// [`INDEX_SUBS_EXCL_FILENAME`].
+pub const INDEX_TOP_SUBS: usize = 15;
 
 /// Multi-file folded-stack filename when `--flame` / [`HtmlRenderOptions::flame`].
 ///
@@ -362,6 +555,12 @@ pub const FLAME_FOLDED_FILENAME: &str = "all_stacks_by_time.folded";
 /// Multi-file native flame SVG filename when flame is on (oracle-aligned basename;
 /// **not** `flamegraph.pl` output).
 pub const FLAME_SVG_FILENAME: &str = "all_stacks_by_time.svg";
+
+/// Multi-file inter-package Graphviz source (6.15 basename; native edges).
+pub const PACKAGES_CALLGRAPH_FILENAME: &str = "packages-callgraph.dot";
+
+/// Multi-file inter-subroutine Graphviz source (6.15 basename; native edges).
+pub const SUBS_CALLGRAPH_FILENAME: &str = "subs-callgraph.dot";
 
 /// Self-contained HTML summary report (MVP; see `docs/schemas/html-report-mvp-v0.md`).
 ///
@@ -391,21 +590,30 @@ pub fn render_html_summary_with_options(
     let title = html_report_title(profile_path);
     let primary_fid = primary_workload_fid(model);
     let mut out = String::with_capacity(if opts.flame { 16384 } else { 8192 });
-    push_html_doc_start(&mut out, &title, HtmlCssMode::Inline);
+    push_html_doc_start(&mut out, &title, HtmlCssMode::Inline, HtmlJsMode::Inline);
+    let app = application_basename(model);
+    push_page_chrome(
+        &mut out,
+        "NYTProf Performance Profile",
+        &format!("For {}", escape_html(&app)),
+        false,
+    );
+    out.push_str("<div class=\"body_content\">\n");
     out.push_str(&format!("<h1>{}</h1>\n", escape_html(&title)));
     push_profile_path(&mut out, profile_path);
     push_event_counts(&mut out, model);
-    push_subs_table(&mut out, model);
-    push_sub_defs_table(&mut out, model);
-    push_call_edges_table(&mut out, model);
-    push_top_exclusive_table(&mut out, model);
+    push_subs_table(&mut out, model, false);
+    push_sub_defs_table(&mut out, model, false);
+    push_call_edges_table(&mut out, model, false);
+    push_top_exclusive_table(&mut out, model, false);
     if opts.flame {
         push_flame_section_embedded(&mut out, model);
     }
     push_source_heading(&mut out, model, primary_fid);
-    push_source_table(&mut out, model, primary_fid);
+    push_source_table(&mut out, model, primary_fid, true);
     // A4b: all block_line_totals when present (blocks fixtures).
     push_block_line_totals_table(&mut out, model, None);
+    out.push_str("</div>\n");
     out.push_str("</body>\n</html>\n");
     out
 }
@@ -426,12 +634,14 @@ pub fn render_html_summary_with_options(
 /// - `source.html` — copy of the primary workload file page (back-compat)
 /// - `style.css` — shared MVP stylesheet ([`SHARED_STYLE_CSS`]); pages link via
 ///   `<link rel="stylesheet" href="style.css">`
+/// - `nytprof-sort.js` — vanilla sort ([`SHARED_SORT_JS`]); pages use
+///   `<script src="nytprof-sort.js" defer>`
 ///
 /// When [`HtmlRenderOptions::flame`] is set (via
 /// [`render_html_site_with_options`] / [`write_html_site_with_options`]), also:
 /// - `all_stacks_by_time.folded` — folded stacks ([`render_folded_stacks`])
-/// - `all_stacks_by_time.svg` — native folded-based flame SVG ([`render_flame_svg`])
-/// - index links under `section.flame` / `p.flame-links`
+/// - `all_stacks_by_time.svg` — native call-tree flame SVG ([`render_flame_svg`])
+/// - index inlines the SVG (hover + click-to-source) and links the sibling files
 pub fn render_html_site(model: &ProfileModel, profile_path: &str) -> HtmlSite {
     render_html_site_with_options(model, profile_path, HtmlRenderOptions::default())
 }
@@ -445,6 +655,8 @@ pub fn render_html_site_with_options(
     let source_filename = "source.html".to_owned();
     let style_filename = STYLE_CSS_FILENAME.to_owned();
     let style_css = SHARED_STYLE_CSS.to_owned();
+    let sort_js_filename = SORT_JS_FILENAME.to_owned();
+    let sort_js = SHARED_SORT_JS.to_owned();
     let index_subs_excl_filename = INDEX_SUBS_EXCL_FILENAME.to_owned();
     let title = html_report_title(profile_path);
     let primary_fid = primary_workload_fid(model);
@@ -454,11 +666,18 @@ pub fn render_html_site_with_options(
         .and_then(|s| s.to_str())
         .unwrap_or(profile_path);
     let css = HtmlCssMode::LinkedStyleSheet(style_filename.as_str());
+    let js = HtmlJsMode::LinkedScript(sort_js_filename.as_str());
 
     let mut file_pages: Vec<(String, String)> = Vec::with_capacity(eligible.len());
     for fid in &eligible {
         let filename = file_page_filename(*fid);
-        let page = render_file_page(model, *fid, profile_base, style_filename.as_str());
+        let page = render_file_page(
+            model,
+            *fid,
+            profile_base,
+            style_filename.as_str(),
+            sort_js_filename.as_str(),
+        );
         file_pages.push((filename, page));
     }
     let primary_name = file_page_filename(primary_fid);
@@ -467,15 +686,27 @@ pub fn render_html_site_with_options(
         .find(|(name, _)| name == &primary_name)
         .map(|(_, html)| html.clone())
         .unwrap_or_else(|| {
-            render_file_page(model, primary_fid, profile_base, style_filename.as_str())
+            render_file_page(
+                model,
+                primary_fid,
+                profile_base,
+                style_filename.as_str(),
+                sort_js_filename.as_str(),
+            )
         });
 
-    let index_subs_excl_html =
-        render_index_subs_excl_page(model, profile_path, profile_base, style_filename.as_str());
+    let index_subs_excl_html = render_index_subs_excl_page(
+        model,
+        profile_path,
+        profile_base,
+        style_filename.as_str(),
+        sort_js_filename.as_str(),
+    );
 
     let (flame_folded, flame_folded_filename, flame_svg, flame_svg_filename) = if opts.flame {
+        let stacks = collect_nonzero_call_edges(model);
         (
-            Some(render_folded_stacks(model)),
+            Some(folded_from_stacks(&stacks)),
             Some(FLAME_FOLDED_FILENAME.to_owned()),
             Some(render_flame_svg(model)),
             Some(FLAME_SVG_FILENAME.to_owned()),
@@ -484,27 +715,63 @@ pub fn render_html_site_with_options(
         (None, None, None, None)
     };
 
-    let mut index = String::with_capacity(if opts.flame { 6144 } else { 4096 });
-    push_html_doc_start(&mut index, &title, css);
-    index.push_str(&format!("<h1>{}</h1>\n", escape_html(&title)));
-    push_profile_path(&mut index, profile_path);
-    push_event_counts(&mut index, model);
-    push_subs_table(&mut index, model);
-    push_sub_defs_table(&mut index, model);
-    push_call_edges_table(&mut index, model);
-    push_top_exclusive_table(&mut index, model);
-    index.push_str(&format!(
-        "<p class=\"subs-excl-link\"><a href=\"{}\">Full exclusive subroutine index</a></p>\n",
-        escape_html(index_subs_excl_filename.as_str())
-    ));
+    let mut index = String::with_capacity(if opts.flame { 8192 } else { 6144 });
+    push_html_doc_start(&mut index, &title, css, js);
+    let app = application_basename(model);
+    let mut subtitle = format!("For {}", escape_html(&app));
+    if let Some(run) = run_time_label(model) {
+        subtitle.push_str("<br>Run on ");
+        subtitle.push_str(&escape_html(&run));
+    }
+    subtitle.push_str("<br>Reported on ");
+    subtitle.push_str(&escape_html(&reported_on_now()));
+    push_page_chrome(&mut index, "Performance Profile Index", &subtitle, false);
+    index.push_str("<div class=\"body_content\">\n");
+    push_index_summary(&mut index, model);
     if opts.flame {
         if let (Some(ref folded_name), Some(ref svg_name)) =
             (&flame_folded_filename, &flame_svg_filename)
         {
-            push_flame_section_links(&mut index, folded_name, svg_name);
+            index.push_str("<div class=\"flamegraph\">\n");
+            push_flame_section_links(
+                &mut index,
+                folded_name,
+                svg_name,
+                flame_svg.as_deref().unwrap_or(""),
+            );
+            index.push_str("</div>\n");
         }
     }
-    push_source_file_links(&mut index, model, &eligible, primary_fid, &source_filename);
+    push_subs_table_v2(
+        &mut index,
+        model,
+        SubsTableKind::Index,
+        None,
+        true,
+    );
+    let n_subs = model.sub_return_totals.len();
+    index.push_str("<div class=\"table_footer\"><p class=\"subs-excl-link\"><a href=\"");
+    index.push_str(&escape_html(index_subs_excl_filename.as_str()));
+    index.push_str(&format!("\">See all {n_subs} subroutines</a></p></div>\n"));
+    push_files_table(
+        &mut index,
+        model,
+        &eligible,
+        primary_fid,
+        source_filename.as_str(),
+    );
+    push_profile_path(&mut index, profile_path);
+    push_event_counts(&mut index, model);
+    push_call_edges_table(&mut index, model, true);
+    push_sub_defs_table(&mut index, model, true);
+    push_block_line_totals_table(&mut index, model, None);
+    index.push_str("<p class=\"callgraph-links\">Call graphs: <a href=\"");
+    index.push_str(PACKAGES_CALLGRAPH_FILENAME);
+    index.push_str("\">packages-callgraph.dot</a> · <a href=\"");
+    index.push_str(SUBS_CALLGRAPH_FILENAME);
+    index.push_str("\">subs-callgraph.dot</a></p>\n");
+    index.push_str("</div>\n");
+    index.push_str("<div class=\"footer\">NYTProfM native operator HTML v2</div>\n");
     index.push_str("</body>\n</html>\n");
 
     HtmlSite {
@@ -516,10 +783,16 @@ pub fn render_html_site_with_options(
         index_subs_excl_filename,
         style_css,
         style_filename,
+        sort_js,
+        sort_js_filename,
         flame_folded,
         flame_folded_filename,
         flame_svg,
         flame_svg_filename,
+        packages_callgraph_dot: render_packages_callgraph_dot(model),
+        packages_callgraph_filename: PACKAGES_CALLGRAPH_FILENAME.to_owned(),
+        subs_callgraph_dot: render_subs_callgraph_dot(model),
+        subs_callgraph_filename: SUBS_CALLGRAPH_FILENAME.to_owned(),
     }
 }
 
@@ -596,9 +869,9 @@ fn path_os_contains_nul(path: &Path) -> bool {
 /// Path safety ([`validate_html_out_dir`]) runs before any create/write.
 ///
 /// Writes `index.html`, `index-subs-excl.html`, every `file-<fid>.html` from
-/// [`HtmlSite::file_pages`], `source.html` (primary alias), and shared
-/// [`HtmlSite::style_filename`] (`style.css`). Flame files are **not** written
-/// on the default options path.
+/// [`HtmlSite::file_pages`], `source.html` (primary alias), shared
+/// [`HtmlSite::style_filename`] (`style.css`), and [`HtmlSite::sort_js_filename`]
+/// (`nytprof-sort.js`). Flame files are **not** written on the default options path.
 ///
 /// Returns the rendered [`HtmlSite`] so callers can list filenames written.
 pub fn write_html_site(
@@ -661,12 +934,24 @@ fn publish_html_site_files(site: &HtmlSite, out_dir: &Path) -> io::Result<()> {
             temp_dir.join(&site.style_filename),
             site.style_css.as_bytes(),
         )?;
+        fs::write(
+            temp_dir.join(&site.sort_js_filename),
+            site.sort_js.as_bytes(),
+        )?;
         if let (Some(body), Some(name)) = (&site.flame_folded, &site.flame_folded_filename) {
             fs::write(temp_dir.join(name), body.as_bytes())?;
         }
         if let (Some(body), Some(name)) = (&site.flame_svg, &site.flame_svg_filename) {
             fs::write(temp_dir.join(name), body.as_bytes())?;
         }
+        fs::write(
+            temp_dir.join(&site.packages_callgraph_filename),
+            site.packages_callgraph_dot.as_bytes(),
+        )?;
+        fs::write(
+            temp_dir.join(&site.subs_callgraph_filename),
+            site.subs_callgraph_dot.as_bytes(),
+        )?;
         atomic_replace_dir(&temp_dir, out_dir)
     })();
 
@@ -764,6 +1049,60 @@ pub fn file_page_filename(fid: u32) -> String {
     format!("file-{fid}.html")
 }
 
+fn dot_quote(s: &str) -> String {
+    format!("\"{}\"", s.replace('\\', "\\\\").replace('"', "\\\""))
+}
+
+fn package_name_of(sub: &str) -> &str {
+    match sub.rfind("::") {
+        Some(i) if i > 0 => &sub[..i],
+        _ => "main",
+    }
+}
+
+/// Graphviz `digraph` of inter-package call edges from [`ProfileModel::call_edges`].
+pub fn render_packages_callgraph_dot(model: &ProfileModel) -> String {
+    let mut edges: BTreeSet<(String, String)> = BTreeSet::new();
+    for ((caller, called), e) in &model.call_edges {
+        if e.count == 0 || caller.is_empty() || called.is_empty() {
+            continue;
+        }
+        edges.insert((
+            package_name_of(caller).to_owned(),
+            package_name_of(called).to_owned(),
+        ));
+    }
+    let mut out = String::from("digraph {\ngraph [overlap=false]\n");
+    for (a, b) in &edges {
+        out.push_str(&dot_quote(a));
+        out.push_str(" -> ");
+        out.push_str(&dot_quote(b));
+        out.push_str(";\n");
+    }
+    out.push_str("}\n");
+    out
+}
+
+/// Graphviz `digraph` of inter-subroutine call edges from [`ProfileModel::call_edges`].
+pub fn render_subs_callgraph_dot(model: &ProfileModel) -> String {
+    let mut edges: BTreeSet<(String, String)> = BTreeSet::new();
+    for ((caller, called), e) in &model.call_edges {
+        if e.count == 0 || caller.is_empty() || called.is_empty() {
+            continue;
+        }
+        edges.insert((caller.clone(), called.clone()));
+    }
+    let mut out = String::from("digraph {\ngraph [overlap=false]\n");
+    for (a, b) in &edges {
+        out.push_str(&dot_quote(a));
+        out.push_str(" -> ");
+        out.push_str(&dot_quote(b));
+        out.push_str(";\n");
+    }
+    out.push_str("}\n");
+    out
+}
+
 /// Fids in `model.files` that have source text and/or A4/A4b line data.
 fn eligible_source_fids(model: &ProfileModel) -> Vec<u32> {
     let mut fids: Vec<u32> = model
@@ -789,6 +1128,7 @@ fn render_file_page(
     fid: u32,
     profile_base: &str,
     style_filename: &str,
+    sort_filename: &str,
 ) -> String {
     let basename = model
         .fid_basename(fid)
@@ -800,42 +1140,77 @@ fn render_file_page(
         &mut page,
         &src_title,
         HtmlCssMode::LinkedStyleSheet(style_filename),
+        HtmlJsMode::LinkedScript(sort_filename),
     );
-    page.push_str(&format!("<h1>{}</h1>\n", escape_html(&src_title)));
-    page.push_str("<p><a href=\"index.html\">← Back to index</a></p>\n");
+    push_page_chrome(
+        &mut page,
+        "NYTProf Performance Profile",
+        &format!("{} — « line view »", escape_html(&basename)),
+        true,
+    );
+    page.push_str("<div class=\"body_content\">\n");
+    push_file_summary(&mut page, model, fid);
+    push_subs_table_v2(&mut page, model, SubsTableKind::File, Some(fid), true);
     push_source_heading(&mut page, model, fid);
-    push_source_table(&mut page, model, fid);
+    let emit_stubs = fid == primary_workload_fid(model);
+    push_source_table(&mut page, model, fid, emit_stubs);
     // A4b: block_line_totals for this fid when present (blocks fixtures).
     push_block_line_totals_table(&mut page, model, Some(fid));
+    page.push_str("</div>\n");
+    page.push_str("<div class=\"footer\">NYTProfM native operator HTML v2</div>\n");
     page.push_str("</body>\n</html>\n");
     page
 }
 
-/// Index section: relative links to every `file-*.html` plus primary `source.html` alias.
-fn push_source_file_links(
+/// Index `#filestable`: Stmts / Exclusive Time / Reports / Source File.
+fn push_files_table(
     out: &mut String,
     model: &ProfileModel,
     eligible: &[u32],
     primary_fid: u32,
     source_filename: &str,
 ) {
-    out.push_str("<h2>Source files</h2>\n");
-    out.push_str("<ul class=\"source-files\">\n");
+    out.push_str("<h2>Source Code Files</h2>\n");
+    out.push_str("<table id=\"filestable\" class=\"sortable\">\n");
+    out.push_str("<caption>Source Code Files</caption>\n<thead><tr>");
+    push_th(out, "Stmts", "num");
+    push_th_default(out, "Exclusive<br>Time", "num", "desc");
+    out.push_str("<th>Reports</th>");
+    push_th(out, "Source File", "text");
+    out.push_str("</tr></thead>\n<tbody>\n");
+    let tps = ticks_per_sec_attr(model);
+    let mut total_stmts: u64 = 0;
+    let mut total_ticks: i64 = 0;
+    let heat_vals: Vec<f64> = eligible
+        .iter()
+        .map(|fid| fid_exclusive_ticks(model, *fid) as f64)
+        .collect();
+    let scale = HeatScale::from_values(&heat_vals);
     for fid in eligible {
+        let stmts = fid_stmt_calls(model, *fid);
+        let ticks = fid_exclusive_ticks(model, *fid);
+        total_stmts = total_stmts.saturating_add(stmts);
+        total_ticks = total_ticks.saturating_add(ticks);
         let href = file_page_filename(*fid);
-        let basename = model
+        let label = model
             .fid_basename(*fid)
             .map(|s| s.to_owned())
             .unwrap_or_else(|| source_file_label(model, *fid));
-        out.push_str(&format!(
-            "<li><a href=\"{}\">{}</a> (fid {})</li>\n",
-            escape_html(&href),
-            escape_html(&basename),
-            fid
-        ));
+        let heat = heat_class(ticks as f64, &scale);
+        out.push_str("<tr>");
+        push_count_td_heat(out, stmts, if stmts > 0 { heat } else { "" });
+        push_time_td_heat(out, ticks as f64, tps, heat);
+        out.push_str("<td><a href=\"");
+        out.push_str(&escape_html(&href));
+        out.push_str("\">line</a></td>");
+        out.push_str("<td>");
+        out.push_str(&escape_html(&label));
+        out.push_str("</td></tr>\n");
     }
-    out.push_str("</ul>\n");
-    // Back-compat: keep an explicit href="source.html" to the primary page.
+    out.push_str("</tbody>\n<tfoot><tr>");
+    push_count_td(out, total_stmts);
+    push_time_td(out, total_ticks as f64, tps);
+    out.push_str("<td></td><td></td></tr></tfoot>\n</table>\n");
     out.push_str(&format!(
         "<p class=\"source-link\"><a href=\"{}\">Source — {}</a> (primary alias)</p>\n",
         escape_html(source_filename),
@@ -859,7 +1234,7 @@ fn source_file_label(model: &ProfileModel, primary_fid: u32) -> String {
         .unwrap_or_else(|| format!("fid {primary_fid}"))
 }
 
-fn push_html_doc_start(out: &mut String, title: &str, css: HtmlCssMode<'_>) {
+fn push_html_doc_start(out: &mut String, title: &str, css: HtmlCssMode<'_>, js: HtmlJsMode<'_>) {
     out.push_str("<!DOCTYPE html>\n");
     out.push_str("<html lang=\"en\">\n<head>\n");
     out.push_str("<meta charset=\"utf-8\">\n");
@@ -878,7 +1253,114 @@ fn push_html_doc_start(out: &mut String, title: &str, css: HtmlCssMode<'_>) {
             ));
         }
     }
+    match js {
+        HtmlJsMode::Inline => {
+            out.push_str("<script>\n");
+            out.push_str(SHARED_SORT_JS);
+            out.push_str("</script>\n");
+        }
+        HtmlJsMode::LinkedScript(sort_filename) => {
+            out.push_str(&format!(
+                "<script src=\"{}\" defer></script>\n",
+                escape_html(sort_filename)
+            ));
+        }
+    }
     out.push_str("</head>\n<body>\n");
+}
+
+/// Shared header chrome (`div.header` / `.siteTitle` / `.siteSubtitle` / `.header_back`).
+///
+/// `subtitle` may include pre-escaped HTML (e.g. `<br>`). `site_title` is escaped.
+fn push_page_chrome(out: &mut String, site_title: &str, subtitle: &str, back_to_index: bool) {
+    out.push_str("<div class=\"header\">\n");
+    if back_to_index {
+        out.push_str("<div class=\"header_back\"><a href=\"index.html\">← Index</a></div>\n");
+    }
+    out.push_str("<div class=\"siteTitle\">");
+    out.push_str(&escape_html(site_title));
+    out.push_str("</div>\n");
+    if !subtitle.is_empty() {
+        out.push_str("<div class=\"siteSubtitle\">");
+        out.push_str(subtitle);
+        out.push_str("</div>\n");
+    }
+    out.push_str("</div>\n");
+}
+
+fn parse_attr_f64(model: &ProfileModel, key: &str) -> Option<f64> {
+    model
+        .attributes
+        .get(key)
+        .and_then(|s| s.parse::<f64>().ok())
+        .filter(|v| v.is_finite())
+}
+
+fn run_time_label(model: &ProfileModel) -> Option<String> {
+    for key in ["start_date", "run_date", "basetime_iso"] {
+        if let Some(v) = model.attributes.get(key) {
+            if !v.is_empty() && v.parse::<f64>().is_err() {
+                return Some(v.clone());
+            }
+        }
+    }
+    None
+}
+
+fn reported_on_now() -> String {
+    match SystemTime::now().duration_since(UNIX_EPOCH) {
+        Ok(d) => format!("unix {}", d.as_secs()),
+        Err(_) => "unknown".to_owned(),
+    }
+}
+
+fn push_index_summary(out: &mut String, model: &ProfileModel) {
+    let app = application_basename(model);
+    let stmt_secs = parse_attr_f64(model, "profiler_active").or_else(|| {
+        let tps = ticks_per_sec_attr(model)?;
+        let ticks: i64 = model.line_totals.values().map(|t| t.ticks).sum();
+        Some(ticks as f64 / tps as f64)
+    });
+    // Wall only from a real duration attribute — never `application`.
+    let wall_secs = parse_attr_f64(model, "profiler_duration")
+        .or_else(|| parse_attr_f64(model, "duration"));
+    let stmt_count: u64 = model.line_totals.values().map(|t| t.calls).sum();
+    let sub_calls: u64 = model.sub_return_totals.values().map(|t| t.returns).sum();
+    let file_count = model.files.len();
+    let stmt_disp = stmt_secs
+        .map(format_compact_secs)
+        .unwrap_or_else(|| "0s".to_owned());
+    out.push_str("<div class=\"index_summary\">Profile of ");
+    out.push_str(&escape_html(&app));
+    out.push_str(" for ");
+    out.push_str(&escape_html(&stmt_disp));
+    if let Some(wall) = wall_secs {
+        out.push_str(" (of ");
+        out.push_str(&escape_html(&format_compact_secs(wall)));
+        out.push(')');
+    }
+    out.push_str(&format!(
+        ", executing {stmt_count} statements and {sub_calls} subroutine calls in {file_count} source files.</div>\n"
+    ));
+}
+
+fn push_file_summary(out: &mut String, model: &ProfileModel, fid: u32) {
+    let label = source_file_label(model, fid);
+    let stmts = fid_stmt_calls(model, fid);
+    let ticks = fid_exclusive_ticks(model, fid);
+    let tps = ticks_per_sec_attr(model);
+    let secs = match tps {
+        Some(n) if n > 0 => format_compact_secs(ticks as f64 / n as f64),
+        _ => format_ticks(ticks as f64),
+    };
+    out.push_str("<table class=\"file_summary\">\n");
+    out.push_str("<tr><th>Filename</th><td>");
+    out.push_str(&escape_html(&label));
+    out.push_str("</td></tr>\n<tr><th>Statements</th><td>");
+    out.push_str(&escape_html(&format!(
+        "Executed {stmts} statements in {secs}"
+    )));
+    out.push_str("</td></tr>\n</table>\n");
 }
 
 fn push_profile_path(out: &mut String, profile_path: &str) {
@@ -902,65 +1384,235 @@ fn push_event_counts(out: &mut String, model: &ProfileModel) {
         "<li>discount_events: {}</li>\n",
         model.discount_events
     ));
+    if let Some(tps) = ticks_per_sec_attr(model) {
+        out.push_str(&format!("<li>ticks_per_sec: {tps}</li>\n"));
+    }
     out.push_str("</ul>\n");
 }
 
-fn push_subs_table(out: &mut String, model: &ProfileModel) {
+/// Which 6-col `#subs_table` to emit (operator HTML v2).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum SubsTableKind {
+    /// Index: top [`INDEX_TOP_SUBS`], exclusive-desc, no `data-sort-default`.
+    Index,
+    /// Exclusive index page: all rows, `data-sort-default=desc`, class `subs-excl`.
+    ExclIndex,
+    /// Per-file: subs in this fid (+ CORE: names with edges), default Exclusive desc.
+    File,
+}
+
+fn push_subs_table_v2(
+    out: &mut String,
+    model: &ProfileModel,
+    kind: SubsTableKind,
+    only_fid: Option<u32>,
+    multi_file: bool,
+) {
+    let mut rows = sorted_subs_by_exclusive(model);
+    if let Some(fid) = only_fid {
+        rows.retain(|(name, _)| sub_belongs_on_file_page(model, name, fid));
+    }
+    let extra_core: Vec<(String, nytprof_model::SubTotal)> = if let Some(fid) = only_fid {
+        core_names_for_fid(model, fid)
+            .into_iter()
+            .filter(|name| {
+                !rows.iter().any(|(n, _)| *n == name) && !model.sub_return_totals.contains_key(name)
+            })
+            .map(|name| {
+                (
+                    name,
+                    nytprof_model::SubTotal {
+                        returns: 0,
+                        incl: 0.0,
+                        excl: 0.0,
+                    },
+                )
+            })
+            .collect()
+    } else {
+        Vec::new()
+    };
+
+    if matches!(kind, SubsTableKind::Index) {
+        rows.truncate(INDEX_TOP_SUBS);
+    }
+
+    let class = match kind {
+        SubsTableKind::ExclIndex => "subs-excl sortable",
+        _ => "sortable",
+    };
+    let default_excl = !matches!(kind, SubsTableKind::Index);
+
     out.push_str("<h2>Subroutines</h2>\n");
-    out.push_str(
-        "<table class=\"subs\">\n<thead><tr>\
-         <th>name</th><th>returns</th><th>incl</th><th>excl</th>\
-         </tr></thead>\n<tbody>\n",
-    );
+    out.push_str("<table id=\"subs_table\" class=\"");
+    out.push_str(class);
+    out.push_str("\">\n<caption>Subroutines</caption>\n<thead><tr>");
+    push_th(out, "Calls", "num");
+    push_th(out, "P", "num");
+    push_th(out, "F", "num");
+    if default_excl {
+        push_th_default(out, "Exclusive<br>Time", "num", "desc");
+    } else {
+        push_th_html(out, "Exclusive<br>Time", "num");
+    }
+    push_th_html(out, "Inclusive<br>Time", "num");
+    push_th(out, "Subroutine", "text");
+    out.push_str("</tr></thead>\n<tbody>\n");
+    let tps = ticks_per_sec_attr(model);
+    let heat_vals: Vec<f64> = rows
+        .iter()
+        .map(|(_, t)| t.excl)
+        .chain(extra_core.iter().map(|(_, t)| t.excl))
+        .collect();
+    let scale = HeatScale::from_values(&heat_vals);
+    for (name, t) in rows {
+        push_subs_v2_row(out, model, name, t, tps, &scale, multi_file);
+    }
+    for (name, t) in &extra_core {
+        push_subs_v2_row(out, model, name, t, tps, &scale, multi_file);
+    }
+    out.push_str("</tbody>\n</table>\n");
+}
+
+fn push_subs_v2_row(
+    out: &mut String,
+    model: &ProfileModel,
+    name: &str,
+    t: &nytprof_model::SubTotal,
+    tps: Option<u64>,
+    scale: &HeatScale,
+    multi_file: bool,
+) {
+    let (p, f) = sub_places_and_files(model, name);
+    let heat = heat_class(t.excl, scale);
+    out.push_str("<tr");
+    if !heat.is_empty() {
+        out.push_str(" class=\"");
+        out.push_str(heat);
+        out.push('"');
+    }
+    out.push('>');
+    push_count_td_heat(out, t.returns, if t.returns > 0 { heat } else { "" });
+    push_count_td(out, p);
+    push_count_td(out, f);
+    push_time_td_heat(out, t.excl, tps, heat);
+    push_time_td_heat(out, t.incl, tps, heat_class(t.incl, scale));
+    push_sub_name_cell(out, model, name, multi_file);
+    out.push_str("</tr>\n");
+}
+
+fn sub_belongs_on_file_page(model: &ProfileModel, name: &str, fid: u32) -> bool {
+    if model.sub_defs.get(name).is_some_and(|d| d.fid == fid) {
+        return true;
+    }
+    name.contains("CORE:") && sub_involves_fid(model, name, fid)
+}
+
+fn sub_involves_fid(model: &ProfileModel, name: &str, fid: u32) -> bool {
+    model.call_edges.keys().any(|(caller, called)| {
+        if caller != name && called != name {
+            return false;
+        }
+        model
+            .sub_defs
+            .get(caller)
+            .is_some_and(|d| d.fid == fid)
+            || model.sub_defs.get(called).is_some_and(|d| d.fid == fid)
+            || (primary_workload_fid(model) == fid)
+    })
+}
+
+fn core_names_for_fid(model: &ProfileModel, fid: u32) -> Vec<String> {
+    let mut names = BTreeSet::new();
+    for (caller, called) in model.call_edges.keys() {
+        for n in [caller, called] {
+            if n.contains("CORE:") && sub_involves_fid(model, n, fid) {
+                names.insert(n.clone());
+            }
+        }
+    }
+    names.into_iter().collect()
+}
+
+fn sub_places_and_files(model: &ProfileModel, name: &str) -> (u64, u64) {
+    let mut callers: BTreeSet<&str> = BTreeSet::new();
+    let mut fids: BTreeSet<u32> = BTreeSet::new();
+    for (caller, called) in model.call_edges.keys() {
+        if called == name {
+            callers.insert(caller.as_str());
+            if let Some(d) = model.sub_defs.get(caller) {
+                fids.insert(d.fid);
+            }
+        }
+    }
+    let p = callers.len() as u64;
+    let f = if fids.is_empty() { 1 } else { fids.len() as u64 };
+    (p, f)
+}
+
+fn push_subs_table(out: &mut String, model: &ProfileModel, multi_file: bool) {
+    out.push_str("<h2>Subroutines</h2>\n");
+    out.push_str("<table class=\"subs sortable\">\n<thead><tr>");
+    push_th(out, "name", "text");
+    push_th(out, "returns", "num");
+    push_th(out, "incl", "num");
+    push_th(out, "excl", "num");
+    out.push_str("</tr></thead>\n<tbody>\n");
+    let tps = ticks_per_sec_attr(model);
     let mut subs: Vec<_> = model.sub_return_totals.iter().collect();
     subs.sort_by_key(|(a, _)| *a);
+    let heat_vals: Vec<f64> = subs.iter().map(|(_, t)| t.excl).collect();
+    let scale = HeatScale::from_values(&heat_vals);
     for (name, t) in subs {
-        out.push_str(&format!(
-            "<tr><td>{}</td><td class=\"num\">{}</td>\
-             <td class=\"num\">{}</td><td class=\"num\">{}</td></tr>\n",
-            escape_html(name),
-            t.returns,
-            format_ticks(t.incl),
-            format_ticks(t.excl),
-        ));
+        let heat = heat_class(t.excl, &scale);
+        out.push_str("<tr class=\"");
+        out.push_str(heat);
+        out.push_str("\">");
+        push_sub_name_cell(out, model, name, multi_file);
+        push_count_td(out, t.returns);
+        push_time_td(out, t.incl, tps);
+        push_time_td(out, t.excl, tps);
+        out.push_str("</tr>\n");
     }
     out.push_str("</tbody>\n</table>\n");
 }
 
 /// Optional A9 `sub_defs` table (skipped when empty).
-fn push_sub_defs_table(out: &mut String, model: &ProfileModel) {
+fn push_sub_defs_table(out: &mut String, model: &ProfileModel, multi_file: bool) {
     if model.sub_defs.is_empty() {
         return;
     }
     out.push_str("<h2>Subroutine definitions</h2>\n");
-    out.push_str(
-        "<table class=\"sub-defs\">\n<thead><tr>\
-         <th>name</th><th>fid</th><th>first</th><th>last</th>\
-         </tr></thead>\n<tbody>\n",
-    );
+    out.push_str("<table class=\"sub-defs sortable\">\n<thead><tr>");
+    push_th(out, "name", "text");
+    push_th(out, "fid", "num");
+    push_th(out, "first", "num");
+    push_th(out, "last", "num");
+    out.push_str("</tr></thead>\n<tbody>\n");
     let mut defs: Vec<_> = model.sub_defs.iter().collect();
     defs.sort_by_key(|(a, _)| *a);
     for (name, d) in defs {
-        out.push_str(&format!(
-            "<tr><td>{}</td><td class=\"num\">{}</td>\
-             <td class=\"num\">{}</td><td class=\"num\">{}</td></tr>\n",
-            escape_html(name),
-            d.fid,
-            d.first_line,
-            d.last_line,
-        ));
+        out.push_str("<tr>");
+        push_sub_name_cell(out, model, name, multi_file);
+        push_count_td(out, u64::from(d.fid));
+        push_count_td(out, u64::from(d.first_line));
+        push_count_td(out, u64::from(d.last_line));
+        out.push_str("</tr>\n");
     }
     out.push_str("</tbody>\n</table>\n");
 }
 
-fn push_call_edges_table(out: &mut String, model: &ProfileModel) {
+fn push_call_edges_table(out: &mut String, model: &ProfileModel, multi_file: bool) {
     // Call edges (A7): count desc, then caller, then called.
     out.push_str("<h2>Call edges</h2>\n");
-    out.push_str(
-        "<table class=\"call-edges\">\n<thead><tr>\
-         <th>caller</th><th>called</th><th>count</th><th>incl</th><th>excl</th>\
-         </tr></thead>\n<tbody>\n",
-    );
+    out.push_str("<table class=\"call-edges sortable\">\n<thead><tr>");
+    push_th(out, "caller", "text");
+    push_th(out, "called", "text");
+    push_th(out, "count", "num");
+    push_th(out, "incl", "num");
+    push_th(out, "excl", "num");
+    out.push_str("</tr></thead>\n<tbody>\n");
+    let tps = ticks_per_sec_attr(model);
     let mut edges: Vec<_> = model.call_edges.iter().collect();
     edges.sort_by(|((c1, d1), e1), ((c2, d2), e2)| {
         e2.count
@@ -968,42 +1620,48 @@ fn push_call_edges_table(out: &mut String, model: &ProfileModel) {
             .then_with(|| c1.cmp(c2))
             .then_with(|| d1.cmp(d2))
     });
+    let heat_vals: Vec<f64> = edges.iter().map(|(_, e)| e.excl).collect();
+    let scale = HeatScale::from_values(&heat_vals);
     for ((caller, called), e) in edges {
-        out.push_str(&format!(
-            "<tr><td>{}</td><td>{}</td>\
-             <td class=\"num\">{}</td>\
-             <td class=\"num\">{}</td><td class=\"num\">{}</td></tr>\n",
-            escape_html(caller),
-            escape_html(called),
-            e.count,
-            format_ticks(e.incl),
-            format_ticks(e.excl),
-        ));
+        let heat = heat_class(e.excl, &scale);
+        out.push_str("<tr class=\"");
+        out.push_str(heat);
+        out.push_str("\">");
+        push_sub_name_cell(out, model, caller, multi_file);
+        push_sub_name_cell(out, model, called, multi_file);
+        push_count_td(out, e.count);
+        push_time_td(out, e.incl, tps);
+        push_time_td(out, e.excl, tps);
+        out.push_str("</tr>\n");
     }
     out.push_str("</tbody>\n</table>\n");
 }
 
-fn push_top_exclusive_table(out: &mut String, model: &ProfileModel) {
+fn push_top_exclusive_table(out: &mut String, model: &ProfileModel, multi_file: bool) {
     // Exclusive-time ranking (summary): excl desc, then name for stability.
     // Full page lives at `index-subs-excl.html` (see `push_subs_excl_table`).
     out.push_str("<h2>Top exclusive</h2>\n");
-    out.push_str(
-        "<table class=\"top-exclusive\">\n<thead><tr>\
-         <th>name</th><th>excl</th><th>returns</th>\
-         </tr></thead>\n<tbody>\n",
-    );
-    for (name, t) in sorted_subs_by_exclusive(model) {
-        out.push_str(&format!(
-            "<tr><td>{}</td>\
-             <td class=\"num\">{}</td><td class=\"num\">{}</td></tr>\n",
-            escape_html(name),
-            format_ticks(t.excl),
-            t.returns,
-        ));
+    out.push_str("<table class=\"top-exclusive sortable\">\n<thead><tr>");
+    push_th(out, "name", "text");
+    push_th(out, "excl", "num");
+    push_th(out, "returns", "num");
+    out.push_str("</tr></thead>\n<tbody>\n");
+    let tps = ticks_per_sec_attr(model);
+    let rows = sorted_subs_by_exclusive(model);
+    let heat_vals: Vec<f64> = rows.iter().map(|(_, t)| t.excl).collect();
+    let scale = HeatScale::from_values(&heat_vals);
+    for (name, t) in rows {
+        let heat = heat_class(t.excl, &scale);
+        out.push_str("<tr class=\"");
+        out.push_str(heat);
+        out.push_str("\">");
+        push_sub_name_cell(out, model, name, multi_file);
+        push_time_td(out, t.excl, tps);
+        push_count_td(out, t.returns);
+        out.push_str("</tr>\n");
     }
     out.push_str("</tbody>\n</table>\n");
 }
-
 
 /// All `sub_return_totals` sorted by exclusive time descending, then name.
 fn sorted_subs_by_exclusive(model: &ProfileModel) -> Vec<(&String, &nytprof_model::SubTotal)> {
@@ -1011,33 +1669,6 @@ fn sorted_subs_by_exclusive(model: &ProfileModel) -> Vec<(&String, &nytprof_mode
     by_excl.sort_by(|(n1, t1), (n2, t2)| t2.excl.total_cmp(&t1.excl).then_with(|| n1.cmp(n2)));
     by_excl
 }
-
-
-/// Full exclusive-time ranking table for `index-subs-excl.html`.
-///
-/// Columns: name, returns, incl, excl — same fields as the summary Subroutines
-/// table, but sorted by exclusive time (oracle `excl_time` index semantics).
-/// Stable class: `table.subs-excl`.
-fn push_subs_excl_table(out: &mut String, model: &ProfileModel) {
-    out.push_str("<h2>Subroutines by exclusive time</h2>\n");
-    out.push_str(
-        "<table class=\"subs-excl\">\n<thead><tr>\
-         <th>name</th><th>returns</th><th>incl</th><th>excl</th>\
-         </tr></thead>\n<tbody>\n",
-    );
-    for (name, t) in sorted_subs_by_exclusive(model) {
-        out.push_str(&format!(
-            "<tr><td>{}</td><td class=\"num\">{}</td>\
-             <td class=\"num\">{}</td><td class=\"num\">{}</td></tr>\n",
-            escape_html(name),
-            t.returns,
-            format_ticks(t.incl),
-            format_ticks(t.excl),
-        ));
-    }
-    out.push_str("</tbody>\n</table>\n");
-}
-
 
 /// Render the multi-file exclusive sub index page (`index-subs-excl.html`).
 ///
@@ -1047,6 +1678,7 @@ fn render_index_subs_excl_page(
     profile_path: &str,
     profile_base: &str,
     style_filename: &str,
+    sort_filename: &str,
 ) -> String {
     let title = format!("Subroutine exclusive index — {profile_base}");
     let mut page = String::with_capacity(4096);
@@ -1054,11 +1686,19 @@ fn render_index_subs_excl_page(
         &mut page,
         &title,
         HtmlCssMode::LinkedStyleSheet(style_filename),
+        HtmlJsMode::LinkedScript(sort_filename),
     );
-    page.push_str(&format!("<h1>{}</h1>\n", escape_html(&title)));
-    page.push_str("<p><a href=\"index.html\">← Back to index</a></p>\n");
+    push_page_chrome(
+        &mut page,
+        "Performance Profile Subroutine Index",
+        &format!("For {}", escape_html(&application_basename(model))),
+        true,
+    );
+    page.push_str("<div class=\"body_content\">\n");
     push_profile_path(&mut page, profile_path);
-    push_subs_excl_table(&mut page, model);
+    push_subs_table_v2(&mut page, model, SubsTableKind::ExclIndex, None, true);
+    page.push_str("</div>\n");
+    page.push_str("<div class=\"footer\">NYTProfM native operator HTML v2</div>\n");
     page.push_str("</body>\n</html>\n");
     page
 }
@@ -1072,36 +1712,133 @@ fn push_source_heading(out: &mut String, model: &ProfileModel, primary_fid: u32)
     ));
 }
 
-fn push_source_table(out: &mut String, model: &ProfileModel, primary_fid: u32) {
-    out.push_str(
-        "<table class=\"source\">\n<thead><tr>\
-         <th>line</th><th>calls</th><th>ticks</th><th>source</th>\
-         </tr></thead>\n<tbody>\n",
-    );
+fn push_source_table(
+    out: &mut String,
+    model: &ProfileModel,
+    primary_fid: u32,
+    emit_opcode_stubs: bool,
+) {
+    out.push_str("<table class=\"source sortable\">\n<thead><tr>");
+    push_th(out, "Line", "num");
+    push_th(out, "Statements", "num");
+    push_th_html(out, "Time on line", "num");
+    push_th(out, "Calls", "num");
+    push_th_html(out, "Time in subs", "num");
+    push_th(out, "Code", "text");
+    out.push_str("</tr></thead>\n<tbody>\n");
 
-    let mut src_rows: Vec<(u32, &String)> = model
-        .source_lines
+    // Sorted union of SRC_LINE text, A4 line_totals, and A4b block_line lines.
+    let mut lines: BTreeSet<u32> = BTreeSet::new();
+    for (fid, line) in model.source_lines.keys() {
+        if *fid == primary_fid {
+            lines.insert(*line);
+        }
+    }
+    for (fid, line) in model.line_totals.keys() {
+        if *fid == primary_fid {
+            lines.insert(*line);
+        }
+    }
+    for (fid, line) in model.block_line_totals.keys() {
+        if *fid == primary_fid {
+            lines.insert(*line);
+        }
+    }
+
+    let tps = ticks_per_sec_attr(model);
+    let heat_vals: Vec<f64> = lines
         .iter()
-        .filter(|((fid, _), _)| *fid == primary_fid)
-        .map(|((_, line), text)| (*line, text))
+        .filter_map(|line| {
+            model
+                .line_totals
+                .get(&(primary_fid, *line))
+                .map(|t| t.ticks as f64)
+                .filter(|v| *v > 0.0)
+        })
         .collect();
-    src_rows.sort_by_key(|(line, _)| *line);
+    let scale = HeatScale::from_values(&heat_vals);
+    let stmt_vals: Vec<f64> = lines
+        .iter()
+        .filter_map(|line| {
+            model
+                .line_totals
+                .get(&(primary_fid, *line))
+                .map(|t| t.calls as f64)
+                .filter(|v| *v > 0.0)
+        })
+        .collect();
+    let stmt_scale = HeatScale::from_values(&stmt_vals);
+    let calls_by_line = line_call_aggs(model);
+    let stub_ins = stub_call_ins(model);
 
-    for (line, text) in src_rows {
-        let (calls, ticks) = model
-            .line_totals
+    for line in lines {
+        let totals = model.line_totals.get(&(primary_fid, line));
+        let ticks_val = totals.map(|t| t.ticks as f64).unwrap_or(0.0);
+        let agg = calls_by_line.get(&(primary_fid, line));
+        out.push_str(&format!("<tr id=\"L{line}\">"));
+        push_count_td(out, u64::from(line));
+        match totals {
+            Some(t) => {
+                let stmt_heat = heat_class(t.calls as f64, &stmt_scale);
+                let time_heat = heat_class(ticks_val, &scale);
+                push_count_td_heat(out, t.calls, stmt_heat);
+                push_time_td_heat(out, t.ticks as f64, tps, time_heat);
+            }
+            None => {
+                push_placeholder_num_td(out);
+                push_placeholder_num_td(out);
+            }
+        }
+        match agg {
+            Some(a) if a.out_count > 0 => {
+                push_count_td(out, a.out_count);
+                push_time_td(out, a.out_incl, tps);
+            }
+            _ => {
+                push_placeholder_num_td(out);
+                push_placeholder_num_td(out);
+            }
+        }
+        let display = model
+            .source_lines
             .get(&(primary_fid, line))
-            .map(|t| (t.calls.to_string(), t.ticks.to_string()))
-            .unwrap_or_else(|| ("—".to_owned(), "—".to_owned()));
-        // SRC_LINE text often includes a trailing newline; strip for cell display.
-        let display = text.trim_end_matches(['\n', '\r']);
-        out.push_str(&format!(
-            "<tr><td class=\"num\">{line}</td>\
-             <td class=\"num\">{calls}</td>\
-             <td class=\"num\">{ticks}</td>\
-             <td class=\"src-line\"><code>{}</code></td></tr>\n",
-            escape_html(display),
-        ));
+            .map(|text| text.trim_end_matches(['\n', '\r']).to_owned())
+            .unwrap_or_else(|| "—".to_owned());
+        out.push_str("<td class=\"s\">");
+        out.push_str(&escape_html(&display));
+        if let Some(a) = agg {
+            push_call_annotations(out, model, a, true);
+        }
+        out.push_str("</td></tr>\n");
+    }
+
+    if emit_opcode_stubs {
+        for name in opcode_stub_names(model) {
+            let id = opcode_fragment_id(&name);
+            out.push_str("<tr id=\"");
+            out.push_str(&escape_html(&id));
+            out.push_str("\">");
+            push_placeholder_num_td(out);
+            push_placeholder_num_td(out);
+            push_placeholder_num_td(out);
+            push_placeholder_num_td(out);
+            push_placeholder_num_td(out);
+            out.push_str("<td class=\"s\">");
+            out.push_str(&escape_html(&name));
+            if name.contains("CORE:") {
+                out.push_str(" (opcode)");
+            }
+            if let Some(ins) = stub_ins.get(&name) {
+                for (caller, cfid, cline, count) in ins {
+                    out.push_str("<div class=\"calls calls_in\"># spent ");
+                    out.push_str(&count.to_string());
+                    out.push_str(" times called from ");
+                    push_call_site_link(out, model, caller, *cfid, *cline, true);
+                    out.push_str("</div>");
+                }
+            }
+            out.push_str("</td></tr>\n");
+        }
     }
     out.push_str("</tbody>\n</table>\n");
 }
@@ -1153,107 +1890,182 @@ fn push_block_line_totals_table(out: &mut String, model: &ProfileModel, only_fid
 /// Lines are sorted lexicographically for deterministic output. Empty callers
 /// are kept as a leading `;` (i.e. `;called count`).
 pub fn render_folded_stacks(model: &ProfileModel) -> String {
+    folded_from_stacks(&collect_nonzero_call_edges(model))
+}
+
+/// Non-zero `call_edges` in folded-stack order (lexicographic caller, called).
+fn collect_nonzero_call_edges(model: &ProfileModel) -> Vec<((&str, &str), u64)> {
     let mut rows: Vec<((&str, &str), u64)> = model
         .call_edges
         .iter()
         .filter(|(_, e)| e.count > 0)
         .map(|((caller, called), e)| ((caller.as_str(), called.as_str()), e.count))
         .collect();
-    rows.sort_by(|((c1, d1), _), ((c2, d2), _)| c1.cmp(c2).then_with(|| d1.cmp(d2)));
+    rows.sort_unstable_by(|((c1, d1), _), ((c2, d2), _)| c1.cmp(c2).then_with(|| d1.cmp(d2)));
+    rows
+}
 
-    let mut out = String::with_capacity(rows.len().saturating_mul(48));
-    for ((caller, called), count) in rows {
+fn folded_from_stacks(stacks: &[((&str, &str), u64)]) -> String {
+    let mut out = String::with_capacity(stacks.len().saturating_mul(48));
+    for ((caller, called), count) in stacks {
         out.push_str(caller);
         out.push(';');
         out.push_str(called);
         out.push(' ');
-        out.push_str(&count.to_string());
+        let _ = write!(out, "{count}");
         out.push('\n');
     }
     out
 }
 
-
-/// Native flame / icicle SVG from call-edge folded stacks (optional HTML path).
+/// Native flame SVG from the `call_edges` tree (optional HTML path).
 ///
-/// **Not** oracle `flamegraph.pl` / full multi-frame `nytprofcalls` stacks.
-/// Each non-zero `call_edges` entry is a two-frame stack `caller;called` with
-/// weight `count`, laid out left-to-right (deterministic name order) with
-/// widths proportional to count. Residual honesty: Graphviz / treemap / oracle
-/// visual parity remain out of scope.
+/// **Not** oracle `flamegraph.pl` / multi-frame `nytprofcalls` / a sampled
+/// timeline. Roots sit at the **bottom**; callees stack upward. Width is
+/// inclusive time when `sub_return_totals` has it, otherwise call count.
+/// Same caller is **one** frame (not a column per edge). Frames narrower
+/// than [`FLAME_MIN_PAINT_PX`] are omitted.
 ///
-/// See `docs/schemas/html-optional-flame-mvp-v0.md`.
+/// Published sibling SVG uses multi-file `file-{fid}.html#L{line}` hrefs
+/// (same directory as the site). See `docs/schemas/html-optional-flame-mvp-v0.md`.
 pub fn render_flame_svg(model: &ProfileModel) -> String {
-    // Same ordering as folded stacks for determinism.
-    let mut stacks: Vec<((&str, &str), u64)> = model
-        .call_edges
-        .iter()
-        .filter(|(_, e)| e.count > 0)
-        .map(|((caller, called), e)| ((caller.as_str(), called.as_str()), e.count))
+    flame_svg_from_model(model, true)
+}
+
+/// Minimum painted frame width (CSS px in the 1200-wide viewBox).
+const FLAME_MIN_PAINT_PX: f64 = 1.0;
+const FLAME_MIN_LABEL_PX: f64 = 48.0;
+const FLAME_SVG_W: f64 = 1200.0;
+const FLAME_ROW_H: f64 = 22.0;
+const FLAME_PAD: f64 = 2.0;
+const FLAME_MAX_DEPTH: usize = 16;
+
+fn flame_node_incl(model: &ProfileModel, name: &str) -> f64 {
+    match model.sub_return_totals.get(name) {
+        Some(t) if t.incl.is_finite() && t.incl > 0.0 => t.incl,
+        _ => 0.0,
+    }
+}
+
+#[derive(Clone, Copy)]
+struct FlameKid<'a> {
+    name: &'a str,
+    count: u64,
+    weight: f64,
+}
+
+fn flame_children<'a>(model: &'a ProfileModel) -> BTreeMap<&'a str, Vec<FlameKid<'a>>> {
+    let mut kids: BTreeMap<&str, Vec<FlameKid<'_>>> = BTreeMap::new();
+    for ((caller, called), e) in &model.call_edges {
+        if e.count == 0 || called.is_empty() || caller == called {
+            continue;
+        }
+        let weight = {
+            let incl = flame_node_incl(model, called);
+            if incl > 0.0 {
+                incl
+            } else if e.incl.is_finite() && e.incl > 0.0 {
+                e.incl
+            } else {
+                e.count as f64
+            }
+        };
+        kids.entry(caller.as_str()).or_default().push(FlameKid {
+            name: called.as_str(),
+            count: e.count,
+            weight,
+        });
+    }
+    for v in kids.values_mut() {
+        v.sort_unstable_by(|a, b| b.weight.total_cmp(&a.weight).then_with(|| a.name.cmp(b.name)));
+    }
+    kids
+}
+
+fn flame_svg_from_model(model: &ProfileModel, multi_file: bool) -> String {
+    let kids = flame_children(model);
+    let called: BTreeSet<&str> = kids
+        .values()
+        .flat_map(|v| v.iter().map(|k| k.name))
         .collect();
-    stacks.sort_by(|((c1, d1), _), ((c2, d2), _)| c1.cmp(c2).then_with(|| d1.cmp(d2)));
+    let mut roots: Vec<&str> = kids
+        .keys()
+        .copied()
+        .filter(|c| !c.is_empty() && !called.contains(c))
+        .collect();
+    if roots.is_empty() {
+        roots = kids.keys().copied().filter(|c| !c.is_empty()).collect();
+    }
+    roots.sort_unstable();
 
-    const SVG_W: f64 = 1200.0;
-    const ROW_H: f64 = 24.0;
-    const DEPTHS: f64 = 2.0;
-    const PAD: f64 = 2.0;
-    let svg_h = ROW_H * DEPTHS + PAD * 2.0;
+    let mut root_nodes: Vec<(&str, u64, f64)> = roots
+        .into_iter()
+        .map(|name| {
+            let child_sum: f64 = kids.get(name).map(|v| v.iter().map(|k| k.weight).sum()).unwrap_or(0.0);
+            let incl = flame_node_incl(model, name);
+            let weight = incl.max(child_sum).max(1.0);
+            let count = kids.get(name).map(|v| v.iter().map(|k| k.count).sum()).unwrap_or(0);
+            (name, count, weight)
+        })
+        .collect();
+    let total_w: f64 = root_nodes.iter().map(|(_, _, w)| *w).sum();
+    root_nodes.sort_unstable_by(|a, b| b.2.total_cmp(&a.2).then_with(|| a.0.cmp(b.0)));
 
-    let total: u64 = stacks.iter().map(|(_, c)| *c).sum();
-    let mut out = String::with_capacity(stacks.len().saturating_mul(256).max(512));
-    // Use r## so SVG hex colors like "#333" do not terminate the raw string.
-    out.push_str(&format!(
-        r##"<?xml version="1.0" encoding="UTF-8"?>
-<svg xmlns="http://www.w3.org/2000/svg" width="{w}" height="{h}" viewBox="0 0 {w} {h}" class="nytprof-flame" role="img" aria-label="NYTProf folded call-edge flame">
-<title>NYTProf folded call-edge flame (native MVP; not flamegraph.pl)</title>
-<desc>Two-level icicle from call_edges folded stacks; widths proportional to call count.</desc>
-"##,
-        w = SVG_W as u32,
+    let mut max_depth = 1usize;
+    let mut seen_depth = BTreeSet::new();
+    for (name, _, _) in &root_nodes {
+        seen_depth.clear();
+        max_depth = max_depth.max(flame_depth(name, &kids, &mut seen_depth, 0));
+    }
+    max_depth = max_depth.min(FLAME_MAX_DEPTH);
+    let svg_h = FLAME_PAD * 2.0 + (max_depth as f64) * FLAME_ROW_H;
+
+    let mut out = String::with_capacity(kids.len().saturating_mul(200).max(512));
+    let _ = write!(
+        out,
+        "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n\
+<svg xmlns=\"http://www.w3.org/2000/svg\" xmlns:xlink=\"http://www.w3.org/1999/xlink\" width=\"{w}\" height=\"{h}\" viewBox=\"0 0 {w} {h}\" class=\"nytprof-flame\" role=\"img\" aria-label=\"NYTProf call-tree flame\">\n\
+<title>NYTProf call-tree flame (native; not flamegraph.pl)</title>\n\
+<desc>Roots at the bottom; callees stack up. Width is inclusive time when known, else calls. Hover a frame for details; click to open source.</desc>\n\
+<style type=\"text/css\"><![CDATA[\n\
+.flame-link{{cursor:pointer}}\n\
+.flame-link:hover rect,.flame-frame:hover rect{{filter:brightness(1.18);stroke:#111;stroke-width:1.2px}}\n\
+]]></style>\n",
+        w = FLAME_SVG_W as u32,
         h = svg_h as u32,
-    ));
+    );
 
-    if stacks.is_empty() || total == 0 {
+    if root_nodes.is_empty() || total_w <= 0.0 {
         out.push_str(
-            r##"<text x="8" y="16" font-family="system-ui,sans-serif" font-size="12" fill="#444">No call edges for flame</text>
-</svg>
-"##,
+            "<text x=\"8\" y=\"16\" font-family=\"system-ui,sans-serif\" font-size=\"12\" fill=\"#444\">No call edges for flame</text>\n</svg>\n",
         );
         return out;
     }
 
     let mut x = 0.0_f64;
-    for ((caller, called), count) in &stacks {
-        let width = (*count as f64) / (total as f64) * SVG_W;
-        if width <= 0.0 {
-            continue;
-        }
-        let caller_fill = flame_fill_color(caller);
-        let called_fill = flame_fill_color(called);
-        // Depth 0: caller (parent frame)
-        push_flame_rect(
-            &mut out,
-            FlameRect {
-                x,
-                y: PAD,
-                width,
-                height: ROW_H,
-                name: caller,
+    let mut ctx = FlamePaint {
+        out: &mut out,
+        kids: &kids,
+        model,
+        multi_file,
+        tps: ticks_per_sec_attr(model),
+        max_depth,
+        svg_h,
+    };
+    for (name, count, weight) in &root_nodes {
+        let width = (*weight / total_w) * FLAME_SVG_W;
+        let mut path = BTreeSet::new();
+        paint_flame_node(
+            &mut ctx,
+            FlameFrame {
+                name,
                 count: *count,
-                fill: caller_fill.as_str(),
-            },
-        );
-        // Depth 1: called (child frame)
-        push_flame_rect(
-            &mut out,
-            FlameRect {
+                weight: *weight,
                 x,
-                y: PAD + ROW_H,
                 width,
-                height: ROW_H,
-                name: called,
-                count: *count,
-                fill: called_fill.as_str(),
+                depth: 0,
             },
+            &mut path,
         );
         x += width;
     }
@@ -1261,69 +2073,220 @@ pub fn render_flame_svg(model: &ProfileModel) -> String {
     out
 }
 
+fn flame_depth(
+    name: &str,
+    kids: &BTreeMap<&str, Vec<FlameKid<'_>>>,
+    path: &mut BTreeSet<String>,
+    depth: usize,
+) -> usize {
+    if depth >= FLAME_MAX_DEPTH || !path.insert(name.to_owned()) {
+        return depth + 1;
+    }
+    let mut d = depth + 1;
+    if let Some(cs) = kids.get(name) {
+        for k in cs {
+            d = d.max(flame_depth(k.name, kids, path, depth + 1));
+        }
+    }
+    path.remove(name);
+    d
+}
+
+struct FlamePaint<'a, 'b> {
+    out: &'a mut String,
+    kids: &'b BTreeMap<&'b str, Vec<FlameKid<'b>>>,
+    model: &'b ProfileModel,
+    multi_file: bool,
+    tps: Option<u64>,
+    max_depth: usize,
+    svg_h: f64,
+}
+
+struct FlameFrame<'a> {
+    name: &'a str,
+    count: u64,
+    weight: f64,
+    x: f64,
+    width: f64,
+    depth: usize,
+}
+
+fn paint_flame_node(ctx: &mut FlamePaint<'_, '_>, frame: FlameFrame<'_>, path: &mut BTreeSet<String>) {
+    if frame.width < FLAME_MIN_PAINT_PX || frame.depth >= ctx.max_depth {
+        return;
+    }
+    // Classic flame: depth 0 at the bottom, children grow upward.
+    let y = ctx.svg_h - FLAME_PAD - ((frame.depth + 1) as f64) * FLAME_ROW_H;
+    let (calls, mut incl, excl) = flame_frame_totals(ctx.model, frame.name, frame.count);
+    if incl <= 0.0 && frame.weight.is_finite() && frame.weight > 0.0 {
+        incl = frame.weight;
+    }
+    let incl_l = format_time_cell(incl, ctx.tps);
+    let excl_l = format_time_cell(excl, ctx.tps);
+    let href = flame_frame_href(ctx.model, frame.name, ctx.multi_file);
+    push_flame_rect(
+        ctx.out,
+        FlameRect {
+            x: frame.x,
+            y,
+            width: frame.width,
+            name: frame.name,
+            count: calls,
+            incl_label: &incl_l,
+            excl_label: &excl_l,
+            href: href.as_deref(),
+        },
+    );
+    if !path.insert(frame.name.to_owned()) {
+        return;
+    }
+    let Some(cs) = ctx.kids.get(frame.name) else {
+        path.remove(frame.name);
+        return;
+    };
+    let child_sum: f64 = cs.iter().map(|k| k.weight).sum();
+    if child_sum <= 0.0 {
+        path.remove(frame.name);
+        return;
+    }
+    // Scale children into the parent bar (leftover width is parent self-time).
+    let fit = frame
+        .width
+        .min(frame.width * (child_sum / frame.weight.max(child_sum)));
+    let mut cx = frame.x;
+    let next_depth = frame.depth + 1;
+    let kids: Vec<FlameKid<'_>> = cs.clone();
+    for k in kids {
+        let cw = (k.weight / child_sum) * fit;
+        paint_flame_node(
+            ctx,
+            FlameFrame {
+                name: k.name,
+                count: k.count,
+                weight: k.weight,
+                x: cx,
+                width: cw,
+                depth: next_depth,
+            },
+            path,
+        );
+        cx += cw;
+    }
+    path.remove(frame.name);
+}
+
+fn flame_frame_totals(model: &ProfileModel, name: &str, fallback_count: u64) -> (u64, f64, f64) {
+    match model.sub_return_totals.get(name) {
+        Some(t) => {
+            let calls = if t.returns > 0 {
+                t.returns
+            } else {
+                fallback_count
+            };
+            let incl = if t.incl.is_finite() && t.incl > 0.0 {
+                t.incl
+            } else {
+                0.0
+            };
+            let excl = if t.excl.is_finite() && t.excl > 0.0 {
+                t.excl
+            } else {
+                0.0
+            };
+            (calls, incl, excl)
+        }
+        None => (fallback_count, 0.0, 0.0),
+    }
+}
+
+fn flame_frame_href(model: &ProfileModel, name: &str, multi_file: bool) -> Option<String> {
+    if let Some(h) = sub_href(model, name, multi_file) {
+        return Some(h);
+    }
+    if name == "RUNTIME" || name.ends_with("::RUNTIME") {
+        let fid = primary_workload_fid(model);
+        return Some(if multi_file {
+            format!("file-{fid}.html")
+        } else {
+            "#L1".to_owned()
+        });
+    }
+    None
+}
+
 struct FlameRect<'a> {
     x: f64,
     y: f64,
     width: f64,
-    height: f64,
     name: &'a str,
     count: u64,
-    fill: &'a str,
+    incl_label: &'a str,
+    excl_label: &'a str,
+    href: Option<&'a str>,
 }
 
-
 fn push_flame_rect(out: &mut String, r: FlameRect<'_>) {
-    let title = format!("{} ({})", r.name, r.count);
-    // Slight inset so adjacent frames are separable.
     let ix = r.x + 0.5;
     let iy = r.y + 0.5;
     let iw = (r.width - 1.0).max(0.5);
-    let ih = r.height - 1.0;
-    out.push_str(&format!(
-        r##"<g class="flame-frame">
-  <title>{title}</title>
-  <rect x="{ix:.2}" y="{iy:.2}" width="{iw:.2}" height="{ih:.2}" fill="{fill}" stroke="#333" stroke-width="0.5"/>
-"##,
-        title = escape_xml(&title),
-        fill = r.fill,
-    ));
-    // Label only when the frame is wide enough to read.
-    if r.width >= 48.0 {
+    let ih = FLAME_ROW_H - 1.0;
+    let fill = flame_fill_color(r.name);
+    let linked = r.href.filter(|h| !h.is_empty());
+    if let Some(h) = linked {
+        out.push_str("<a class=\"flame-link\" href=\"");
+        escape_xml_into(out, h);
+        out.push_str("\" xlink:href=\"");
+        escape_xml_into(out, h);
+        out.push_str("\">");
+    }
+    out.push_str("<g class=\"flame-frame\"><title>");
+    escape_xml_into(out, r.name);
+    let _ = write!(out, "\ncalls: {}\ninclusive: ", r.count);
+    escape_xml_into(out, r.incl_label);
+    out.push_str("\nexclusive: ");
+    escape_xml_into(out, r.excl_label);
+    if linked.is_some() {
+        out.push_str("\nclick to open source");
+    }
+    out.push_str("</title>");
+    let _ = write!(
+        out,
+        "<rect x=\"{ix:.2}\" y=\"{iy:.2}\" width=\"{iw:.2}\" height=\"{ih:.2}\" fill=\"{fill}\" stroke=\"#333\" stroke-width=\"0.5\"/>"
+    );
+    if r.width >= FLAME_MIN_LABEL_PX {
         let label = if r.name.is_empty() { "(anon)" } else { r.name };
         let tx = r.x + 4.0;
-        let ty = r.y + r.height * 0.68;
-        out.push_str(&format!(
-            r##"  <text x="{tx:.2}" y="{ty:.2}" font-family="ui-monospace,monospace" font-size="11" fill="#111">{label}</text>
-"##,
-            label = escape_xml(label),
-        ));
+        let ty = r.y + FLAME_ROW_H * 0.68;
+        let _ = write!(
+            out,
+            "<text x=\"{tx:.2}\" y=\"{ty:.2}\" font-family=\"ui-monospace,monospace\" font-size=\"11\" fill=\"#111\">"
+        );
+        escape_xml_into(out, label);
+        out.push_str("</text>");
     }
-    out.push_str("</g>\n");
+    out.push_str("</g>");
+    if linked.is_some() {
+        out.push_str("</a>");
+    }
+    out.push('\n');
 }
 
-
 /// Deterministic pastel fill from subroutine name (not a visual-oracle palette).
-fn flame_fill_color(name: &str) -> String {
+fn flame_fill_color(name: &str) -> &'static str {
     let mut h: u32 = 2166136261;
     for b in name.as_bytes() {
         h ^= u32::from(*b);
         h = h.wrapping_mul(16777619);
     }
-    let hue = h % 360;
-    // Soft HSL-ish via fixed saturation/lightness approximation in hex RGB.
-    // Use a small fixed palette keyed by hue bucket for stable SVG without a CSS hsl() dependency.
-    let bucket = (hue / 30) as usize; // 12 buckets
     const PALETTE: [&str; 12] = [
         "#f4a3a3", "#f4c3a3", "#f4e3a3", "#d4f4a3", "#a3f4b3", "#a3f4e3", "#a3d4f4", "#a3b3f4",
         "#c3a3f4", "#e3a3f4", "#f4a3d4", "#f4a3c3",
     ];
-    PALETTE[bucket % PALETTE.len()].to_owned()
+    PALETTE[((h % 360) / 30) as usize]
 }
 
 
-/// Escape text for SVG/XML text nodes and attributes.
-fn escape_xml(s: &str) -> String {
-    let mut out = String::with_capacity(s.len());
+fn escape_xml_into(out: &mut String, s: &str) {
     for ch in s.chars() {
         match ch {
             '&' => out.push_str("&amp;"),
@@ -1335,53 +2298,84 @@ fn escape_xml(s: &str) -> String {
             c => out.push(c),
         }
     }
-    out
 }
 
 
-/// Multi-file index: links to optional flame artifacts (no embedded SVG bloat).
-fn push_flame_section_links(out: &mut String, folded_filename: &str, svg_filename: &str) {
+/// Multi-file index: sibling flame files plus an **inlined** SVG so hover and
+/// click-to-source work under `file://` (`<img>` / `<object>` cannot).
+fn push_flame_section_links(
+    out: &mut String,
+    folded_filename: &str,
+    svg_filename: &str,
+    svg_body: &str,
+) {
     out.push_str("<section class=\"flame\">\n");
     out.push_str("<h2>Flame graph</h2>\n");
     out.push_str(
-        "<p class=\"flame-note\">Optional native folded-based flame (not oracle flamegraph.pl / Graphviz / treemap).</p>\n",
+        "<p class=\"flame-note\">Hover a frame for inclusive/exclusive time. Click a frame to open its source. (Native call-tree; not oracle flamegraph.pl.)</p>\n",
     );
     out.push_str(&format!(
         "<p class=\"flame-links\"><a href=\"{svg}\">{svg}</a> · <a href=\"{folded}\">{folded}</a></p>\n",
         svg = escape_html(svg_filename),
         folded = escape_html(folded_filename),
     ));
-    // Lightweight inline preview via object so index stays small if SVG is large.
-    out.push_str(&format!(
-        "<p><object type=\"image/svg+xml\" data=\"{svg}\" class=\"flame-svg-embed\">\
-<a href=\"{svg}\">{svg}</a></object></p>\n",
-        svg = escape_html(svg_filename),
-    ));
+    push_inlined_flame_svg(out, svg_body);
     out.push_str("</section>\n");
 }
-
 
 /// Single-file: embed native flame SVG inline (self-contained document).
 fn push_flame_section_embedded(out: &mut String, model: &ProfileModel) {
     out.push_str("<section class=\"flame\">\n");
     out.push_str("<h2>Flame graph</h2>\n");
     out.push_str(
-        "<p class=\"flame-note\">Optional native folded-based flame (not oracle flamegraph.pl / Graphviz / treemap).</p>\n",
+        "<p class=\"flame-note\">Hover a frame for inclusive/exclusive time. Click a frame to open its source. (Native call-tree; not oracle flamegraph.pl.)</p>\n",
     );
+    let svg = flame_svg_from_model(model, false);
+    push_inlined_flame_svg(out, &svg);
+    out.push_str("</section>\n");
+}
+
+fn push_inlined_flame_svg(out: &mut String, svg_body: &str) {
     out.push_str("<div class=\"flame-svg-embed\">\n");
-    // Strip XML declaration when embedding SVG inside HTML.
-    let svg = render_flame_svg(model);
-    let embed = svg
-        .lines()
-        .filter(|l| !l.starts_with("<?xml"))
-        .collect::<Vec<_>>()
-        .join("\n");
-    out.push_str(&embed);
+    let embed = svg_body
+        .strip_prefix("<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n")
+        .unwrap_or(svg_body);
+    out.push_str(embed);
     if !embed.ends_with('\n') {
         out.push('\n');
     }
     out.push_str("</div>\n");
-    out.push_str("</section>\n");
+    out.push_str("<div id=\"nytprof-flame-tip\" hidden></div>\n");
+    // Vanilla; no jquery. Reads SVG <title> so the same details show immediately.
+    out.push_str(
+        "<script>\n\
+(function(){\n\
+var svg=document.querySelector(\".flame-svg-embed svg\");\n\
+var tip=document.getElementById(\"nytprof-flame-tip\");\n\
+if(!svg||!tip)return;\n\
+function hide(){tip.style.display=\"none\";tip.hidden=true;}\n\
+svg.addEventListener(\"mouseover\",function(e){\n\
+var g=e.target.closest(\".flame-frame\");\n\
+if(!g)return;\n\
+var t=g.querySelector(\"title\");\n\
+if(!t)return;\n\
+tip.textContent=t.textContent;\n\
+tip.hidden=false;\n\
+tip.style.display=\"block\";\n\
+});\n\
+svg.addEventListener(\"mousemove\",function(e){\n\
+if(tip.hidden)return;\n\
+var x=e.clientX+12,y=e.clientY+12;\n\
+if(x+tip.offsetWidth>window.innerWidth-8)x=e.clientX-tip.offsetWidth-12;\n\
+if(y+tip.offsetHeight>window.innerHeight-8)y=e.clientY-tip.offsetHeight-12;\n\
+tip.style.left=x+\"px\";tip.style.top=y+\"px\";\n\
+});\n\
+svg.addEventListener(\"mouseout\",function(e){\n\
+if(!e.relatedTarget||!svg.contains(e.relatedTarget))hide();\n\
+});\n\
+})();\n\
+</script>\n",
+    );
 }
 
 /// Callgrind-inspired text export (export-formats MVP v0).
@@ -1474,21 +2468,98 @@ fn callgrind_cost_from_f64(v: f64, fallback: u64) -> u64 {
     }
 }
 
-/// Choose the primary source file id for the HTML source section.
+fn path_basename(path: &str) -> &str {
+    path.rsplit(['/', '\\'])
+        .next()
+        .filter(|s| !s.is_empty())
+        .unwrap_or(path)
+}
+
+fn is_inc_ish_path(path: &str) -> bool {
+    path.contains("/lib/perl")
+        || path.contains("site_perl")
+        || path.contains("vendor_perl")
+        || path.contains("/usr/share/perl")
+}
+
+fn fid_exclusive_ticks(model: &ProfileModel, fid: u32) -> i64 {
+    model
+        .line_totals
+        .iter()
+        .filter(|((f, _), _)| *f == fid)
+        .map(|(_, t)| t.ticks)
+        .sum()
+}
+
+fn fid_stmt_calls(model: &ProfileModel, fid: u32) -> u64 {
+    model
+        .line_totals
+        .iter()
+        .filter(|((f, _), _)| *f == fid)
+        .map(|(_, t)| t.calls)
+        .sum()
+}
+
+fn application_basename(model: &ProfileModel) -> String {
+    if let Some(app) = model.attributes.get("application") {
+        if !app.is_empty() {
+            return path_basename(app).to_owned();
+        }
+    }
+    let fid = primary_workload_fid(model);
+    model
+        .fid_basename(fid)
+        .unwrap_or("profile")
+        .to_owned()
+}
+
+/// Choose the primary source file id for `source.html` (KD-PRIMARY).
 ///
-/// Prefers the lowest fid whose path/name contains `"workload"` (case-sensitive)
-/// or whose basename is `workload.pl`. Falls back to the minimum fid that has
-/// any `source_lines` entry; finally `1`.
+/// 1. `attributes["application"]` basename matching a `files` entry
+/// 2. non-@INC `.pl` with the most exclusive time
+/// 3. existing `"workload"` / `workload.pl` heuristic
+/// 4. min fid with source_lines / eligible data, else 1
 fn primary_workload_fid(model: &ProfileModel) -> u32 {
+    if let Some(app) = model.attributes.get("application") {
+        if !app.is_empty() {
+            let base = path_basename(app);
+            let mut matches: Vec<u32> = model
+                .files
+                .iter()
+                .filter(|(_, name)| path_basename(name) == base || name.as_str() == app.as_str())
+                .map(|(fid, _)| *fid)
+                .collect();
+            if !matches.is_empty() {
+                matches.sort_unstable();
+                return matches[0];
+            }
+        }
+    }
+
+    let mut best: Option<(i64, u32)> = None;
+    for (fid, name) in &model.files {
+        let base = path_basename(name);
+        if !base.ends_with(".pl") || is_inc_ish_path(name) {
+            continue;
+        }
+        let ticks = fid_exclusive_ticks(model, *fid);
+        match best {
+            None => best = Some((ticks, *fid)),
+            Some((bt, bf)) if ticks > bt || (ticks == bt && *fid < bf) => {
+                best = Some((ticks, *fid));
+            }
+            _ => {}
+        }
+    }
+    if let Some((_, fid)) = best {
+        return fid;
+    }
+
     let mut workload_fids: Vec<u32> = model
         .files
         .iter()
         .filter(|(_, name)| {
-            let base = name
-                .rsplit(['/', '\\'])
-                .next()
-                .filter(|s| !s.is_empty())
-                .unwrap_or(name);
+            let base = path_basename(name);
             name.contains("workload") || base == "workload.pl"
         })
         .map(|(fid, _)| *fid)
@@ -1501,7 +2572,413 @@ fn primary_workload_fid(model: &ProfileModel) -> u32 {
     let mut source_fids: Vec<u32> = model.source_lines.keys().map(|(fid, _)| *fid).collect();
     source_fids.sort_unstable();
     source_fids.dedup();
-    source_fids.first().copied().unwrap_or(1)
+    if let Some(&fid) = source_fids.first() {
+        return fid;
+    }
+    eligible_source_fids(model)
+        .first()
+        .copied()
+        .unwrap_or(1)
+}
+
+/// Parse `attributes["ticks_per_sec"]` as a positive unsigned integer.
+fn ticks_per_sec_attr(model: &ProfileModel) -> Option<u64> {
+    model
+        .attributes
+        .get("ticks_per_sec")
+        .and_then(|s| s.parse::<u64>().ok())
+        .filter(|&n| n > 0)
+}
+
+/// HTML-only time-cell display (seconds when `ticks_per_sec` is Some(n>0)).
+///
+/// Text / CSV / `report --json` stay on [`format_ticks`] integer ticks.
+fn format_time_cell(ticks: f64, ticks_per_sec: Option<u64>) -> String {
+    match ticks_per_sec {
+        Some(tps) if tps > 0 => {
+            let scaled = ticks / (tps as f64);
+            // default-calls1 SUB_CALLERS NVs are already seconds-scale (OI-003-02);
+            // dividing again would collapse them to 0s.
+            let secs = if ticks.abs() > 0.0 && ticks.abs() < 1.0 && scaled.abs() < 1e-9 {
+                ticks
+            } else {
+                scaled
+            };
+            format_compact_secs(secs)
+        }
+        _ => format_ticks(ticks),
+    }
+}
+
+fn int_digit_len(v: f64) -> usize {
+    let n = v.trunc().abs() as u64;
+    if n == 0 { 1 } else { n.to_string().len() }
+}
+
+/// 6.15 `Util.pm` `fmt_time` (empty width) — HTML display only.
+fn format_compact_secs(secs: f64) -> String {
+    if !secs.is_finite() {
+        return format_ticks(secs);
+    }
+    if secs < 0.0 {
+        return format!("-{}", format_compact_secs(-secs));
+    }
+    if secs == 0.0 {
+        return "0s".to_owned();
+    }
+    if secs < 1e-6 {
+        return format!("{:.0}ns", secs * 1e9);
+    }
+    if secs < 1e-3 {
+        return format!("{:.0}µs", secs * 1e6);
+    }
+    if secs < 1.0 {
+        let val = secs * 1e3;
+        let prec = 3usize.saturating_sub(int_digit_len(val));
+        return format!("{val:.prec$}ms");
+    }
+    if secs < 100.0 {
+        let prec = 3usize.saturating_sub(int_digit_len(secs));
+        return format!("{secs:.prec$}s");
+    }
+    format!("{secs:.0}s")
+}
+
+/// Quartile thresholds for heat classes within one table.
+struct HeatScale {
+    q1: f64,
+    q2: f64,
+    q3: f64,
+    spread: bool,
+}
+
+impl HeatScale {
+    fn from_values(values: &[f64]) -> Self {
+        let mut v: Vec<f64> = values.iter().copied().filter(|x| x.is_finite()).collect();
+        if v.is_empty() {
+            return Self {
+                q1: 0.0,
+                q2: 0.0,
+                q3: 0.0,
+                spread: false,
+            };
+        }
+        v.sort_by(|a, b| a.total_cmp(b));
+        let n = v.len();
+        let q_at = |p: f64| -> f64 {
+            if n == 1 {
+                return v[0];
+            }
+            let idx = p * (n - 1) as f64;
+            let lo = idx.floor() as usize;
+            let hi = idx.ceil() as usize;
+            let frac = idx - lo as f64;
+            if lo == hi {
+                v[lo]
+            } else {
+                v[lo].mul_add(1.0 - frac, v[hi] * frac)
+            }
+        };
+        let min = v[0];
+        let max = v[n - 1];
+        Self {
+            q1: q_at(0.25),
+            q2: q_at(0.50),
+            q3: q_at(0.75),
+            spread: max > min,
+        }
+    }
+}
+
+/// Quartile rank class: `heat-hot` (highest) … `heat-low` (lowest).
+///
+/// Zero values and tables with no spread get **no** class (unused source rows
+/// stay uncolored).
+fn heat_class(value: f64, scale: &HeatScale) -> &'static str {
+    if value == 0.0 || !scale.spread {
+        return "";
+    }
+    if value >= scale.q3 {
+        "heat-hot"
+    } else if value >= scale.q2 {
+        "heat-high"
+    } else if value >= scale.q1 {
+        "heat-mid"
+    } else {
+        "heat-low"
+    }
+}
+
+/// Sub → source href from `model.sub_def(name)` (never a hard-coded line).
+///
+/// Multi-file: `file-{fid}.html#L{first_line}`. Single-file: `#L{first_line}`.
+/// CORE: / xsub names without a def link to an opcode stub on the application
+/// file (`#main__CORE_match`).
+fn sub_href(model: &ProfileModel, name: &str, multi_file: bool) -> Option<String> {
+    if let Some(d) = model.sub_def(name) {
+        if d.first_line > 0 {
+            return if multi_file {
+                Some(format!("file-{}.html#L{}", d.fid, d.first_line))
+            } else {
+                Some(format!("#L{}", d.first_line))
+            };
+        }
+    }
+    if name.contains("CORE:") {
+        let frag = opcode_fragment_id(name);
+        return if multi_file {
+            let fid = primary_workload_fid(model);
+            Some(format!("file-{}.html#{frag}", fid))
+        } else {
+            Some(format!("#{frag}"))
+        };
+    }
+    None
+}
+
+fn opcode_fragment_id(name: &str) -> String {
+    name.chars()
+        .map(|c| {
+            if c.is_ascii_alphanumeric() {
+                c
+            } else {
+                '_'
+            }
+        })
+        .collect()
+}
+
+fn call_site_usable(model: &ProfileModel, caller: &str, fid: u32, line: u32) -> bool {
+    if fid == 0 || line == 0 {
+        return false;
+    }
+    if fid == 1 && line == 1 {
+        return match model.sub_def(caller) {
+            Some(d) => d.fid == 1 && d.first_line == 1,
+            None => false,
+        };
+    }
+    true
+}
+
+#[derive(Default)]
+struct LineCallAgg {
+    out_count: u64,
+    out_incl: f64,
+    outs: Vec<(String, u64, f64)>,
+    ins: Vec<(String, u32, u32, u64)>,
+}
+
+fn line_call_aggs(model: &ProfileModel) -> BTreeMap<(u32, u32), LineCallAgg> {
+    let mut map: BTreeMap<(u32, u32), LineCallAgg> = BTreeMap::new();
+    for ((caller, called, fid, line), site) in &model.call_sites {
+        if !call_site_usable(model, caller, *fid, *line) {
+            continue;
+        }
+        let out = map.entry((*fid, *line)).or_default();
+        out.out_count = out.out_count.saturating_add(site.count);
+        out.out_incl += site.incl;
+        out.outs.push((called.clone(), site.count, site.incl));
+        let dest = model.sub_def(called).map(|d| (d.fid, d.first_line));
+        if let Some((dfid, dline)) = dest {
+            if dline > 0 {
+                let incoming = map.entry((dfid, dline)).or_default();
+                incoming
+                    .ins
+                    .push((caller.clone(), *fid, *line, site.count));
+            }
+        }
+    }
+    for agg in map.values_mut() {
+        agg.outs.sort_by(|a, b| a.0.cmp(&b.0));
+        agg.ins.sort_by(|a, b| a.0.cmp(&b.0).then(a.2.cmp(&b.2)));
+    }
+    map
+}
+
+fn stub_call_ins(model: &ProfileModel) -> BTreeMap<String, Vec<(String, u32, u32, u64)>> {
+    let mut map: BTreeMap<String, Vec<(String, u32, u32, u64)>> = BTreeMap::new();
+    for ((caller, called, fid, line), site) in &model.call_sites {
+        if !called.contains("CORE:") || model.sub_defs.contains_key(called) {
+            continue;
+        }
+        if !call_site_usable(model, caller, *fid, *line) {
+            continue;
+        }
+        map.entry(called.clone())
+            .or_default()
+            .push((caller.clone(), *fid, *line, site.count));
+    }
+    for v in map.values_mut() {
+        v.sort_by(|a, b| a.0.cmp(&b.0));
+    }
+    map
+}
+
+fn href_file_line(fid: u32, line: u32, multi_file: bool) -> String {
+    if multi_file {
+        format!("file-{fid}.html#L{line}")
+    } else {
+        format!("#L{line}")
+    }
+}
+
+fn opcode_stub_names(model: &ProfileModel) -> Vec<String> {
+    let mut names = BTreeSet::new();
+    for (caller, called) in model.call_edges.keys() {
+        for n in [caller, called] {
+            if n.contains("CORE:") && !model.sub_defs.contains_key(n) {
+                names.insert(n.clone());
+            }
+        }
+    }
+    names.into_iter().collect()
+}
+
+fn push_th(out: &mut String, label: &str, sort: &str) {
+    push_th_inner(out, &escape_html(label), sort, None);
+}
+
+fn push_th_html(out: &mut String, label_html: &str, sort: &str) {
+    push_th_inner(out, label_html, sort, None);
+}
+
+/// Header that may contain unescaped `<br>` plus `data-sort-default`.
+fn push_th_default(out: &mut String, label: &str, sort: &str, default_dir: &str) {
+    push_th_inner(out, label, sort, Some(default_dir));
+}
+
+fn push_th_inner(out: &mut String, label_html: &str, sort: &str, default_dir: Option<&str>) {
+    out.push_str("<th data-sort=\"");
+    out.push_str(&escape_html(sort));
+    out.push('"');
+    if let Some(dir) = default_dir {
+        out.push_str(" data-sort-default=\"");
+        out.push_str(&escape_html(dir));
+        out.push('"');
+    }
+    out.push('>');
+    out.push_str(label_html);
+    out.push_str("</th>");
+}
+
+fn push_count_td(out: &mut String, n: u64) {
+    push_count_td_heat(out, n, "");
+}
+
+fn push_count_td_heat(out: &mut String, n: u64, heat: &str) {
+    let s = n.to_string();
+    out.push_str("<td class=\"num");
+    if !heat.is_empty() {
+        out.push(' ');
+        out.push_str(heat);
+    }
+    out.push_str("\" data-sort-value=\"");
+    out.push_str(&s);
+    out.push_str("\">");
+    out.push_str(&s);
+    out.push_str("</td>");
+}
+
+fn push_time_td(out: &mut String, ticks: f64, ticks_per_sec: Option<u64>) {
+    push_time_td_heat(out, ticks, ticks_per_sec, "");
+}
+
+fn push_time_td_heat(out: &mut String, ticks: f64, ticks_per_sec: Option<u64>, heat: &str) {
+    let display = format_time_cell(ticks, ticks_per_sec);
+    let raw = format_ticks(ticks);
+    let title = match ticks_per_sec {
+        Some(n) if n > 0 => format!("{raw} ticks"),
+        _ => raw.clone(),
+    };
+    out.push_str("<td class=\"num");
+    if !heat.is_empty() {
+        out.push(' ');
+        out.push_str(heat);
+    }
+    out.push_str("\" data-sort-value=\"");
+    out.push_str(&escape_html(&raw));
+    out.push_str("\" title=\"");
+    out.push_str(&escape_html(&title));
+    out.push_str("\">");
+    out.push_str(&escape_html(&display));
+    out.push_str("</td>");
+}
+
+fn push_placeholder_num_td(out: &mut String) {
+    out.push_str("<td class=\"num\" data-sort-value=\"\">—</td>");
+}
+
+fn push_call_site_link(
+    out: &mut String,
+    model: &ProfileModel,
+    name: &str,
+    fid: u32,
+    line: u32,
+    multi_file: bool,
+) {
+    let href = if line > 0 {
+        href_file_line(fid, line, multi_file)
+    } else {
+        sub_href(model, name, multi_file).unwrap_or_else(|| "#".to_owned())
+    };
+    out.push_str("<a href=\"");
+    out.push_str(&escape_html(&href));
+    out.push_str("\">");
+    out.push_str(&escape_html(name));
+    out.push_str("</a>");
+}
+
+fn push_call_annotations(
+    out: &mut String,
+    model: &ProfileModel,
+    agg: &LineCallAgg,
+    multi_file: bool,
+) {
+    if !agg.ins.is_empty() {
+        for (caller, cfid, cline, count) in &agg.ins {
+            out.push_str("<div class=\"calls calls_in\"># spent ");
+            out.push_str(&count.to_string());
+            out.push_str(" times called from ");
+            push_call_site_link(out, model, caller, *cfid, *cline, multi_file);
+            out.push_str("</div>");
+        }
+    }
+    if !agg.outs.is_empty() {
+        for (called, count, _incl) in &agg.outs {
+            out.push_str("<div class=\"calls calls_out\">");
+            out.push_str(&count.to_string());
+            out.push_str(" calls to ");
+            if let Some(href) = sub_href(model, called, multi_file) {
+                out.push_str("<a href=\"");
+                out.push_str(&escape_html(&href));
+                out.push_str("\">");
+                out.push_str(&escape_html(called));
+                out.push_str("</a>");
+            } else {
+                out.push_str(&escape_html(called));
+            }
+            out.push_str("</div>");
+        }
+    }
+}
+
+fn push_sub_name_cell(out: &mut String, model: &ProfileModel, name: &str, multi_file: bool) {
+    out.push_str("<td class=\"sub_name\">");
+    let escaped = escape_html(name);
+    if let Some(href) = sub_href(model, name, multi_file) {
+        out.push_str("<a href=\"");
+        out.push_str(&escape_html(&href));
+        out.push_str("\">");
+        out.push_str(&escaped);
+        out.push_str("</a>");
+    } else {
+        out.push_str(&escaped);
+    }
+    if name.contains("CORE:") {
+        out.push_str(" <span class=\"hint\">(opcode)</span>");
+    }
+    out.push_str("</td>");
 }
 
 /// Format floating tick / time sums without noisy trailing zeros when integral.
@@ -1898,6 +3375,32 @@ mod tests {
         assert_eq!(site.source_filename, "source.html");
         assert_eq!(site.style_filename, STYLE_CSS_FILENAME);
         assert_eq!(site.style_css, SHARED_STYLE_CSS);
+        assert_eq!(site.sort_js_filename, SORT_JS_FILENAME);
+        assert_eq!(site.sort_js, SHARED_SORT_JS);
+        assert_eq!(
+            site.packages_callgraph_filename,
+            PACKAGES_CALLGRAPH_FILENAME
+        );
+        assert_eq!(site.subs_callgraph_filename, SUBS_CALLGRAPH_FILENAME);
+        assert!(
+            site.packages_callgraph_dot.starts_with("digraph"),
+            "packages dot: {}",
+            site.packages_callgraph_dot
+        );
+        assert!(
+            site.subs_callgraph_dot.contains("->"),
+            "subs dot must have edges:\n{}",
+            site.subs_callgraph_dot
+        );
+        if model.call_edge("main::mid", "main::leaf").is_some() {
+            assert!(
+                site.subs_callgraph_dot.contains("main::mid")
+                    && site.subs_callgraph_dot.contains("main::leaf")
+                    && site.subs_callgraph_dot.contains("->"),
+                "subs-callgraph.dot must include mid→leaf from call_edges:\n{}",
+                site.subs_callgraph_dot
+            );
+        }
         assert!(!site.index_html.is_empty());
         assert!(!site.source_html.is_empty());
         assert!(
@@ -1919,6 +3422,10 @@ mod tests {
         );
 
         let index = &site.index_html;
+        assert!(
+            index.contains("packages-callgraph.dot") && index.contains("subs-callgraph.dot"),
+            "index must link Graphviz files:\n{index}"
+        );
         let lower = index.to_ascii_lowercase();
         assert!(
             lower.contains("<!doctype html"),
@@ -2013,6 +3520,22 @@ mod tests {
             source, file1,
             "source.html must be a copy of primary file-1.html"
         );
+        let mid_leaf_usable = model.call_sites.iter().any(|((c, d, f, l), s)| {
+            c == "main::mid"
+                && d == "main::leaf"
+                && s.count > 0
+                && call_site_usable(&model, c, *f, *l)
+        });
+        if mid_leaf_usable {
+            assert!(
+                file1.contains("calls_out") && file1.contains("main::leaf"),
+                "file-1 must annotate mid→leaf call-out:\n{file1}"
+            );
+            assert!(
+                file1.contains("calls_in") && file1.contains("main::mid"),
+                "file-1 must annotate leaf call-in from mid:\n{file1}"
+            );
+        }
     }
 
     /// Private workspace under the process temp dir so staging/orphan checks
@@ -2130,6 +3653,20 @@ mod tests {
         let index_path = tmp.join("index.html");
         let source_path = tmp.join("source.html");
         let file1_path = tmp.join("file-1.html");
+        assert!(
+            tmp.join(PACKAGES_CALLGRAPH_FILENAME).is_file(),
+            "missing packages-callgraph.dot"
+        );
+        assert!(
+            tmp.join(SUBS_CALLGRAPH_FILENAME).is_file(),
+            "missing subs-callgraph.dot"
+        );
+        let subs_dot =
+            fs::read_to_string(tmp.join(SUBS_CALLGRAPH_FILENAME)).expect("read subs dot");
+        assert!(
+            subs_dot.starts_with("digraph") && subs_dot.contains("->"),
+            "subs-callgraph.dot must be a real digraph:\n{subs_dot}"
+        );
         assert!(
             index_path.is_file(),
             "index.html missing at {}",
@@ -2249,40 +3786,27 @@ mod tests {
         let index = &site.index_html;
         for needle in [
             "class=\"profile-path\"",
-            "class=\"subs\"",
-            "class=\"call-edges\"",
-            "class=\"top-exclusive\"",
-            "class=\"source-files\"",
+            "id=\"subs_table\"",
+            "class=\"call-edges",
+            "id=\"filestable\"",
             "<h2>Event counts</h2>",
             "<h2>Subroutines</h2>",
             "<h2>Call edges</h2>",
-            "<h2>Top exclusive</h2>",
-            "<h2>Source files</h2>",
+            "<h2>Source Code Files</h2>",
+            "Performance Profile Index",
         ] {
             assert!(
                 index.contains(needle),
                 "index structure missing {needle}:\n{index}"
             );
         }
-        // Semantic counts 15/3/15 on index tables.
+        // Semantic counts 15/3/15 on index tables (name may be an <a href>).
         assert!(
-            index.contains(&format!(
-                "<td>main::leaf</td><td class=\"num\">{}</td>",
-                leaf.returns
-            )) || index.contains(&format!(
-                "main::leaf</td><td class=\"num\">{}</td>",
-                leaf.returns
-            )),
+            index.contains("main::leaf") && index.contains(&format!(">{}<", leaf.returns)),
             "leaf returns cell"
         );
         assert!(
-            index.contains(&format!(
-                "<td>main::mid</td><td class=\"num\">{}</td>",
-                mid.returns
-            )) || index.contains(&format!(
-                "main::mid</td><td class=\"num\">{}</td>",
-                mid.returns
-            )),
+            index.contains("main::mid") && index.contains(&format!(">{}<", mid.returns)),
             "mid returns cell"
         );
         let edges_idx = index
@@ -2300,7 +3824,7 @@ mod tests {
 
         // Source page structure.
         let source = &site.source_html;
-        assert!(source.contains("class=\"source\""));
+        assert!(source.contains("class=\"source"));
         assert!(source.contains("$x++") && source.contains("for 1 .. 50"));
 
         // Disk publish includes style.css with exact shared text.
@@ -2346,10 +3870,10 @@ mod tests {
             &single[..single.len().min(400)]
         );
         assert!(
-            single.contains("class=\"subs\"")
-                && single.contains("class=\"call-edges\"")
-                && single.contains("class=\"top-exclusive\"")
-                && single.contains("class=\"source\""),
+            (single.contains("class=\"subs") || single.contains("id=\"subs_table\""))
+                && single.contains("class=\"call-edges")
+                && single.contains("class=\"top-exclusive")
+                && single.contains("class=\"source"),
             "single-file structure classes"
         );
         assert!(
@@ -2676,15 +4200,9 @@ mod tests {
             src_slice.contains("$x++") || src_slice.contains("for 1 .. 50"),
             "source section must include hot loop text:\n{src_slice}"
         );
-        // Line 5 row: line-number cell then calls from line_totals (A4).
-        // Prefer the full row shape so we do not match an earlier calls-cell "5".
-        let line5_row_prefix =
-            format!("<td class=\"num\">5</td><td class=\"num\">{expected_calls}</td>");
+        // Line 5 row: `id="L5"` plus A4 calls (data-sort-value cells).
         assert!(
-            src_slice.contains(&line5_row_prefix)
-                || src_slice.contains(&format!(
-                    "<td class=\"num\">5</td>\n             <td class=\"num\">{expected_calls}</td>"
-                )),
+            src_slice.contains("id=\"L5\"") && src_slice.contains(&calls_cell),
             "line 5 source row must include calls={expected_calls}:\n{src_slice}"
         );
     }
@@ -2872,30 +4390,14 @@ mod tests {
             "HTML must list main::mid:\n{html}"
         );
 
-        // Sub table cells: name then returns num cell.
-        let leaf_returns_cell = format!(
-            "<td>{}</td><td class=\"num\">{}</td>",
-            "main::leaf", leaf.returns
-        );
-        let mid_returns_cell = format!(
-            "<td>{}</td><td class=\"num\">{}</td>",
-            "main::mid", mid.returns
-        );
+        // Sub table cells: name (plain or linked) then returns num cell.
         assert!(
-            html.contains(&leaf_returns_cell)
-                || html.contains(&format!(
-                    "main::leaf</td><td class=\"num\">{}</td>",
-                    leaf.returns
-                )),
+            html.contains("main::leaf") && html.contains(&format!(">{}<", leaf.returns)),
             "subs table must show leaf returns={}:\n{html}",
             leaf.returns
         );
         assert!(
-            html.contains(&mid_returns_cell)
-                || html.contains(&format!(
-                    "main::mid</td><td class=\"num\">{}</td>",
-                    mid.returns
-                )),
+            html.contains("main::mid") && html.contains(&format!(">{}<", mid.returns)),
             "subs table must show mid returns={}:\n{html}",
             mid.returns
         );
@@ -2915,17 +4417,10 @@ mod tests {
             "call edges must include mid→leaf count {}:\n{edges_slice}",
             edge.count
         );
-        let edge_row = format!(
-            "<td>main::mid</td><td>main::leaf</td>\
-             <td class=\"num\">{}</td>",
-            edge.count
-        );
         assert!(
-            edges_slice.contains(&edge_row)
-                || edges_slice.contains(&format!(
-                    "main::mid</td><td>main::leaf</td><td class=\"num\">{}</td>",
-                    edge.count
-                )),
+            edges_slice.contains("main::mid")
+                && edges_slice.contains("main::leaf")
+                && edges_slice.contains(&format!(">{}<", edge.count)),
             "call-edges row mid→leaf count={}:\n{edges_slice}",
             edge.count
         );
@@ -3067,16 +4562,8 @@ mod tests {
             src_slice.contains("$x++") || src_slice.contains("for 1 .. 50"),
             "source section must include hot loop text:\n{src_slice}"
         );
-        let line5_row_prefix = format!(
-            "<td class=\"num\">5</td><td class=\"num\">{}</td>",
-            lt.calls
-        );
         assert!(
-            src_slice.contains(&line5_row_prefix)
-                || src_slice.contains(&format!(
-                    "<td class=\"num\">5</td>\n             <td class=\"num\">{}</td>",
-                    lt.calls
-                )),
+            src_slice.contains("id=\"L5\"") && src_slice.contains(&calls_cell),
             "line 5 source row must include calls={}:\n{src_slice}",
             lt.calls
         );
@@ -3347,6 +4834,207 @@ mod tests {
         assert_eq!(edge.count, 15);
     }
 
+    fn flame_rect_widths(svg: &str) -> Vec<f64> {
+        let mut widths = Vec::new();
+        let mut rest = svg;
+        while let Some(i) = rest.find("<rect ") {
+            rest = &rest[i + 6..];
+            if let Some(wpos) = rest.find("width=\"") {
+                let after = &rest[wpos + 7..];
+                if let Some(end) = after.find('"') {
+                    if let Ok(w) = after[..end].parse::<f64>() {
+                        widths.push(w);
+                    }
+                }
+            }
+        }
+        widths
+    }
+
+    #[test]
+    fn flame_svg_default_calls1_real_render() {
+        let path = fixture_out("default-calls1");
+        assert!(path.is_file(), "missing fixture {}", path.display());
+        let model = ProfileModel::from_path(&path).expect("build model");
+        let svg = render_flame_svg(&model);
+        assert!(svg.contains("<svg"), "well-formed svg:\n{svg}");
+        assert!(
+            svg.contains("main::leaf") && svg.contains("main::mid"),
+            "labels:\n{svg}"
+        );
+        let edge = model
+            .call_edge("main::mid", "main::leaf")
+            .expect("mid→leaf");
+        assert_eq!(edge.count, 15);
+        assert!(
+            svg.contains("calls: 15") || svg.contains("main::leaf (15)") || svg.contains("(15)"),
+            "count 15 visible:\n{svg}"
+        );
+        let leaf_href = sub_href(&model, "main::leaf", true).expect("leaf href");
+        assert!(
+            svg.contains(&format!("href=\"{leaf_href}\""))
+                && svg.contains("class=\"flame-link\""),
+            "leaf frame must link to source:\n{svg}"
+        );
+        assert!(
+            svg.contains("inclusive:") && svg.contains("exclusive:"),
+            "hover title must include incl/excl:\n{svg}"
+        );
+        let widths = flame_rect_widths(&svg);
+        assert!(
+            widths.len() >= 4,
+            "stacked parent+child rects, got {}: {widths:?}",
+            widths.len()
+        );
+        let min_w = widths.iter().copied().fold(f64::INFINITY, f64::min);
+        let max_w = widths.iter().copied().fold(0.0, f64::max);
+        assert!(
+            max_w > min_w + 0.5,
+            "widths must not all be equal when edge counts differ: {widths:?}"
+        );
+        assert!(
+            !svg.contains("jquery") && !svg.contains("tablesorter"),
+            "flame svg must not pull jquery"
+        );
+    }
+
+    #[test]
+    fn flame_svg_stacks_callers_once_not_per_edge_columns() {
+        // Equal-count scanner-shaped graph. The abandoned per-edge painter
+        // emitted five identical-width columns (RUNTIME painted twice).
+        let mut model = ProfileModel::default();
+        for (caller, called) in [
+            ("main::RUNTIME", "main::merge_freq"),
+            ("main::RUNTIME", "main::scan_file"),
+            ("main::scan_file", "main::classify"),
+            ("main::scan_file", "main::tokenize"),
+            ("main::tokenize", "main::CORE:match"),
+        ] {
+            model.call_edges.insert(
+                (caller.to_owned(), called.to_owned()),
+                nytprof_model::CallEdgeTotal {
+                    count: 7576,
+                    ..Default::default()
+                },
+            );
+        }
+        let svg = render_flame_svg(&model);
+        assert_eq!(
+            svg.matches("<title>main::RUNTIME").count(),
+            1,
+            "RUNTIME must be one root frame, not a column per outgoing edge:\n{svg}"
+        );
+        assert_eq!(
+            svg.matches("<title>main::scan_file").count(),
+            1,
+            "scan_file must nest once under RUNTIME:\n{svg}"
+        );
+        assert_eq!(svg.matches("<title>main::tokenize").count(), 1, "{svg}");
+        assert_eq!(svg.matches("<title>main::CORE:match").count(), 1, "{svg}");
+        assert_eq!(svg.matches("<title>main::merge_freq").count(), 1, "{svg}");
+        assert_eq!(svg.matches("<title>main::classify").count(), 1, "{svg}");
+        let widths = flame_rect_widths(&svg);
+        assert_eq!(widths.len(), 6, "one rect per unique tree node: {widths:?}");
+        let max_w = widths.iter().copied().fold(0.0_f64, f64::max);
+        let min_w = widths.iter().copied().fold(f64::INFINITY, f64::min);
+        assert!(
+            max_w > min_w + 50.0,
+            "root must be wider than nested children, not a barcode: {widths:?}"
+        );
+        assert!(
+            svg.contains("height=\"92\""),
+            "four stacked rows (RUNTIME→scan_file→tokenize→match): {svg}"
+        );
+    }
+
+    #[test]
+    fn flame_svg_omits_subpixel_frames() {
+        let mut model = ProfileModel::default();
+        model.call_edges.insert(
+            ("big".to_owned(), "child".to_owned()),
+            nytprof_model::CallEdgeTotal {
+                count: 1_000_000,
+                ..Default::default()
+            },
+        );
+        model.call_edges.insert(
+            ("tiny".to_owned(), "speck".to_owned()),
+            nytprof_model::CallEdgeTotal {
+                count: 1,
+                ..Default::default()
+            },
+        );
+        let svg = render_flame_svg(&model);
+        assert!(svg.contains("big"), "big frame:\n{svg}");
+        assert!(
+            !svg.contains("speck"),
+            "sub-pixel edge must not emit a labeled frame:\n{svg}"
+        );
+        let widths = flame_rect_widths(&svg);
+        assert_eq!(
+            widths.len(),
+            2,
+            "only the paintable edge's parent+child rects: {widths:?}"
+        );
+    }
+
+    #[test]
+    fn html_site_default_no_flame_artifacts() {
+        let path = fixture_out("default-calls1");
+        let model = ProfileModel::from_path(&path).expect("model");
+        let site = render_html_site(&model, "nytprof.out");
+        assert!(site.flame_svg.is_none() && site.flame_folded.is_none());
+        assert!(!site.index_html.contains("all_stacks_by_time"));
+        assert!(!site.index_html.to_ascii_lowercase().contains("jquery"));
+    }
+
+    #[test]
+    fn html_site_optional_flame_default_calls1() {
+        let path = fixture_out("default-calls1");
+        let model = ProfileModel::from_path(&path).expect("model");
+        let site = render_html_site_with_options(
+            &model,
+            "nytprof.out",
+            HtmlRenderOptions { flame: true },
+        );
+        let folded = site.flame_folded.expect("folded");
+        let svg = site.flame_svg.expect("svg");
+        assert!(folded.contains("main::mid;main::leaf 15"), "{folded}");
+        assert!(svg.contains("<svg") && svg.contains("main::leaf"));
+        assert!(
+            site.index_html.contains("href=\"all_stacks_by_time.svg\"")
+                && site.index_html.contains("href=\"all_stacks_by_time.folded\"")
+        );
+        assert!(
+            site.index_html.contains("<svg") && site.index_html.contains("class=\"nytprof-flame\""),
+            "file:// hover/click requires inlined SVG, not <img>:\n{}",
+            site.index_html
+        );
+        assert!(
+            !site.index_html.contains("<img ") && !site.index_html.contains("<object"),
+            "preview must not use <img> or <object>:\n{}",
+            site.index_html
+        );
+        assert!(
+            site.index_html.contains("id=\"nytprof-flame-tip\"")
+                && site.index_html.contains("querySelector"),
+            "index must publish the hover tip script:\n{}",
+            site.index_html
+        );
+        let leaf_href = sub_href(&model, "main::leaf", true).expect("leaf href");
+        assert!(
+            site.index_html.contains(&format!("href=\"{leaf_href}\"")),
+            "inlined flame must link leaf to source:\n{}",
+            site.index_html
+        );
+        assert!(
+            site.index_html.contains("main::leaf") && site.index_html.contains(">15<")
+        );
+        assert!(
+            site.index_html.contains("main::mid") && site.index_html.contains(">3<")
+        );
+    }
+
     #[test]
     fn callgrind_default_calls1_real_render() {
         let path = fixture_out("default-calls1");
@@ -3538,5 +5226,206 @@ mod tests {
             search_from = abs + needle.len();
         }
         None
+    }
+
+    #[test]
+    fn format_time_cell_html_only_seconds() {
+        assert_eq!(format_time_cell(12340.0, None), "12340");
+        assert_eq!(format_time_cell(12340.0, Some(0)), "12340");
+        let scaled = format_time_cell(12340.0, Some(10_000_000));
+        assert!(
+            scaled.contains('s') && (scaled.contains('.') || scaled == "0s"),
+            "seconds display: {scaled}"
+        );
+        assert_ne!(scaled, "12340");
+        // Already-seconds NVs (SUB_CALLERS on default-calls1) must not collapse to 0s.
+        let already_secs = format_time_cell(0.0000524, Some(10_000_000));
+        assert_ne!(already_secs, "0s", "already-seconds NV: {already_secs}");
+        assert!(already_secs.contains('s'), "{already_secs}");
+        // Text/CSV path is unchanged integer ticks.
+        assert_eq!(format_ticks(12340.0), "12340");
+    }
+
+    #[test]
+    fn heat_class_quartile_names_only() {
+        let scale = HeatScale::from_values(&[1.0, 2.0, 3.0, 4.0]);
+        assert_eq!(heat_class(4.0, &scale), "heat-hot");
+        assert_eq!(heat_class(1.0, &scale), "heat-low");
+        for v in [1.0, 2.0, 3.0, 4.0] {
+            let c = heat_class(v, &scale);
+            assert!(
+                matches!(c, "heat-hot" | "heat-high" | "heat-mid" | "heat-low"),
+                "{c}"
+            );
+            assert!(!c.starts_with('c'), "must not use oracle c0–c3: {c}");
+        }
+        let flat = HeatScale::from_values(&[5.0, 5.0, 5.0]);
+        assert_eq!(heat_class(5.0, &flat), "");
+        assert_eq!(heat_class(0.0, &scale), "");
+    }
+
+    #[test]
+    fn sub_href_from_model_sub_def_default_calls1() {
+        let path = fixture_out("default-calls1");
+        assert!(path.is_file(), "missing fixture {}", path.display());
+        let model = ProfileModel::from_path(&path).expect("model");
+        let d = model.sub_def("main::leaf").expect("main::leaf sub_def");
+        let href = sub_href(&model, "main::leaf", true).expect("multi-file href");
+        assert_eq!(href, format!("file-{}.html#L{}", d.fid, d.first_line));
+        let single = sub_href(&model, "main::leaf", false).expect("single-file href");
+        assert_eq!(single, format!("#L{}", d.first_line));
+        assert!(sub_href(&model, "no::such::sub", true).is_none());
+        let html = render_html_site(&model, "default-calls1.out").index_html;
+        assert!(
+            html.contains(&format!("href=\"{href}\"")),
+            "index must link leaf via model sub_def:\n{html}"
+        );
+        assert!(
+            !html.contains("jquery") && !html.contains("tablesorter"),
+            "must not vendor jquery/tablesorter"
+        );
+    }
+
+    #[test]
+    fn html_source_union_line_totals_without_source_text() {
+        let mut model = ProfileModel::default();
+        model.files.insert(1, "workload.pl".to_owned());
+        model.line_totals.insert(
+            (1, 42),
+            nytprof_model::LineTotal {
+                calls: 7,
+                ticks: 100,
+            },
+        );
+        let html = render_html_summary(&model, "union.out");
+        assert!(
+            html.contains("id=\"L42\""),
+            "union must emit a source row for line_totals-only line:\n{html}"
+        );
+        assert!(
+            html.contains("—"),
+            "missing source text must be em dash:\n{html}"
+        );
+        assert!(
+            html.contains(">7<"),
+            "calls from line_totals must appear:\n{html}"
+        );
+        assert!(
+            !html.contains("id=\"L42\" class=\"heat-"),
+            "single unused/no-spread source row must not paint row heat:\n{html}"
+        );
+    }
+
+    #[test]
+    fn shared_style_and_sort_js_contract() {
+        assert!(SHARED_STYLE_CSS.contains("heat-hot"));
+        assert!(SHARED_STYLE_CSS.contains("heat-high"));
+        assert!(SHARED_STYLE_CSS.contains("heat-mid"));
+        assert!(SHARED_STYLE_CSS.contains("heat-low"));
+        assert!(SHARED_STYLE_CSS.contains("th[data-sort]"));
+        assert!(SHARED_STYLE_CSS.contains("th.sort-asc::after"));
+        assert!(SHARED_STYLE_CSS.contains("th.sort-desc::after"));
+        assert!(
+            !SHARED_STYLE_CSS.contains(".c0") && !SHARED_STYLE_CSS.contains("c0{"),
+            "must not emit oracle .c0 class selectors (CSS vars --nyt-c0 are ok)"
+        );
+        assert!(SHARED_SORT_JS.contains("nytprofSortInit"));
+        assert!(SHARED_SORT_JS.contains("data-sort"));
+        let lower = SHARED_SORT_JS.to_ascii_lowercase();
+        assert!(!lower.contains("jquery") && !lower.contains("tablesorter"));
+        assert!(!SHARED_SORT_JS.contains("innerHTML"));
+        assert!(SHARED_SORT_JS.contains("data-sort-default"));
+        assert_eq!(SORT_JS_FILENAME, "nytprof-sort.js");
+    }
+
+    #[test]
+    fn format_compact_secs_fmt_time_branches() {
+        assert_eq!(format_compact_secs(0.0), "0s");
+        assert_eq!(format_compact_secs(500e-9), "500ns");
+        assert_eq!(format_compact_secs(49e-6), "49µs");
+        assert_eq!(format_compact_secs(0.129), "129ms");
+        assert_eq!(format_compact_secs(4.72), "4.72s");
+        assert_eq!(format_compact_secs(150.0), "150s");
+        assert_eq!(format_compact_secs(-0.129), "-129ms");
+    }
+
+    #[test]
+    fn primary_workload_fid_scanner_shaped_not_warnings() {
+        let mut model = ProfileModel::default();
+        model
+            .files
+            .insert(1, "/usr/share/perl5/warnings.pm".to_owned());
+        model
+            .files
+            .insert(3, "/tmp/lab/minute_text_scanner.pl".to_owned());
+        model
+            .source_lines
+            .insert((1, 1), "package warnings;".to_owned());
+        model
+            .source_lines
+            .insert((3, 1), "sub tokenize {".to_owned());
+        model.line_totals.insert(
+            (1, 1),
+            nytprof_model::LineTotal {
+                calls: 2,
+                ticks: 50,
+            },
+        );
+        model.line_totals.insert(
+            (3, 20),
+            nytprof_model::LineTotal {
+                calls: 400,
+                ticks: 9_000,
+            },
+        );
+        assert_eq!(
+            primary_workload_fid(&model),
+            3,
+            "hottest non-@INC .pl must win over warnings.pm"
+        );
+        model.attributes.insert(
+            "application".to_owned(),
+            "/tmp/lab/minute_text_scanner.pl".to_owned(),
+        );
+        assert_eq!(
+            primary_workload_fid(&model),
+            3,
+            "application basename must select the scanner"
+        );
+    }
+
+    #[test]
+    fn primary_workload_fid_default_calls1_still_workload() {
+        let path = fixture_out("default-calls1");
+        let model = ProfileModel::from_path(&path).expect("model");
+        let fid = primary_workload_fid(&model);
+        let base = model.fid_basename(fid).unwrap_or("");
+        assert!(
+            base.contains("workload"),
+            "default-calls1 primary fid {fid} basename {base}"
+        );
+    }
+
+    #[test]
+    fn push_page_chrome_escapes_title_and_optional_back() {
+        let mut with_back = String::new();
+        push_page_chrome(
+            &mut with_back,
+            "A <title>",
+            "For app",
+            true,
+        );
+        assert!(with_back.contains("class=\"header\""));
+        assert!(with_back.contains("class=\"siteTitle\""));
+        assert!(with_back.contains("A &lt;title&gt;"));
+        assert!(
+            with_back.contains("← Index") || with_back.contains("&larr; Index"),
+            "{with_back}"
+        );
+        assert!(with_back.contains("href=\"index.html\""));
+        let mut index = String::new();
+        push_page_chrome(&mut index, "Performance Profile Index", "For x", false);
+        assert!(index.contains("Performance Profile Index"));
+        assert!(!index.contains("header_back"));
     }
 }

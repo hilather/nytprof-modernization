@@ -15,8 +15,10 @@ This slice adds an **opt-in** native flame path:
 |------|--------|
 | **Default off** | No flame files or sections unless the operator passes `--flame` — **no default bloat** (unlike oracle default-on) |
 | **Folded-based** | Stacks come from `call_edges` via `render_folded_stacks` (two-frame `caller;called count`) — not full multi-frame call-stream reconstruction |
-| **Native SVG** | Simple icicle/flame SVG from those folded stacks — **not** `flamegraph.pl` output or visual parity |
-| **Still residual** | Graphviz `.dot`, treemap, Shared JS, oracle flame DOM embed polish |
+| **Native SVG** | Call-tree flame from `call_edges`: same caller is **one** frame; children stack **up**; width is **inclusive time** when `sub_return_totals` has it, else edge incl, else call count. **Not** a two-level equal-width column per edge, and **not** `flamegraph.pl` visual parity. |
+| **Bounded paint** | Frames narrower than 1 CSS px in the 1200-wide viewBox are **omitted** (no one-rect-per-tiny-edge flood). Labels only when width ≥ 48 px. Depth capped at 16. |
+| **No extra profile walk** | Multi-file `--flame` collects `call_edges` **once** for folded + SVG. Index **inlines** that SVG (hover details + click-to-source) and still links the sibling files. **Not** `<img>` / `<object>` (those cannot host SVG links or titles under `file://`). |
+| **Still residual** | `flamegraph.pl` / `nytprofcalls` multi-frame stacks, default-on flame, treemap, Shared JS |
 
 ## CLI
 
@@ -52,8 +54,8 @@ Default (no `--flame`) layout is unchanged — **no** `all_stacks_by_time.*` fil
 | Artifact | Requirement |
 |----------|-------------|
 | `all_stacks_by_time.folded` | Same text as `render_folded_stacks`; default-calls1 includes `main::mid;main::leaf 15` |
-| `all_stacks_by_time.svg` | Well-formed SVG; labels include `main::leaf` / `main::mid`; count **15** visible for mid→leaf (title/tooltip or text) |
-| Index `section.flame` | `p.flame-links` with relative `href` to both files; optional `<object>` preview of SVG |
+| `all_stacks_by_time.svg` | Well-formed SVG; **call-tree** stacked `rect`s (roots at the bottom); same caller is **one** frame (not a column per outgoing edge); widths proportional to inclusive time when known, else count (not all equal when weights differ); labels include `main::leaf` / `main::mid`; count **15** visible for mid→leaf (`calls: 15` in `<title>`). Frames with a `sub_def` (or `CORE:` / `RUNTIME`) wrap in `<a class="flame-link" href="file-{fid}.html#L{line}">`. `<title>` lists name, calls, inclusive, exclusive. Sub-pixel frames omitted. |
+| Index `section.flame` | `p.flame-links` with relative `href` to both files; **inlined** sibling SVG (same body) so hover + click work under `file://`; `#nytprof-flame-tip` vanilla tooltip; **not** `<img>` / `<object>` |
 | Atomic publish | Flame files written in the same temp-then-rename path as `style.css` |
 | stderr listing | CLI lists flame paths with other published files when flame is on |
 
@@ -109,9 +111,11 @@ Flame does **not** replace advertised HTML counts. With or without `--flame`:
 
 | Test | Asserts |
 |------|---------|
-| `flame_svg_default_calls1_real_render` | Real model → SVG has leaf/mid and count 15 |
+| `flame_svg_default_calls1_real_render` | Real model → SVG has leaf/mid, count 15, stacked `rect`s, **unequal** widths |
+| `flame_svg_stacks_callers_once_not_per_edge_columns` | Equal-count scanner-shaped graph: each name once; root wider than children (not a barcode of identical columns) |
+| `flame_svg_omits_subpixel_frames` | 1-count edge vs 1e6-count edge: tiny name not painted |
 | `html_site_default_no_flame_artifacts` | Default site/disk has no flame files or index links |
-| `html_site_optional_flame_default_calls1` | Opt-in render + disk publish; folded mid→leaf 15; index links; CSS still present |
+| `html_site_optional_flame_default_calls1` | Opt-in render + disk publish; folded mid→leaf 15; index inlines SVG + hover tip; leaf `flame-link` to `sub_def` line |
 | `html_summary_optional_flame_embed_default_calls1` | Single-file default vs embed |
 | CLI `html_out_dir_default_has_no_flame_files` | Real binary: default `--out-dir` no flame |
 | CLI `html_out_dir_flame_writes_svg_and_folded_and_lists_on_stderr` | Real binary: `--flame` writes + stderr + **15/3** |

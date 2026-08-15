@@ -1273,7 +1273,7 @@ fn write_stdout_text(text: &str) -> Result<(), Box<dyn std::error::Error>> {
 /// - `html <profile.out>` — single-file HTML to stdout (inline shared CSS)
 /// - `html <profile.out> -o path.html` — single-file to path
 /// - `html <profile.out> --out-dir DIR` — multi-file site:
-///   `index.html` + `index-subs-excl.html` + `file-*.html` + `source.html` + `style.css`
+///   `index.html` + `index-subs-excl.html` + `file-*.html` + `source.html` + `style.css` + `nytprof-sort.js`
 /// - `html … --flame` — opt-in flame path (folded + native SVG; **default off**)
 /// - `html … --no-flame` — explicit off (default)
 ///
@@ -1363,6 +1363,9 @@ fn cmd_html(args: &[String]) -> Result<(), Box<dyn std::error::Error>> {
         }
         eprintln!("{base}/{}", site.source_filename);
         eprintln!("{base}/{}", site.style_filename);
+        eprintln!("{base}/{}", site.sort_js_filename);
+        eprintln!("{base}/{}", site.packages_callgraph_filename);
+        eprintln!("{base}/{}", site.subs_callgraph_filename);
         if let Some(name) = &site.flame_svg_filename {
             eprintln!("{base}/{name}");
         }

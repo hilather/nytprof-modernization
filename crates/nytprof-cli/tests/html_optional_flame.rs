@@ -139,6 +139,40 @@ fn html_out_dir_flame_writes_svg_and_folded_and_lists_on_stderr() {
         svg.contains("<svg") && svg.contains("main::leaf") && svg.contains("main::mid"),
         "SVG content:\n{svg}"
     );
+    assert!(
+        svg.contains("<rect ")
+            && (svg.contains("calls: 15")
+                || svg.contains("main::leaf (15)")
+                || svg.contains("(15)")),
+        "stacked rects + count 15:\n{svg}"
+    );
+    assert!(
+        svg.contains("class=\"flame-link\"") && svg.contains("file-") && svg.contains("#L"),
+        "SVG frames must link to source:\n{svg}"
+    );
+    assert!(
+        svg.contains("inclusive:") && svg.contains("exclusive:"),
+        "SVG title must include incl/excl:\n{svg}"
+    );
+    let mut rect_w = Vec::new();
+    let mut rest = svg.as_str();
+    while let Some(i) = rest.find("<rect ") {
+        rest = &rest[i + 6..];
+        if let Some(wpos) = rest.find("width=\"") {
+            let after = &rest[wpos + 7..];
+            if let Some(end) = after.find('"') {
+                if let Ok(w) = after[..end].parse::<f64>() {
+                    rect_w.push(w);
+                }
+            }
+        }
+    }
+    let min_w = rect_w.iter().copied().fold(f64::INFINITY, f64::min);
+    let max_w = rect_w.iter().copied().fold(0.0_f64, f64::max);
+    assert!(
+        rect_w.len() >= 4 && max_w > min_w + 0.5,
+        "proportional widths (not all equal): {rect_w:?}"
+    );
 
     let folded = fs::read_to_string(&folded_path).expect("folded");
     assert!(
@@ -163,6 +197,18 @@ fn html_out_dir_flame_writes_svg_and_folded_and_lists_on_stderr() {
     assert!(
         index.contains("href=\"all_stacks_by_time.folded\""),
         "index must link folded:\n{index}"
+    );
+    assert!(
+        index.contains("<svg") && index.contains("class=\"flame-link\""),
+        "index must inline SVG so hover/click work under file://:\n{index}"
+    );
+    assert!(
+        !index.contains("<img ") && !index.contains("<object"),
+        "preview must not use <img> or <object>:\n{index}"
+    );
+    assert!(
+        index.contains("id=\"nytprof-flame-tip\""),
+        "index must include hover tip:\n{index}"
     );
     assert!(
         index.contains("main::leaf") && index.contains(">15<"),
@@ -203,5 +249,13 @@ fn html_single_file_flame_embeds_svg_on_stdout() {
     assert!(
         stdout.contains("main::leaf") && stdout.contains(">15<"),
         "leaf 15 on single-file flame HTML:\n{stdout}"
+    );
+    assert!(
+        stdout.contains("class=\"flame-link\"") && stdout.contains("href=\"#L"),
+        "single-file flame must use in-page source anchors:\n{stdout}"
+    );
+    assert!(
+        stdout.contains("id=\"nytprof-flame-tip\""),
+        "single-file must include hover tip:\n{stdout}"
     );
 }

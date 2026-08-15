@@ -35,7 +35,7 @@ jobs:
             scripts/packaging/make_nytprofm_dist.sh
           ./scripts/packaging/build_el8_module_rpm.sh dist/el8
           ls -la dist/el8
-          test -f dist/el8/perl-NYTProfM-6.15-1.el8.x86_64.rpm
+          test -f dist/el8/perl-NYTProfM-6.15-2.el8.x86_64.rpm
 
       - name: Upload RPM artifacts
         uses: actions/upload-artifact@v4
@@ -66,4 +66,4 @@ jobs:
           name: ${{ github.ref_name }} — Rocky 8 testdrive RPM
           files: dist/el8/*.rpm
           fail_on_unmatched_files: true
-          body_path: docs/RELEASE_NOTES_v0.2.6.md
+          body_path: docs/RELEASE_NOTES_v0.2.7.md

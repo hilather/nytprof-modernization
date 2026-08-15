@@ -9,7 +9,8 @@
 # Does NOT invoke DB::emit_* from the workload. Does NOT rewrite dual_path
 # (stays oracle-primary). collection_default stays v5. G03a trivial -e
 # still writes no nytprof.out. Default (no blocks=) stays TIME_LINE
-# (no TIME_BLOCK). G05 format=v6 / G06 fork / full opcode / DI-02 27 remain residual.
+# (no TIME_BLOCK). PR-3 finish emits SRC_LINE + SUB_INFO (savesrc default on).
+# G05 format=v6 / G06 fork / full opcode / DI-02 27 remain residual.
 #
 # When CC + Perl XS headers exist:
 #   make -C collector xs-nytprof, isolated product @INC, live attach + dump.
@@ -107,7 +108,10 @@ print_residuals() {
   echo "G05 options/format: g05_options_format_smoke.sh"
   echo "G06 fork/addpid: g06_fork_addpid_smoke.sh"
   echo "NOT-YET: mid-deflate continue-in-child / TEST-018"
-  echo "DI-01 blocks=1 780/810: di01_blocks_780_smoke.sh"
+  echo "DI-01 blocks=1 780/810 + elapsed TIME_BLOCK: di01_blocks_780_smoke.sh"
+  echo "G07 Getopt/Exporter compile-safe: g07_getopt_compile_smoke.sh"
+  echo "G08 CORE:print/match times: g08_slowops_times_smoke.sh"
+  echo "G09 tokenize excl split: g09_tokenize_excl_smoke.sh"
   echo "NOT-YET: full 6.15 opcode/entersub / DI-02 SUB_ENTRY 27"
 }
 
@@ -289,6 +293,126 @@ grep -F -q 'main::leaf  returns=15' "$REPORT_TXT" \
 grep -F -q 'main::mid  returns=3' "$REPORT_TXT" \
   || fail "text report missing main::mid  returns=3 (from produced profile)"
 ok "shipped report of produced bytes: leaf 15 / mid 3 / mid→leaf 15"
+
+if grep -F -q 'HASH(' "$DUMP" "$REPORT_TXT"; then
+  fail "caller/sub names must not stringify as HASH( (product_sub_stack frames)"
+fi
+ok "no HASH( callers in dump/report"
+
+LEAF_INCL="$(perl -ne 'print $1 if /main::leaf\s+returns=15\s+excl=\S+\s+incl=(\d+)/' "$REPORT_TXT")"
+echo "main::leaf incl=${LEAF_INCL:-?}"
+[[ -n "$LEAF_INCL" ]] || fail "text report missing main::leaf incl="
+[[ "$LEAF_INCL" -gt 0 ]] || fail "main::leaf incl=$LEAF_INCL (want > 0; live clock)"
+ok "main::leaf incl=$LEAF_INCL (> 0)"
+
+perl -e '
+  my $n = 0;
+  my $nonzero = 0;
+  my $not_one = 0;
+  while (<>) {
+    next unless /"tag":"TIME_LINE"/;
+    $n++;
+    if (/"args":\[(\d+)/) {
+      $nonzero++ if $1 > 0;
+      $not_one++ if $1 != 1;
+    }
+  }
+  die "no TIME_LINE in dump\n" unless $n;
+  die "all TIME_LINE ticks are 1 (still visit-count emit)\n" unless $not_one;
+  print "TIME_LINE events=$n nonzero=$nonzero not_one=$not_one\n";
+' "$DUMP" || fail "TIME_LINE ticks still look like visit counts"
+ok "TIME_LINE ticks are elapsed (not identically 1)"
+
+set +e
+"${CLI_CMD[@]}" verify "$PROFILE" >"$WORKDIR/verify.txt" 2>"$WORKDIR/verify.err"
+VERIFY_RC=$?
+set -e
+if [[ "$VERIFY_RC" -ne 0 ]]; then
+  cat "$WORKDIR/verify.err" >&2 || true
+  fail "nytprof-cli verify failed on produced profile (rc=$VERIFY_RC) — PID pair?"
+fi
+grep -q '^OK:' "$WORKDIR/verify.txt" \
+  || fail "verify missing OK: (see $WORKDIR/verify.txt)"
+ok "verify OK (PID_START/PID_END balanced)"
+
+has_tag "$DUMP" "SRC_LINE" || fail "dump missing SRC_LINE (finish_profiler savesrc)"
+has_tag "$DUMP" "SUB_INFO" || fail "dump missing SUB_INFO (finish_profiler %DB::sub)"
+SRC_N="$(perl -ne 'END { print $n+0 } $n++ if /\"tag\":[[:space:]]*\"SRC_LINE\"/' "$DUMP")"
+SUBINFO_N="$(perl -ne 'END { print $n+0 } $n++ if /\"tag\":[[:space:]]*\"SUB_INFO\"/' "$DUMP")"
+echo "dump SRC_LINE=$SRC_N SUB_INFO=$SUBINFO_N"
+[[ "$SRC_N" -gt 0 ]] || fail "src_line events=$SRC_N (want > 0)"
+[[ "$SUBINFO_N" -gt 0 ]] || fail "sub_info events=$SUBINFO_N (want > 0)"
+ok "dump has SRC_LINE ($SRC_N) and SUB_INFO ($SUBINFO_N)"
+
+grep -E -q '"tag":[[:space:]]*"SUB_INFO".*main::leaf|"args":\[[^]]*main::leaf' "$DUMP" \
+  || grep -F -q 'main::leaf' "$DUMP" \
+  || fail "dump SUB_INFO missing main::leaf"
+perl -e '
+  my ($leaf, $mid) = (0, 0);
+  while (<>) {
+    next unless /"tag":[[:space:]]*"SUB_INFO"/;
+    $leaf++ if /main::leaf/;
+    $mid++  if /main::mid/;
+  }
+  die "dump SUB_INFO missing main::leaf\n" unless $leaf;
+  die "dump SUB_INFO missing main::mid\n" unless $mid;
+  print "dump SUB_INFO names leaf=$leaf mid=$mid\n";
+' "$DUMP" || fail "dump SUB_INFO names"
+ok "dump SUB_INFO includes main::leaf and main::mid"
+
+SRC_JSON="$(perl -ne 'print $1 if /"src_line_events"\s*:\s*(\d+)/' "$REPORT_JSON")"
+LEAF_DEF="$(perl -ne 'print $1 if /"sub_def_leaf"\s*:\s*(null|\{[^}]*\})/' "$REPORT_JSON")"
+MID_DEF="$(perl -ne 'print $1 if /"sub_def_mid"\s*:\s*(null|\{[^}]*\})/' "$REPORT_JSON")"
+echo "report --json src_line_events=${SRC_JSON:-?} sub_def_leaf=${LEAF_DEF:-?} sub_def_mid=${MID_DEF:-?}"
+[[ -n "$SRC_JSON" && "$SRC_JSON" -gt 0 ]] \
+  || fail "report src_line_events=$SRC_JSON (want > 0)"
+[[ -n "$LEAF_DEF" && "$LEAF_DEF" != "null" ]] \
+  || fail "report sub_def_leaf missing/null (want main::leaf SUB_INFO)"
+[[ -n "$MID_DEF" && "$MID_DEF" != "null" ]] \
+  || fail "report sub_def_mid missing/null (want main::mid SUB_INFO)"
+echo "$LEAF_DEF" | grep -E -q '"first_line"|"fid"' \
+  || fail "sub_def_leaf not an object: $LEAF_DEF"
+echo "$MID_DEF" | grep -E -q '"first_line"|"fid"' \
+  || fail "sub_def_mid not an object: $MID_DEF"
+ok "report/model sub_def for main::leaf and main::mid; src_line_events=$SRC_JSON"
+
+# savesrc=0 skips file SRC_LINE; SUB_INFO + 15/3/15 + verify still hold.
+SAVESRC0="$WORKDIR/savesrc0.nytprof"
+SAVESRC0_DUMP="$WORKDIR/savesrc0.jsonl"
+SAVESRC0_JSON="$WORKDIR/savesrc0.json"
+set +e
+SAVESRC0_OUT="$(
+  cd "$WORKDIR" && NYTPROF="file=${SAVESRC0}:savesrc=0" \
+    perl -I"$NYTP_DEST" -d:NYTProfM "$WORKLOAD" 2>&1
+)"
+SAVESRC0_RC=$?
+set -e
+[[ "$SAVESRC0_RC" -eq 0 ]] || fail "savesrc=0 workload exited $SAVESRC0_RC"
+[[ -f "$SAVESRC0" ]] || fail "savesrc=0 did not write $SAVESRC0"
+dump_profile "$SAVESRC0" "$SAVESRC0_DUMP"
+if has_tag "$SAVESRC0_DUMP" "SRC_LINE"; then
+  fail "savesrc=0 must skip file SRC_LINE"
+fi
+has_tag "$SAVESRC0_DUMP" "SUB_INFO" || fail "savesrc=0 must still emit SUB_INFO"
+set +e
+"${CLI_CMD[@]}" report --json "$SAVESRC0" >"$SAVESRC0_JSON" 2>"$SAVESRC0_JSON.err"
+SAVESRC0_JSON_RC=$?
+set -e
+[[ "$SAVESRC0_JSON_RC" -eq 0 ]] || fail "savesrc=0 report --json failed"
+S0_LEAF="$(perl -ne 'print $1 if /"leaf_returns"\s*:\s*(\d+)/' "$SAVESRC0_JSON")"
+S0_MID="$(perl -ne 'print $1 if /"mid_returns"\s*:\s*(\d+)/' "$SAVESRC0_JSON")"
+S0_EDGE="$(perl -ne 'print $1 if /"mid_leaf_edge"\s*:\s*(\d+)/' "$SAVESRC0_JSON")"
+S0_SRC="$(perl -ne 'print $1 if /"src_line_events"\s*:\s*(\d+)/' "$SAVESRC0_JSON")"
+[[ "$S0_LEAF" == "15" && "$S0_MID" == "3" && "$S0_EDGE" == "15" ]] \
+  || fail "savesrc=0 counts leaf=$S0_LEAF mid=$S0_MID edge=$S0_EDGE (want 15/3/15)"
+[[ "${S0_SRC:-1}" == "0" ]] || fail "savesrc=0 src_line_events=$S0_SRC (want 0)"
+set +e
+"${CLI_CMD[@]}" verify "$SAVESRC0" >"$WORKDIR/savesrc0.verify" 2>"$WORKDIR/savesrc0.verify.err"
+S0_VRC=$?
+set -e
+[[ "$S0_VRC" -eq 0 ]] || fail "savesrc=0 verify failed (rc=$S0_VRC)"
+grep -q '^OK:' "$WORKDIR/savesrc0.verify" || fail "savesrc=0 verify missing OK:"
+ok "savesrc=0 skips SRC_LINE; SUB_INFO + 15/3/15 + verify hold"
 
 # G03a: trivial -e without file= still must not write nytprof.out.
 LOAD_CWD="$(mktemp -d "$WORKDIR/g03a-load-XXXXXX")"

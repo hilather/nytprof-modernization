@@ -50,6 +50,15 @@ die "mid SUB_RETURN=$mid want 3\n"    unless $mid == 3;
 die "mid->leaf CALLERS=$edge want 15\n" unless $edge == 15;
 print "OK: installed attach leaf=15 mid=3 edge=15\n";
 
+{
+    open my $fh, '<:raw', $profile or die "open $profile: $!\n";
+    local $/;
+    my $bytes = <$fh>;
+    close $fh;
+    $bytes =~ /HASH\(/
+      and die "profile must not contain HASH( caller names\n";
+}
+
 # format=v6 must fail-closed on D1-B (no NYTPROF6 file).
 {
     my $v6 = File::Spec->catfile( $tmp, 'nytprof.v6' );

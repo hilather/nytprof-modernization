@@ -26,9 +26,11 @@ This guide is **docs-landed**. It is **not** a CPAN TRIAL upload, **not** a publ
 |---------|----------------|--------------|
 | **CPAN (primary)** | Dist **`NYTProfM`**, module **`Devel::NYTProfM`**, product `$VERSION` **6.15** | Identity frozen (Option B / KD-16/17 superseded). **`CPAN-TRIAL-READY` is notes-ready** — no TRIAL upload, no `cpanm NYTProfM` of this tree from PAUSE yet |
 | **Rocky / EL8 RPM (companion)** | `dnf install perl-NYTProfM` | Spec MVP (`EL8-RPM-MODULE`). **Not** mock-certified / public COPR unless those rows land. Same sources as CPAN |
-| **Rocky 8 testdrive (unsigned GitHub Release)** | `rpm -Uvh --replacefiles perl-NYTProfM-6.15-1.el8.x86_64.rpm` | Download the `v*` release asset. Workflow [`.github/workflows/release-el8-rpm.yml`](https://github.com/hilather/nytprof-modernization/blob/main/.github/workflows/release-el8-rpm.yml). **Not** mock-certified / signed / COPR |
+| **Rocky 8 testdrive (unsigned GitHub Release)** | `rpm -Uvh --replacefiles perl-NYTProfM-6.15-2.el8.x86_64.rpm` | Download the `v*` release asset. Workflow [`.github/workflows/release-el8-rpm.yml`](https://github.com/hilather/nytprof-modernization/blob/main/.github/workflows/release-el8-rpm.yml). **Not** mock-certified / signed / COPR |
 
-Testdrive (no yum repo yet): download `perl-NYTProfM-6.15-1.el8.x86_64.rpm` from the GitHub Release and `sudo rpm -Uvh --replacefiles` that file. `--replacefiles` overwrites stock `/usr/bin/nytprofhtml` if `perl-Devel-NYTProf` is present.
+Testdrive (no yum repo yet): download `perl-NYTProfM-6.15-2.el8.x86_64.rpm` from the GitHub Release and `sudo rpm -Uvh --replacefiles` that file. `--replacefiles` overwrites stock `/usr/bin/nytprofhtml` if `perl-Devel-NYTProf` is present.
+
+Local **Rocky 8 Docker** walkthrough (install testdrive RPM, download [ack v3](https://beyondgrep.com/) + a Gutenberg corpus, profile a core-only ~1-minute analyzer, write HTML): [`scripts/field/rocky8_docker_profile_demo.sh`](https://github.com/hilather/nytprof-modernization/blob/main/scripts/field/rocky8_docker_profile_demo.sh) — default output `~/Downloads/nytprof-rocky8-demo/`. Integration smoke (same path, `--lab`, honest docker SKIP): [`scripts/field/rocky8_docker_profile_smoke.sh`](https://github.com/hilather/nytprof-modernization/blob/main/scripts/field/rocky8_docker_profile_smoke.sh). See [R1_PREVIEW_OPERATOR_RUNBOOK.md](https://github.com/hilather/nytprof-modernization/blob/main/docs/R1_PREVIEW_OPERATOR_RUNBOOK.md) § Rocky 8 Docker profile demo. Ack itself is **not** the profiled process (product `DB::sub` residual on Getopt::Long / Exporter). **Not** mock-certified / not a perf claim.
 
 When yum/CPAN channels exist:
 

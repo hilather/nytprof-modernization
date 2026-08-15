@@ -9,7 +9,7 @@
 
 Name:           perl-NYTProfM
 Version:        6.15
-Release:        1%{?dist}
+Release:        2%{?dist}
 Summary:        NYTProfM 6.15 collection (D1-B v5-only default; -d:NYTProfM)
 License:        GPL+ or Artistic
 URL:            https://github.com/hilather/nytprof-modernization
@@ -135,6 +135,10 @@ fi
 %{_bindir}/nytprof-dump
 
 %changelog
+* Sat Aug 15 2026 nytprof-modernization <devnull@example.com> - 6.15-2
+- Operator HTML v2 + opt-in call-tree --flame (hover/click)
+- Live attach incl/excl (clock + pending child excl)
+- Getopt/Exporter compile under -d:NYTProfM (INIT + goto)
 * Thu Aug 13 2026 nytprof-modernization <devnull@example.com> - 6.15-1
 - K01: identity NYTProfM / Devel::NYTProfM 6.15; -d:NYTProfM
 - D1-B v5-only module RPM (zlib, no cargo)

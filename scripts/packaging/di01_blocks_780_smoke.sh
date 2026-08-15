@@ -12,6 +12,7 @@
 #   line_calls(fid,5)=780
 #   block_line_calls(fid,4)=810
 #   leaf 15 / mid 3 / mid→leaf 15
+#   TIME_BLOCK args[0] ticks not identically 1 (PR-8 last-site clock)
 #
 # Does NOT invoke DB::emit_* from the workload. Does NOT rewrite dual_path
 # (stays oracle-primary). collection_default stays v5. Does NOT claim
@@ -112,8 +113,8 @@ resolve_cc() {
 }
 
 print_residuals() {
-  echo "NOT-YET: DI-02 calls=2 SUB_ENTRY 27 / thin PRINT-MATCH slowops"
-  echo "NOT-YET: full 6.15 opcode/entersub / DISCOUNT 818 / previous-statement ticks"
+  echo "NOT-YET: DI-02 calls=2 SUB_ENTRY 27 / thin PRINT-MATCH names (times: g08)"
+  echo "NOT-YET: full 6.15 opcode/entersub / DISCOUNT 818"
   echo "NOT-YET: mid-deflate continue-in-child / TEST-018 / S2"
 }
 
@@ -335,6 +336,43 @@ echo "report --json: leaf_returns=${LEAF:-?} mid_returns=${MID:-?} mid_leaf_edge
 [[ "$MID" == "3" ]] || fail "mid_returns=$MID (want 3)"
 [[ "$EDGE" == "15" ]] || fail "mid_leaf_edge=$EDGE (want 15)"
 ok "shipped report of produced bytes: leaf 15 / mid 3 / mid→leaf 15"
+
+# PR-8: TIME_BLOCK ticks are last-site clock deltas, not identically 1.
+TICKS="$(perl - "$DUMP" <<'PERL'
+use strict;
+use warnings;
+use JSON::PP;
+my $dump = $ARGV[0];
+my ($n, $not_one, $nonzero, $min, $max) = (0, 0, 0, undef, undef);
+open my $fh, "<", $dump or die "open $dump: $!\n";
+while (<$fh>) {
+    my $j = decode_json($_);
+    next unless ($j->{tag} // "") eq "TIME_BLOCK";
+    my $ticks = $j->{args}[0];
+    next unless defined $ticks && $ticks =~ /^-?\d+(?:\.\d+)?$/;
+    $n++;
+    $not_one++ if $ticks != 1;
+    $nonzero++ if $ticks > 0;
+    $min = $ticks if !defined $min || $ticks < $min;
+    $max = $ticks if !defined $max || $ticks > $max;
+}
+close $fh;
+print "time_block_tick_events=$n\n";
+print "time_block_ticks_not_one=$not_one\n";
+print "time_block_ticks_nonzero=$nonzero\n";
+print "time_block_ticks_min=", (defined $min ? $min : "na"), "\n";
+print "time_block_ticks_max=", (defined $max ? $max : "na"), "\n";
+PERL
+)"
+printf '%s\n' "$TICKS"
+TB_N="$(perl -ne 'print $1 if /^time_block_tick_events=(\d+)/' <<<"$TICKS")"
+TB_NOT1="$(perl -ne 'print $1 if /^time_block_ticks_not_one=(\d+)/' <<<"$TICKS")"
+TB_MIN="$(perl -ne 'print $1 if /^time_block_ticks_min=(.*)/' <<<"$TICKS")"
+TB_MAX="$(perl -ne 'print $1 if /^time_block_ticks_max=(.*)/' <<<"$TICKS")"
+[[ -n "$TB_N" && "$TB_N" -gt 0 ]] || fail "no TIME_BLOCK ticks parsed from dump"
+[[ "$TB_NOT1" -gt 0 ]] \
+  || fail "all TIME_BLOCK ticks are 1 (still visit-count emit; want clock deltas)"
+ok "TIME_BLOCK ticks not identically 1 (events=$TB_N not_one=$TB_NOT1 min=$TB_MIN max=$TB_MAX)"
 
 print_residuals
 ok "DI-01 blocks=1 780/810 live attach"

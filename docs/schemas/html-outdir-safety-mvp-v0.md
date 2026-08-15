@@ -35,7 +35,7 @@ After validation succeeds:
 
 1. Render site in memory.
 2. Stage under a sibling `.nytprof-html-*` temp dir under `out_dir`'s parent.
-3. Rename-publish into `out_dir` (bak-swap when the directory already exists).
+3. Rename-publish into `out_dir` (bak-swap when the directory already exists). The atomic set includes `nytprof-sort.js` with the rest of the site.
 
 See [html-multifile-mvp-v0.md](https://github.com/hilather/nytprof-modernization/blob/main/docs/schemas/html-multifile-mvp-v0.md).
 

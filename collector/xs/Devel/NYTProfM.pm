@@ -23,6 +23,12 @@
 # PR-B1 / DI-01 — NYTPROF blocks=1 live TIME_BLOCK + first-seen fid table
 # + visit_contexts block/sub lines (not full opcode / not DI-03 / not
 # slowops PRINT-MATCH). Default blocks=0 stays TIME_LINE (G04).
+# PR-3    — savesrc default 1: PL_perldb SAVESRC|SAVESRC_NOSUBS via XS
+# (not $^P |= 0x400). finish_profiler emits SRC_LINE + SUB_INFO.
+# PR-7    — Compile-safe start: do not set $DB::single at file= enable.
+# INIT sets it so use/BEGIN compile without DB::DB. DB::sub goto-all
+# until INIT; after, goto &$raw for Exporter / Getopt / vars / constant
+# / overload (not &$raw wrap). Workload subs keep the hash-stack wrap.
 # Shape follows 6.15 Devel::NYTProf.pm: package Devel::NYTProfM then DB,
 # require Core, init_profiler().
 
@@ -73,9 +79,15 @@ $Devel::NYTProfM::PRODUCT_SLOWOPS_OPS   = 0;
 $Devel::NYTProfM::PRODUCT_REQUIRE_REBIND = 0;
 $Devel::NYTProfM::PRODUCT_SIGEXIT        = '';
 $Devel::NYTProfM::PRODUCT_SIGEXIT_DONE   = 0;
+# PR-3: 6.15 NYTP_OPTf_SAVESRC default on. set_savesrc applies PL_perldb.
+$Devel::NYTProfM::PRODUCT_SAVESRC        = 1;
 
 our @product_sub_stack;
 our $product_in_hook = 0;
+# 0 until INIT after file= enable. Compile-time DB::sub must goto so
+# caller-sensitive pragmas (vars/constant/overload/Exporter) see the
+# real caller. Set together with $DB::single in INIT.
+our $product_after_init = 0;
 
 # G04 / DI-01 statement hook (enabled only with NYTPROF file= + $^P 0x02).
 # Default (blocks=0): TIME_LINE via shipped nytp_emit_time_line.
@@ -95,7 +107,7 @@ sub DB {
             DB::emit_time_block( 1, $fid, $line || 1, $bl || $line, $sl || $line );
         }
         else {
-            DB::emit_time_line( 1, $fid, $line || 1 );
+            DB::emit_attributed_time_line( $fid, $line || 1 );
         }
         1;
     };
@@ -156,6 +168,22 @@ sub _product_skip_sub {
     return 0;
 }
 
+# Tail-call / caller-sensitive modules must stay `goto &$raw`.
+# Wrapping with `&$raw` then return makes Exporter's `goto &heavy_*`
+# become `heavy_(eval)`, and vars/constant/overload import's caller()
+# see DB so `use vars qw($VERSION)` / `use constant` fail under strict.
+# Compile-time calls also goto (`$product_after_init` is 0 until INIT).
+# Never pair this with a pushed stack frame — goto unwinds the pad.
+sub _product_needs_goto {
+    my ($name) = @_;
+    return 0 unless defined $name && length $name;
+    return 0 if ref $name;
+    return 1
+      if $name =~
+      /^(?:Exporter(?:::|\z)|Getopt::|vars::|constant::|overload::)/;
+    return 0;
+}
+
 # Smallest G04 hook: Perl DB::sub + $^P 0x01. Emits SUB_RETURN (A5) and
 # SUB_CALLERS (A7) through shipped DB::emit_* → nytp_emit_*. Not 6.15
 # entersub / opcode TIME_* / XSUB / goto.
@@ -173,20 +201,47 @@ sub sub {
     }
     if (  !$Devel::NYTProfM::PRODUCT_XS_ATTACH
         || $product_in_hook
-        || _product_skip_sub($called) )
+        || !$product_after_init
+        || _product_skip_sub($called)
+        || _product_needs_goto($called) )
     {
         goto &$raw;
     }
 
     my $caller =
-      @product_sub_stack ? $product_sub_stack[-1] : 'main::RUNTIME';
-    push @product_sub_stack, $called;
+      @product_sub_stack
+      ? $product_sub_stack[-1]{name}
+      : 'main::RUNTIME';
+    my ( undef, $cfile, $cline ) = caller(0);
+    $cline ||= 1;
+    my $cfid = 1;
+    if ( defined $cfile && length $cfile ) {
+        $product_in_hook = 1;
+        eval { $cfid = DB::fid_for_filename($cfile) || 1; 1 };
+        $product_in_hook = 0;
+    }
+
+    # Absorb MATCH/PRINT exclusive that ran in the parent since last child.
+    if (@product_sub_stack) {
+        $product_sub_stack[-1]{child_excl} += DB::take_pending_child_excl();
+    }
+    else {
+        DB::take_pending_child_excl();
+    }
+
+    push @product_sub_stack,
+      {
+        name       => $called,
+        t0         => DB::clock_now_ticks(),
+        child_excl => 0,
+        fid        => $cfid,
+        line       => $cline,
+      };
 
     if ( $Devel::NYTProfM::PRODUCT_CALLS >= 2 ) {
-        my ( undef, $cfile, $cline ) = caller(0);
         $product_in_hook = 1;
         eval {
-            DB::emit_sub_entry( DB::fid_for_filename($cfile), $cline || 1 );
+            DB::emit_sub_entry( $cfid, $cline );
             1;
         };
         $product_in_hook = 0;
@@ -207,13 +262,30 @@ sub sub {
         1;
     };
     my $err = $@;
-    pop @product_sub_stack;
+    my $frame = pop @product_sub_stack;
+    my $depth = @product_sub_stack + 1;
+    my $incl  = 0;
+    my $excl  = 0;
+    my $site_fid  = 1;
+    my $site_line = 1;
+    if ($frame) {
+        $incl = DB::clock_now_ticks() - $frame->{t0};
+        $incl = 0 if $incl < 0;
+        $frame->{child_excl} += DB::take_pending_child_excl();
+        $excl = $incl - ( $frame->{child_excl} || 0 );
+        $excl = 0 if $excl < 0;
+        if (@product_sub_stack) {
+            $product_sub_stack[-1]{child_excl} += $excl;
+        }
+        $site_fid  = $frame->{fid}  || 1;
+        $site_line = $frame->{line} || 1;
+    }
 
     $product_in_hook = 1;
-    my $depth = @product_sub_stack + 1;
     eval {
-        DB::emit_sub_return( $depth, 0.0, 0.0, $called );
-        DB::emit_sub_callers( 1, 1, 1, 0.0, 0.0, 0.0, 0, $called, $caller );
+        DB::emit_sub_return( $depth, $incl, $excl, $called );
+        DB::emit_sub_callers( $site_fid, $site_line, 1, $incl, $excl, 0.0, 0,
+            $called, $caller );
         1;
     };
     $product_in_hook = 0;
@@ -348,6 +420,13 @@ sub _product_install_fork_hook {
     $Devel::NYTProfM::PRODUCT_SLOWOPS = $slowops;
     my $compress = _product_int_opt( $opts, 'compress', 0 );
     $Devel::NYTProfM::PRODUCT_COMPRESS = $compress ? 1 : 0;
+    my $usecpu = $opts->{usecputime};
+    if ( defined $usecpu && $usecpu ne '' && $usecpu ne '0' ) {
+        warn
+"The NYTProf usecputime option has been removed (try using clock=N if possible)\n";
+    }
+    my $savesrc = _product_int_opt( $opts, 'savesrc', 1 );
+    $Devel::NYTProfM::PRODUCT_SAVESRC = $savesrc ? 1 : 0;
 }
 
 init_profiler();    # G03a: hold in-memory v5 sink — never writes nytprof.out
@@ -382,7 +461,12 @@ init_profiler();    # G03a: hold in-memory v5 sink — never writes nytprof.out
         $^P |= 0x01;    # sub enter/exit → DB::sub
         $^P |= 0x02;    # line-by-line (dbstate already compiled when $^P != 0)
         $^P |= 0x20;    # start with single-step on
-        $DB::single = 1;    # pp_dbstate calls DB::DB only when this is true
+        # PR-7: do not set $DB::single here. pp_dbstate would run DB::DB
+        # while compiling use/BEGIN (Getopt::Long $VERSION under strict).
+        # INIT below turns statement hooks on after compile.
+        # 6.15 ~3177–3179: PL_perldb |= PERLDBf_SAVESRC | PERLDBf_SAVESRC_NOSUBS
+        # via XS macros — not $^P |= 0x400 (eval-source / SAVESRC_INVALID).
+        DB::set_savesrc( $Devel::NYTProfM::PRODUCT_SAVESRC );
         if ( $Devel::NYTProfM::PRODUCT_BLOCKS ) {
             # DBSTATE/NEXTSTATE/UNSTACK TIME_BLOCK slice — not DI-03 opcode.
             my $st_ops = DB::install_product_stmt_ops();
@@ -411,6 +495,16 @@ init_profiler();    # G03a: hold in-memory v5 sink — never writes nytprof.out
         if (@sigexit) {
             _product_install_sigexit(@sigexit);
         }
+    }
+}
+
+# PR-7: statement hooks after compile. $DB::single at file= enable
+# would run DB::DB during use/BEGIN (Getopt::Long $VERSION / Exporter).
+# $^P 0x01|0x02|0x20 stay on from enable; only this bit is deferred.
+INIT {
+    if ($Devel::NYTProfM::PRODUCT_XS_ATTACH) {
+        $DB::single           = 1;
+        $product_after_init   = 1;
     }
 }
 

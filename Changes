@@ -1,5 +1,12 @@
 Revision history for NYTProfM (product modernization)
 
+6.15  2026-08-15
+        v0.2.7 testdrive: operator HTML v2 (chrome/IA/sort/compact time),
+        opt-in call-tree --flame (hover + click-to-source), live attach
+        incl/excl (clock + pending child excl), Rocky dual-engine Docker
+        lab, apples-to-apples compare. RPM 6.15-2 upgrades 6.15-1.
+        Not PAUSE/COPR/GPG. Not oracle DOM / flamegraph.pl.
+
 6.15  2026-08-13
         v0.2.6 testdrive: Rocky 8 perl-NYTProfM RPM (unsigned) ships
         -d:NYTProfM, I03 nytprofhtml wrappers, and bundled EL8 nytprof-cli.

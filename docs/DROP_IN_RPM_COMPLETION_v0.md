@@ -334,7 +334,7 @@ Ticks stay `1` for this increment. **780/810 are call counts**, not tick totals.
 
 **Step 4 — keep dbstate-per-iteration.**
 
-`$^P` is already non-zero at compile (`0x010|0x100|0x200`), so user code (and `use strict/warnings`) compiles `dbstate` instead of `nextstate`. G04 already sets `$^P |= 0x02` and `$DB::single = 1` when `file=` is set. **Do not** clear `$DB::single` inside `DB::DB`. If perl’s optimizer collapses the for-modifier, set `PL_perldb |= PERLDBf_NOOPT` from XS when `optimize=0` (6.15 default is optimize **on**; only flip if measurement shows a short count).
+`$^P` is already non-zero at compile (`0x010|0x100|0x200`), so user code (and `use strict/warnings`) compiles `dbstate` instead of `nextstate`. G04 sets `$^P |= 0x02|0x20` when `file=` is set. **PR-7:** `$DB::single = 1` is set in `INIT` (not at enable) so `use Getopt::Long` compiles. **Do not** clear `$DB::single` inside `DB::DB`. If perl’s optimizer collapses the for-modifier, set `PL_perldb |= PERLDBf_NOOPT` from XS when `optimize=0` (6.15 default is optimize **on**; only flip if measurement shows a short count).
 
 **Step 5 — SUB_ENTRY on `DB::sub` when `calls >= 2`.**
 

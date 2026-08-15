@@ -44,6 +44,45 @@ fn expected_returns_from_events(events: &[Event], subname: &str) -> u64 {
         .count() as u64
 }
 
+/// Sum of SUB_CALLERS `count` for a (caller, called, fid, line) site from events.
+fn expected_site_count_from_events(
+    events: &[Event],
+    caller: &str,
+    called: &str,
+    fid: u32,
+    line: u32,
+) -> u64 {
+    events
+        .iter()
+        .filter(|e| e.tag == tags::SUB_CALLERS)
+        .filter(|e| {
+            e.args.get(7).and_then(|v| v.as_str()) == Some(called)
+                && e.args.get(8).and_then(|v| v.as_str()) == Some(caller)
+                && e.args.get(0).and_then(|v| v.as_u64()) == Some(u64::from(fid))
+                && e.args.get(1).and_then(|v| v.as_u64()) == Some(u64::from(line))
+        })
+        .map(|e| e.args.get(2).and_then(|v| v.as_u64()).unwrap_or(0))
+        .sum()
+}
+
+/// First (fid, line) for a (caller, called) SUB_CALLERS pair in the event stream.
+fn first_site_fid_line(events: &[Event], caller: &str, called: &str) -> Option<(u32, u32)> {
+    events.iter().find_map(|e| {
+        if e.tag != tags::SUB_CALLERS {
+            return None;
+        }
+        if e.args.get(7).and_then(|v| v.as_str()) != Some(called) {
+            return None;
+        }
+        if e.args.get(8).and_then(|v| v.as_str()) != Some(caller) {
+            return None;
+        }
+        let fid = e.args.get(0).and_then(|v| v.as_u64())? as u32;
+        let line = e.args.get(1).and_then(|v| v.as_u64())? as u32;
+        Some((fid, line))
+    })
+}
+
 /// Sum of SUB_CALLERS `count` for a (caller, called) edge by scanning oracle events.
 fn expected_edge_count_from_events(events: &[Event], caller: &str, called: &str) -> u64 {
     events
@@ -766,6 +805,25 @@ fn default_calls1_call_edges_and_source() {
     );
     assert_call_edges_match(&model, &oracle);
     assert_source_lines_match(&model, &oracle);
+
+    // Site-level SUB_CALLERS (fid/line retained; not part of A7 equality).
+    let (sfid, sline) =
+        first_site_fid_line(&oracle_events, "main::mid", "main::leaf").expect("mid→leaf site");
+    let site_count =
+        expected_site_count_from_events(&oracle_events, "main::mid", "main::leaf", sfid, sline);
+    assert!(site_count > 0, "fixture mid→leaf site count");
+    let site = model
+        .call_sites
+        .get(&(
+            "main::mid".to_owned(),
+            "main::leaf".to_owned(),
+            sfid,
+            sline,
+        ))
+        .expect("model retained mid→leaf call site");
+    assert_eq!(site.count, site_count);
+    assert_eq!(site.fid, sfid);
+    assert_eq!(site.line, sline);
 
     let text = model.source_line(1, 5).expect("src");
     assert!(text.contains("x++") || text.contains("for 1 .. 50"), "{text:?}");

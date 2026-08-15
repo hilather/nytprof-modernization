@@ -20,6 +20,17 @@
 extern "C" {
 #endif
 
+/* 6.15 TICKS_PER_SEC — NV ticks on SUB_RETURN / SUB_CALLERS. */
+#ifndef NYTP_TICKS_PER_SEC
+#define NYTP_TICKS_PER_SEC 10000000
+#endif
+
+/*
+ * Production monotonic clock (CLOCK_MONOTONIC). Not the TEST-003 fake clock.
+ * *out is absolute ticks at NYTP_TICKS_PER_SEC. Written only on NYTP_OK.
+ */
+nytp_status nytp_clock_now(nytp_ticks *out);
+
 /* ---- Scripted fake clock ---- */
 
 typedef struct nytp_fake_clock {

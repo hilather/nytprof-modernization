@@ -19,10 +19,22 @@ Legacy single `source.html` may remain as a **redirect/alias** to the primary wo
 
 ## File page requirements
 
-- Title/heading with fid and path basename
-- Source table: line, calls (A4), ticks, source text (escaped)
+- Chrome: `.siteTitle` **NYTProf Performance Profile**; subtitle includes `« line view »`; `.header_back` `← Index`
+- `table.file_summary`: Filename, Statements
+- Per-file `table#subs_table` (same 6 columns as the index; no top-N; `data-sort-default="desc"` on Exclusive Time)
+- Source table columns: **Line**, **Statements**, **Time on line**, **Calls**, **Time in subs**, **Code**
+- **Row union:** iterate the sorted union of `source_lines` **and** `line_totals` (and `block_line_totals` lines that belong to that fid). Missing source text is `—`.
+- Each source `<tr>` has `id="L{line}"` so sub links (`file-{fid}.html#L{first_line}`) land on the line.
+- Unused / zero-tick lines have **no** heat class on the `<tr>` or cells. Heat is on numeric time/count cells only when the value is &gt; 0.
+- Calls / Time in subs come from **usable** `call_sites` only (`(fid,line)==(1,1)` is unusable unless that caller’s `sub_def` starts there). Otherwise **`—`** (never `0` / `0s`). Usable sites also emit `.calls` / `.calls_in` / `.calls_out` in the Code cell.
+- Code cell is `<td class="s">` with escaped source.
+- After source lines, opcode stub rows for `CORE:` names that have `call_edges` but no `sub_def`: `id="main__CORE_match"` (non-alnum → `_`).
+- Source times are **HTML-only compact units** when `ticks_per_sec` is present (`title=` raw ticks); text/CSV/JSON stay integer ticks.
+- Not oracle `c0`–`c3` class names.
+- `table.source.sortable` with `th[data-sort]` and `data-sort-value` on numeric cells; vanilla `nytprof-sort.js` (see [html-sort-js-mvp-v0.md](https://github.com/hilather/nytprof-modernization/blob/main/docs/schemas/html-sort-js-mvp-v0.md)).
 - Hot loop on workload page: `$x++` / `for 1 .. 50` and positive calls
 - On blocks-calls1: A4 line 5 calls from model; **A4b section or column** showing block_line totals (see below)
+- `source.html` is the **application** fid (attributes `application` basename, else hottest non-`@INC` `.pl`), not `warnings.pm`
 
 ## A4b in HTML
 

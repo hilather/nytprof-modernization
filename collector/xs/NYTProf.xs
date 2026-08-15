@@ -22,6 +22,15 @@
  *           block_and_sub_lines + optional DBSTATE/NEXTSTATE TIME_BLOCK
  *           slice (not full opcode / DI-03).
  * PR-B2   — thin OP_PRINT / OP_MATCH slowops (not full slowops.h).
+ * PR-3    — finish_profiler: flush last-site, begin_finalize, SRC_LINE
+ *           (product_fid_map walk, no HAS_SRC) + lookup-only SUB_INFO
+ *           (parse_DBsub_value + product_fid_lookup; no NEW_FID), then
+ *           PID_END. PL_perldb SAVESRC|SAVESRC_NOSUBS at file= (not $^P 0x400).
+ * PR-8    — C stmt-ops TIME_BLOCK + PRINT/MATCH slowops use the same
+ *           nytp_clock_now / last-site clock as TIME_LINE (not ticks=1 / 0.0).
+ * PR-9    — Slowop exclusive is folded into the parent Perl frame via
+ *           product_pending_child_excl + DB::take_pending_child_excl so
+ *           tokenize-shaped excl = incl − children (not ≈ CORE:match).
  *
  * MODULE Devel::NYTProfM; PACKAGE = DB
  * Default link: libnytp_sink_v5.a + -lz only (D1-B).
@@ -45,7 +54,9 @@
 
 #include <limits.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
+#include <unistd.h>
 
 #ifndef OutCopFILE
 #define OutCopFILE CopFILE
@@ -89,6 +100,199 @@ static COP *product_last_stmt_cop = NULL;
 static COP *product_unstack_cop = NULL;
 static int product_unstack_since_stmt = 0;
 
+/* KD-L / PR-8: one XS last-site clock for TIME_LINE and TIME_BLOCK. */
+static nytp_ticks product_last_abs = 0;
+static nytp_fid product_last_site_fid = 0;
+static nytp_line product_last_site_line = 0;
+static nytp_line product_last_site_block_line = 0;
+static nytp_line product_last_site_sub_line = 0;
+static int product_last_site_is_block = 0;
+static int product_has_last_site = 0;
+
+/* 6.15 NYTP_OPTf_SAVESRC default on. file= apply uses the Perl macros
+ * (PERLDBf_SAVESRC | PERLDBf_SAVESRC_NOSUBS), not $^P |= 0x400 alone. */
+static int product_savesrc = 1;
+
+/* Slowop exclusive waiting to be absorbed by the current Perl DB::sub frame. */
+static double product_pending_child_excl = 0.0;
+
+static void
+product_pending_child_excl_reset(void)
+{
+    product_pending_child_excl = 0.0;
+}
+
+static void
+product_add_pending_child_excl(double excl)
+{
+    if (excl > 0.0)
+        product_pending_child_excl += excl;
+}
+
+static double
+product_take_pending_child_excl(void)
+{
+    double v = product_pending_child_excl;
+    product_pending_child_excl = 0.0;
+    return v;
+}
+
+static void
+product_last_site_reset(void)
+{
+    product_last_abs = 0;
+    product_last_site_fid = 0;
+    product_last_site_line = 0;
+    product_last_site_block_line = 0;
+    product_last_site_sub_line = 0;
+    product_last_site_is_block = 0;
+    product_has_last_site = 0;
+    product_pending_child_excl_reset();
+}
+
+/* Emit leftover interval to the previous site (TIME_LINE or TIME_BLOCK). */
+static nytp_status
+product_emit_last_site_elapsed(nytp_ticks elapsed)
+{
+    if (product_sink == NULL) {
+        return NYTP_ERR_NULL;
+    }
+    if (product_last_site_is_block) {
+        return nytp_emit_time_block(product_sink, elapsed,
+                                    product_last_site_fid,
+                                    product_last_site_line,
+                                    product_last_site_block_line,
+                                    product_last_site_sub_line);
+    }
+    return nytp_emit_time_line(product_sink, elapsed, product_last_site_fid,
+                               product_last_site_line);
+}
+
+static nytp_status
+product_flush_last_site(void)
+{
+    nytp_ticks now = 0;
+    nytp_status st;
+
+    if (!product_has_last_site || product_sink == NULL) {
+        return NYTP_OK;
+    }
+    st = nytp_clock_now(&now);
+    if (st != NYTP_OK) {
+        return st;
+    }
+    if (now < product_last_abs) {
+        return NYTP_ERR_OVERFLOW;
+    }
+    st = product_emit_last_site_elapsed(now - product_last_abs);
+    if (st != NYTP_OK) {
+        return st;
+    }
+    product_has_last_site = 0;
+    return NYTP_OK;
+}
+
+static nytp_status
+product_emit_attributed_time_line(nytp_fid fid, nytp_line line)
+{
+    nytp_ticks now = 0;
+    nytp_status st;
+
+    if (product_sink == NULL) {
+        return NYTP_ERR_NULL;
+    }
+    st = nytp_clock_now(&now);
+    if (st != NYTP_OK) {
+        return st;
+    }
+    if (line == 0) {
+        line = 1;
+    }
+    if (product_has_last_site) {
+        if (now < product_last_abs) {
+            return NYTP_ERR_OVERFLOW;
+        }
+        st = product_emit_last_site_elapsed(now - product_last_abs);
+        if (st != NYTP_OK) {
+            return st;
+        }
+    }
+    product_last_abs = now;
+    product_last_site_fid = fid;
+    product_last_site_line = line;
+    product_last_site_block_line = 0;
+    product_last_site_sub_line = 0;
+    product_last_site_is_block = 0;
+    product_has_last_site = 1;
+    return NYTP_OK;
+}
+
+/* BASE-003: attribute now-last to the previous site, then seed this COP. */
+static nytp_status
+product_emit_attributed_time_block(nytp_fid fid, nytp_line line,
+                                   nytp_line block_line, nytp_line sub_line)
+{
+    nytp_ticks now = 0;
+    nytp_status st;
+
+    if (product_sink == NULL) {
+        return NYTP_ERR_NULL;
+    }
+    st = nytp_clock_now(&now);
+    if (st != NYTP_OK) {
+        return st;
+    }
+    if (line == 0) {
+        line = 1;
+    }
+    if (block_line == 0) {
+        block_line = line;
+    }
+    if (sub_line == 0) {
+        sub_line = line;
+    }
+    if (product_has_last_site) {
+        if (now < product_last_abs) {
+            return NYTP_ERR_OVERFLOW;
+        }
+        st = product_emit_last_site_elapsed(now - product_last_abs);
+        if (st != NYTP_OK) {
+            return st;
+        }
+    }
+    product_last_abs = now;
+    product_last_site_fid = fid;
+    product_last_site_line = line;
+    product_last_site_block_line = block_line;
+    product_last_site_sub_line = sub_line;
+    product_last_site_is_block = 1;
+    product_has_last_site = 1;
+    return NYTP_OK;
+}
+
+static nytp_status
+product_emit_header_and_pid_start(void)
+{
+    char tps[16];
+    nytp_status st;
+
+    if (product_sink == NULL) {
+        return NYTP_ERR_NULL;
+    }
+    (void)snprintf(tps, sizeof(tps), "%d", NYTP_TICKS_PER_SEC);
+    st = nytp_emit_attribute(product_sink, nytp_sv_cstr("ticks_per_sec"),
+                             nytp_sv_cstr(tps));
+    if (st != NYTP_OK) {
+        return st;
+    }
+    st = nytp_sink_activate(product_sink);
+    if (st != NYTP_OK) {
+        return st;
+    }
+    return nytp_emit_pid_start(product_sink, (nytp_pid)getpid(),
+                               (nytp_pid)getppid(), 0.0);
+}
+
 static void
 product_fid_reset(pTHX)
 {
@@ -99,6 +303,7 @@ product_fid_reset(pTHX)
     product_last_stmt_cop = NULL;
     product_unstack_cop = NULL;
     product_unstack_since_stmt = 0;
+    product_last_site_reset();
 }
 
 static UV
@@ -133,6 +338,196 @@ product_fid_for_filename(pTHX_ SV *path_sv)
     }
     (void)hv_store(product_fid_map, pv, (I32)len, newSVuv(fid), 0);
     return fid;
+}
+
+/* Lookup-only (KD-N). Never emit NEW_FID. Missing → 0. */
+static UV
+product_fid_lookup(pTHX_ const char *filename, STRLEN filename_len)
+{
+    SV **slot;
+
+    if (product_fid_map == NULL || filename == NULL || filename_len == 0) {
+        return 0;
+    }
+    slot = hv_fetch(product_fid_map, filename, (I32)filename_len, 0);
+    if (slot != NULL && *slot != NULL && SvOK(*slot)) {
+        return SvUV(*slot);
+    }
+    return 0;
+}
+
+/*
+ * Port of baseline/6.15/src/NYTProf.xs parse_DBsub_value ~3383
+ * ("filename:first-last"). Used by write_sub_line_ranges ~3563.
+ */
+static int
+product_parse_DBsub_value(pTHX_ SV *sv, STRLEN *filename_len_p,
+                          UV *first_line_p, UV *last_line_p, char *sub_name)
+{
+    char *filename;
+    char *first;
+    char *last;
+    int first_is_neg = 0;
+
+    if (sv == NULL || !SvOK(sv)) {
+        return 0;
+    }
+    filename = SvPV_nolen(sv);
+    first = strrchr(filename, ':');
+    if (first && filename_len_p) {
+        *filename_len_p = (STRLEN)(first - filename);
+    }
+    if (!first) {
+        return 0;
+    }
+    first++; /* start of first number (6.15 `if (!first++)`) */
+    if (*first == '-') {
+        ++first;
+        first_is_neg = 1;
+    }
+    last = strchr(first, '-');
+    if (!last || !grok_number(first, (STRLEN)(last - first), first_line_p)) {
+        return 0;
+    }
+    if (first_is_neg) {
+        warn("Negative first line number in %%DB::sub entry '%s' for %s\n",
+             filename, sub_name ? sub_name : "?");
+        *first_line_p = 0;
+    }
+    if (*++last == '-') {
+        warn("Negative last line number in %%DB::sub entry '%s' for %s\n",
+             filename, sub_name ? sub_name : "?");
+        last = (char *)"0";
+    }
+    if (last_line_p) {
+        *last_line_p = (UV)atoi(last);
+    }
+    return 1;
+}
+
+static void
+product_apply_savesrc_flags(pTHX)
+{
+    if (!product_savesrc) {
+        return;
+    }
+    /* 6.15 NYTProf.xs ~3177–3179. Do not $^P |= 0x400 alone. */
+#if defined(PERLDBf_SAVESRC) && defined(PERLDBf_SAVESRC_NOSUBS)
+    PL_perldb |= PERLDBf_SAVESRC | PERLDBf_SAVESRC_NOSUBS;
+#elif defined(PERLDBf_SAVESRC)
+    PL_perldb |= PERLDBf_SAVESRC;
+#endif
+}
+
+/*
+ * Walk existing product_fid_map only. Emit SRC_LINE from Perl's
+ * @{"_<$file"} (gv_fetchfile_flags). Do not require NYTP_FIDf_HAS_SRC.
+ */
+static void
+product_emit_src_lines(pTHX)
+{
+    char *filename;
+    I32 filename_len;
+    SV *fid_sv;
+
+    if (product_sink == NULL || product_fid_map == NULL) {
+        return;
+    }
+    hv_iterinit(product_fid_map);
+    while ((fid_sv = hv_iternextsv(product_fid_map, &filename,
+                                   &filename_len)) != NULL) {
+        GV *gv;
+        AV *src_av;
+        UV fid;
+        I32 last;
+        I32 line;
+
+        if (!SvOK(fid_sv) || filename == NULL || filename_len <= 0) {
+            continue;
+        }
+        fid = SvUV(fid_sv);
+        if (fid == 0) {
+            continue;
+        }
+        gv = gv_fetchfile_flags(filename, (STRLEN)filename_len, 0);
+        if (gv == NULL) {
+            continue;
+        }
+        src_av = GvAV(gv);
+        if (src_av == NULL) {
+            continue;
+        }
+        last = av_len(src_av);
+        for (line = 1; line <= last; ++line) {
+            SV **svp = av_fetch(src_av, line, 0);
+            STRLEN len = 0;
+            const char *src = "";
+
+            if (svp != NULL && *svp != NULL && SvOK(*svp)) {
+                src = SvPV(*svp, len);
+            }
+            (void)nytp_emit_src_line(product_sink, (nytp_fid)fid,
+                                     (nytp_line)line, nytp_sv(src, len, 0));
+        }
+    }
+}
+
+/*
+ * Walk %DB::sub. Lookup-only fid (KD-N). Skip rows with no existing fid
+ * (6.15 get_file_id(..., 0) + continue, write_sub_line_ranges ~3579–3584).
+ */
+static void
+product_emit_sub_infos(pTHX)
+{
+    HV *hv;
+    char *sub_name;
+    I32 sub_name_len;
+    SV *file_lines_sv;
+
+    if (product_sink == NULL || PL_DBsub == NULL) {
+        return;
+    }
+    hv = GvHV(PL_DBsub);
+    if (hv == NULL) {
+        return;
+    }
+    hv_iterinit(hv);
+    while ((file_lines_sv = hv_iternextsv(hv, &sub_name, &sub_name_len))
+           != NULL) {
+        STRLEN file_lines_len = 0;
+        char *filename;
+        STRLEN filename_len = 0;
+        UV first_line = 0;
+        UV last_line = 0;
+        UV fid;
+
+        if (file_lines_sv == NULL || !SvOK(file_lines_sv) || sub_name == NULL) {
+            continue;
+        }
+        filename = SvPV(file_lines_sv, file_lines_len);
+        /* 6.15 write_sub_line_ranges ~3460–3463: skip /:[^0]-0$/ */
+        if (file_lines_len > 4
+            && filename[file_lines_len - 2] == '-'
+            && filename[file_lines_len - 1] == '0'
+            && filename[file_lines_len - 4] != ':'
+            && filename[file_lines_len - 3] != '0') {
+            continue;
+        }
+        if (!product_parse_DBsub_value(aTHX_ file_lines_sv, &filename_len,
+                                       &first_line, &last_line, sub_name)) {
+            continue;
+        }
+        if (filename_len == 0) {
+            continue;
+        }
+        fid = product_fid_lookup(aTHX_ filename, filename_len);
+        if (fid == 0) {
+            continue;
+        }
+        (void)nytp_emit_sub_info(product_sink, (nytp_fid)fid,
+                                 (nytp_line)first_line, (nytp_line)last_line,
+                                 nytp_sv(sub_name, (size_t)sub_name_len, 0));
+    }
 }
 
 /* Copy Perl SV bytes into an owned C string; do not pass SvPV to nytp_sv_cstr. */
@@ -527,8 +922,9 @@ product_emit_time_block_for_cop(pTHX_ COP *cop)
     fid = product_fid_for_filename(aTHX_ file_sv);
     SvREFCNT_dec(file_sv);
     product_fill_block_sub(aTHX_ cop, line, &bl, &sl);
-    (void)nytp_emit_time_block(product_sink, (nytp_ticks)1, (nytp_fid)fid,
-                               (nytp_line)line, (nytp_line)bl, (nytp_line)sl);
+    /* Same last-site clock as TIME_LINE (PR-8); first hit seeds, overflow skips. */
+    (void)product_emit_attributed_time_block((nytp_fid)fid, (nytp_line)line,
+                                             (nytp_line)bl, (nytp_line)sl);
 }
 
 static OP *
@@ -728,12 +1124,29 @@ pp_product_slowop(pTHX)
     }
     if (calls >= 2)
         (void)nytp_emit_sub_entry(product_sink, (nytp_fid)fid, (nytp_line)line);
-    ret = orig ? orig(aTHX) : NORMAL;
-    (void)nytp_emit_sub_return(product_sink, (nytp_depth)1, 0.0, 0.0,
-                               nytp_sv_cstr(name));
-    (void)nytp_emit_sub_callers(product_sink, (nytp_fid)fid, (nytp_line)line,
-                                1U, 0.0, 0.0, 0.0, 0U, nytp_sv_cstr(name),
-                                nytp_sv_cstr(caller));
+    {
+        nytp_ticks t0 = 0;
+        nytp_ticks now = 0;
+        nytp_ticks incl = 0;
+        double incl_nv;
+        nytp_status st;
+
+        /* Same nytp_clock_now as last-site / DB::sub — not a second clock. */
+        st = nytp_clock_now(&t0);
+        ret = orig ? orig(aTHX) : NORMAL;
+        if (st == NYTP_OK && nytp_clock_now(&now) == NYTP_OK) {
+            incl = (now >= t0) ? (now - t0) : 0;
+        }
+        incl_nv = (double)incl;
+        (void)nytp_emit_sub_return(product_sink, (nytp_depth)1, incl_nv,
+                                   incl_nv, nytp_sv_cstr(name));
+        (void)nytp_emit_sub_callers(product_sink, (nytp_fid)fid,
+                                    (nytp_line)line, 1U, incl_nv, incl_nv, 0.0,
+                                    0U, nytp_sv_cstr(name),
+                                    nytp_sv_cstr(caller));
+        /* Fold MATCH/PRINT exclusive into the wrapping Perl sub (tokenize). */
+        product_add_pending_child_excl(incl_nv);
+    }
     product_in_slowop = 0;
     return ret;
 }
@@ -857,8 +1270,8 @@ enable_sink(path)
             if (st != NYTP_OK || product_sink == NULL) {
                 croak("DB::enable_sink: nytp_v5_sink_create(%s) failed", path);
             }
-            st = nytp_sink_activate(product_sink);
-            RETVAL = (int)st;
+            product_last_site_reset();
+            RETVAL = (int)product_emit_header_and_pid_start();
         }
     OUTPUT:
         RETVAL
@@ -922,14 +1335,66 @@ enable_sink_v6(path)
                 croak("DB::enable_sink_v6: nytp_v6_sink_create(%s) failed",
                       path);
             }
-            st = nytp_sink_activate(product_sink);
-            RETVAL = (int)st;
+            product_last_site_reset();
+            RETVAL = (int)product_emit_header_and_pid_start();
         }
 #else
         croak("format=v6 requires v6-enabled build (install v6_collect "
               "package or rebuild with --with v6_collect)");
         RETVAL = (int)NYTP_ERR_UNSUPPORTED;
 #endif
+    OUTPUT:
+        RETVAL
+
+NV
+take_pending_child_excl()
+    CODE:
+        RETVAL = product_take_pending_child_excl();
+    OUTPUT:
+        RETVAL
+
+UV
+clock_now_ticks()
+    PREINIT:
+        nytp_ticks ticks = 0;
+        nytp_status st;
+    CODE:
+        st = nytp_clock_now(&ticks);
+        if (st != NYTP_OK) {
+            croak("DB::clock_now_ticks: nytp_clock_now failed (status=%d)",
+                  (int)st);
+        }
+        if (ticks < 0) {
+            croak("DB::clock_now_ticks: negative ticks");
+        }
+        RETVAL = (UV)ticks;
+    OUTPUT:
+        RETVAL
+
+int
+emit_attributed_time_line(fid, line)
+    UV fid
+    UV line
+    CODE:
+        RETVAL = (int)product_emit_attributed_time_line((nytp_fid)fid,
+                                                        (nytp_line)line);
+    OUTPUT:
+        RETVAL
+
+int
+flush_last_site()
+    CODE:
+        RETVAL = (int)product_flush_last_site();
+    OUTPUT:
+        RETVAL
+
+int
+set_savesrc(on)
+    int on
+    CODE:
+        product_savesrc = on ? 1 : 0;
+        product_apply_savesrc_flags(aTHX);
+        RETVAL = product_savesrc;
     OUTPUT:
         RETVAL
 
@@ -1238,9 +1703,25 @@ is_deflating()
 int
 finish_profiler()
     CODE:
-        nytp_product_sink_drop();
-        product_fid_reset(aTHX);
-        RETVAL = 1;
+        {
+            /* KD-P / KD-N / A.5: flush last-site TIME_LINE/TIME_BLOCK
+             * while ACTIVE, then finalize metadata, then PID_END. */
+            nytp_status st = product_flush_last_site();
+            if (st != NYTP_OK && st != NYTP_ERR_NULL) {
+                /* Still close the sink so the file is not left incomplete. */
+            }
+            if (product_sink != NULL) {
+                (void)nytp_sink_begin_finalize(product_sink);
+                if (product_savesrc) {
+                    product_emit_src_lines(aTHX);
+                }
+                product_emit_sub_infos(aTHX);
+                (void)nytp_emit_pid_end(product_sink, (nytp_pid)getpid(), 0.0);
+            }
+            nytp_product_sink_drop();
+            product_fid_reset(aTHX);
+            RETVAL = 1;
+        }
     OUTPUT:
         RETVAL
 
