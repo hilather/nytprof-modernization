@@ -34,7 +34,9 @@ Guide: [R1_PREVIEW_OPERATOR_RUNBOOK.md](https://github.com/hilather/nytprof-mode
 | `perl -c` scanner | syntax OK |
 | host `minute_text_scanner.pl DIR 1` | stdout matches `^passes=` |
 
-**When docker is usable** (binary + `docker info`): run `rocky8_docker_profile_demo.sh --lab --engine both --seconds 3` into a temp dir and require:
+**When docker is usable** (binary + `docker info`) **and** a testdrive RPM is on `dist/el8/`, `NYTPROF_DEMO_RPM`, or the GitHub Release URL: run `rocky8_docker_profile_demo.sh --lab --engine both --seconds 3` into a temp dir and require:
+
+Honest **SKIP** of the docker half when the RPM is not on disk and not downloadable yet (same tag push as `Release EL8 RPM` — do not fail the CI matrix on that 404).
 
 | Artifact | Assertion |
 |----------|-----------|

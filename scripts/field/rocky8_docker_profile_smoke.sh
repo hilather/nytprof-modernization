@@ -61,6 +61,35 @@ if ! docker info >/dev/null 2>&1; then
   exit 0
 fi
 
+# Chicken-and-egg: a v* push starts this job before Release EL8 RPM has
+# attached the new NVR. Missing RPM must SKIP, not fail the CI matrix.
+smoke_rpm_available() {
+  if [[ -n "${NYTPROF_DEMO_RPM:-}" && -f "${NYTPROF_DEMO_RPM}" ]]; then
+    return 0
+  fi
+  local name tag url
+  name="$(sed -n 's/^RPM_NAME="\([^"]*\)".*/\1/p' "$DEMO" | head -1)"
+  [[ -n "$name" ]] || return 1
+  if [[ -f "$ROOT/dist/el8/$name" ]]; then
+    return 0
+  fi
+  tag="${NYTPROF_DEMO_RELEASE:-}"
+  if [[ -z "$tag" ]]; then
+    tag="$(sed -n 's/.*NYTPROF_DEMO_RELEASE:-\([^}]*\)}.*/\1/p' "$DEMO" | head -1)"
+  fi
+  [[ -n "$tag" && -n "$name" ]] || return 1
+  url="https://github.com/hilather/nytprof-modernization/releases/download/${tag}/${name}"
+  if command -v curl >/dev/null 2>&1; then
+    curl -fsIL --max-time 15 "$url" >/dev/null 2>&1 && return 0
+  fi
+  return 1
+}
+if ! smoke_rpm_available; then
+  skip "testdrive RPM not on disk and not on GitHub Release yet — docker half not run"
+  ok "rocky8_docker_profile_smoke host checks (rpm SKIP)"
+  exit 0
+fi
+
 PACK="$TMP_HOST/lab"
 log() { printf '%s\n' "$*"; }
 log "=== Rocky 8 docker lab: $DEMO --lab --engine both --out $PACK ==="
