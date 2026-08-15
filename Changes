@@ -1,11 +1,12 @@
 Revision history for NYTProfM (product modernization)
 
 6.15  2026-08-15
-        v0.2.9 testdrive: RPM 6.15-4 refreshes the bundled EL8 nytprofm-cli
+        v0.2.10 testdrive: RPM 6.15-4 refreshes the bundled EL8 nytprofm-cli
         so the v0.2.8 HTML v2 visual refresh (carded tables, dark mode,
         flame polish) actually ships; release workflow now fails closed on
-        a stale prebuilt via nytprof-cli.source-sha256. No collector /
-        wire / default changes vs v0.2.8.
+        a stale prebuilt via nytprof-cli.source-sha256 (LC_ALL=C pinned —
+        locale-dependent sort burned the v0.2.9 tag, never released).
+        No collector / wire / default changes vs v0.2.8.
 
         v0.2.8 testdrive: omitted compress is zlib-6; opt-in durable=1
         sealed publish; collection-only RPM 6.15-3 (nytprofm-cli, sits

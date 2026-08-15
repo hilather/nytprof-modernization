@@ -9,7 +9,11 @@
 #
 # Hashes the working tree (tracked + untracked, not ignored) because the docker
 # build mounts the working tree, not a git ref. Output: one hex sha256 line.
+#
+# LC_ALL=C is load-bearing: filename sort order under UTF-8 locales differs
+# from CI's POSIX locale, which changes the listing hash (burned tag v0.2.9).
 set -euo pipefail
+export LC_ALL=C
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 cd "$ROOT"
 [[ -d "$ROOT/crates/nytprof-cli" ]] || { echo "ERROR: missing crates/nytprof-cli" >&2; exit 1; }
