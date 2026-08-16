@@ -17,8 +17,8 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 IMAGE="${NYTPROF_EL8_IMAGE:-rockylinux:8}"
 DEFAULT_OUT="${HOME}/Downloads/nytprof-rocky8-demo"
-RPM_NAME="perl-NYTProfM-6.15-3.el8.x86_64.rpm"
-RELEASE_TAG="${NYTPROF_DEMO_RELEASE:-v0.2.8}"
+RPM_NAME="perl-NYTProfM-6.15-4.el8.x86_64.rpm"
+RELEASE_TAG="${NYTPROF_DEMO_RELEASE:-v0.2.10}"
 RELEASE_RPM_URL="${NYTPROF_DEMO_RPM_URL:-https://github.com/hilather/nytprof-modernization/releases/download/${RELEASE_TAG}/${RPM_NAME}}"
 ACK_URL="${NYTPROF_DEMO_ACK_URL:-https://beyondgrep.com/ack-v3.7.0}"
 ACK_FALLBACK_URL="${NYTPROF_DEMO_ACK_FALLBACK_URL:-https://raw.githubusercontent.com/beyondgrep/ack3/3.7.0/ack}"
@@ -399,12 +399,16 @@ run_oracle_inside() {
   mkdir -p "$prefix"
   if [[ ! -x "$prefix/bin/nytprofhtml" || ! -f "$prefix/lib/perl5/Devel/NYTProf.pm" ]]; then
     log "oracle: building Devel::NYTProf 6.15 into $prefix"
-    rm -rf /tmp/Devel-NYTProf-6.15
+    rm -rf /tmp/Devel-NYTProf-6.15 /tmp/devel-nytprof-6.15
     tar -xzf "$archive" -C /tmp \
       >"$OUT/meta/oracle-extract.log" 2>&1 \
       || fail "oracle tar extract failed"
+    local srcdir
+    srcdir="$(find /tmp -maxdepth 1 -type d \( -name 'Devel-NYTProf-6.15' -o -name 'devel-nytprof-6.15' \) | head -1)"
+    [[ -n "$srcdir" && -f "$srcdir/Makefile.PL" ]] \
+      || fail "oracle extract missing Makefile.PL (see meta/oracle-extract.log)"
     (
-      cd /tmp/Devel-NYTProf-6.15
+      cd "$srcdir"
       perl Makefile.PL INSTALL_BASE="$prefix"
       make
       make install
