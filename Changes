@@ -1,6 +1,14 @@
 Revision history for NYTProfM (product modernization)
 
 6.15  2026-08-15
+        v0.2.11 testdrive: flame default-on — nytprof-cli html emits the
+        call-tree flame (all_stacks_by_time.svg/.folded + inlined index
+        section) unless --no-flame, matching oracle nytprofhtml ('flame!'
+        defaults to 1). Profiles with no call edges skip flame artifacts
+        (oracle no-calls parity). Library HtmlRenderOptions::default()
+        unchanged (flame off). RPM 6.15-5.
+
+6.15  2026-08-15
         v0.2.10 testdrive: RPM 6.15-4 refreshes the bundled EL8 nytprofm-cli
         so the v0.2.8 HTML v2 visual refresh (carded tables, dark mode,
         flame polish) actually ships; release workflow now fails closed on

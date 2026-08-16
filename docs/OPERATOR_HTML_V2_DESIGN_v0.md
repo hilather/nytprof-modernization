@@ -102,7 +102,7 @@ nytprofhtml -o "$OUT/html" -f "$OUT/nytprof.out"
 | Pixel-perfect / byte-identical oracle DOM | Charter + ADR-0011 already rejected clone |
 | Oracle `{safe}-{fid}-line.html` filenames | Inventory **WAIVE**; keep `file-<fid>.html` + `source.html` |
 | Block/sub page modes (`*-block.html` / `*-sub.html`) | Still **WAIVE**; “line view” chrome may be static text |
-| Graphviz `.dot`, treemap, default-on flame | Still **WAIVE** / A03 stays **opt-in `--flame`** |
+| Graphviz `.dot`, treemap | Still **WAIVE** (flame default-on superseded 2026-08-15 — see KD-FLAME) |
 | `--open`, exact `-d`, `--mergeevals`, oracle footer branding | Still **WAIVE** (footer may say NYTProfM / native v2 without cloning Tim Bunce blurb) |
 | Flip `collection_default` or claim COL-007 / v6 writer | Binding |
 | Fix product opcode / discount math so native `tokenize` excl matches 6.15 | Collector residual (see Honesty); look/feel must not invent times |
@@ -127,7 +127,7 @@ nytprofhtml -o "$OUT/html" -f "$OUT/nytprof.out"
 | **KD-COLS** | Index/excl/per-file sub tables become **Calls, P, F, Exclusive Time, Inclusive Time, Subroutine**. `returns` maps to Calls. v2a **P** = distinct caller **names** (or `CallEdgeTotal.sites` when that is closer — document which). **F** = distinct caller fids from `sub_defs`. Neither is oracle “Places” (distinct call **sites**; live `CORE:print` is P=2 from two RUNTIME lines, name-count P=1). | Navigation columns. Approximate P/F until a non-stub site map exists. |
 | **KD-CALLS** | Six-column Calls / Time-in-subs stay **`—`** until a site is **usable**. A site is unusable if `(fid,line)==(1,1)` **unless** that caller’s `sub_def` actually starts at fid 1 line 1. If all non-opcode sites collapse to stub `(1,1)`, omit `.calls` entirely. Do **not** advertise oracle-like call-in/out on product attach while `emit_sub_callers(1,1,…)` remains. PR-7 is **optional** until attach stops stubbing. | Product writer hard-codes `(1,1)`; fid 1 on Rocky is `warnings.pm`. |
 | **KD-JS** | One script, `nytprof-sort.js`. Optional tiny `nytprof-nav.js` is **rejected** unless sort file exceeds ~8 KB; prefer extending sort + CSS-only chrome. | Smaller, one CSP surface. |
-| **KD-FLAME** | Flame remains **opt-in `--flame`** (A03). When on, embed under `div.flamegraph` **between** summary and `#subs_table` (oracle order). Default-off. | Do not match 6.15 default-on flame. |
+| **KD-FLAME** | Flame remains **opt-in `--flame`** (A03). When on, embed under `div.flamegraph` **between** summary and `#subs_table` (oracle order). Default-off. | Do not match 6.15 default-on flame. **Superseded 2026-08-15:** user direction flips the CLI to oracle parity — flame **on by default**, `--no-flame` opts out (library `HtmlRenderOptions::default()` unchanged). See `html-optional-flame-mvp-v0.md` amendment. |
 | **KD-LAYOUT** | Frozen host output (closes OQ-1). `--engine native`: unchanged `$OUT/html` + `$OUT/nytprof.out` + `$OUT/meta`. `--engine oracle`: `$OUT/oracle/{nytprof.out,html,meta}` only — **never** overwrite native `html/`. `--engine both`: `$OUT/{native,oracle}/` then **migrate-then-link** so `$OUT/html` and `$OUT/meta` become **symlinks** to `native/html` and `native/meta` (plus `ln -sfn` for the `nytprof.out` **file**). Raw `ln -sfn native/html $OUT/html` is **not** sufficient when `$OUT/html` is an existing directory (GNU `ln -sfn` nests `$OUT/html/html`). | Today’s smoke hard-requires `$PACK/nytprof.out`, `$PACK/html/index.html`, `$PACK/meta/timings.txt`. Pre-KD-LAYOUT trees (`~/Downloads/nytprof-rocky8-demo`) have real dirs. |
 | **KD-DOCKER** | Two containers, one host wrapper: `--engine native\|oracle\|both` (operator default `native`; smoke `--both`). Oracle container **builds 6.15 from the committed archive** into `/opt/nytprof-oracle`. Bind-mount **only** the archive tarball, the scanner script, shared corpus, and optional vendor `File::Which` — **never the repo root**. Construct `PERL5LIB` as a literal `/opt/nytprof-oracle/...` inside the container. **Do not** inherit host `PERL5LIB`. **Do not** `source tools/oracle/env.sh` in docker. Fail closed if `PERL5LIB` contains `crates` **or** `baseline/6.15/install`. Cache `/opt/nytprof-oracle` in a named volume (or derived image tagged by archive SHA). Native still rebuilds XS inside Rocky from an explicit `/src` mount on the **native** container only. | Host pin `.so` is glibc-incompatible with Rocky; repo-root mount is the copy-paste isolation failure mode. |
 | **KD-SKIP** | Honest `SKIP:` when docker/image unavailable. Oracle compile failure → `SKIP` oracle half (do not fake `index.html`). Not in `offline_gate`. GHA `rocky8-docker-lab` timeout **≥45** minutes, or split oracle/native jobs. | Cold `yum` + two XS compiles routinely exceed 20–35 minutes. |
@@ -188,7 +188,7 @@ flowchart TB
 | Heat | cell `c0`–`c3` `#ffb3b3`…`#B4ffB4` | row `heat-*` (already red-hot `#e06060`) | cell `heat-*` retuned to oracle **colors**; **no** `.c0`–`.c3` classes; unused rows uncolored |
 | Time | `4.72s` / `129ms` / `49µs` / `title="%"` | `38.617636s` / `title=ticks` | exact `fmt_time` six-branch + ticks title |
 | Sort | tablesorter + missing floatThead; index `#subs_table` **not** JS-inited | `nytprof-sort.js` first-click asc | extended vanilla; first-click desc; JS default-sort on excl/file + `#filestable` only |
-| Flame | default on (`all_stacks_by_time.svg`) | opt-in `--flame` | stay opt-in; place like oracle when on |
+| Flame | default on (`all_stacks_by_time.svg`) | ~~opt-in `--flame`~~ → **default on, `--no-flame` opt-out (2026-08-15 amendment)** | CLI now matches oracle default; place like oracle |
 | Graphviz / treemap / jit | present / skipped / copied | absent | residual |
 | jquery | shipped + referenced | forbidden | forbidden |
 | `source.html` | n/a (oracle has no alias) | **warnings.pm** | **scanner / application** |
@@ -813,7 +813,7 @@ No fixture golden edits. No v5/v6 wire change.
 | jquery / tablesorter / floatThead | **WAIVE** (M01). Do not close M01. |
 | Graphviz `.dot`, JIT/treemap | **WAIVE** |
 | Block/sub page modes | **WAIVE** (static “line view” only) |
-| Default-on flame / `nytprofcalls` SVG | A03 opt-in only |
+| `nytprofcalls` multi-frame SVG / `flamegraph_subattr.txt` | residual (flame itself default-on since 2026-08-15) |
 | Oracle filenames `{safe}-{fid}-line.html` | **WAIVE** |
 | MAD heat (vs quartile) | residual |
 | Pixel-identical stacked-div header / XHTML | residual; tests must not assert layer count |

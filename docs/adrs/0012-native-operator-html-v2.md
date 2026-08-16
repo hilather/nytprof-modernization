@@ -27,7 +27,7 @@ jquery / tablesorter stay **WAIVE** (M01). Live 6.15 even references `jquery.flo
 
 1. **CLOSE** a new class **Native operator HTML v2**: semantic 6.15 **information architecture and chrome** implemented with CSS custom properties and extended vanilla `nytprof-sort.js`.
 2. **Keep native filenames** (`file-<fid>.html`, `source.html`, `index-subs-excl.html`). Do not emit oracle `{safe}-{fid}-line.html`.
-3. **Leave WAIVE:** jquery, tablesorter, floatThead, Graphviz, treemap, JIT, block/sub page modes, default-on flame, pixel-identical stacked-div header.
+3. **Leave WAIVE:** jquery, tablesorter, floatThead, Graphviz, treemap, JIT, block/sub page modes, default-on flame, pixel-identical stacked-div header. **Amendment 2026-08-15:** default-on flame is un-WAIVEd by user direction for oracle parity — CLI `html` now emits flame unless `--no-flame` (see `docs/schemas/html-optional-flame-mvp-v0.md` amendment; `nytprofcalls` multi-frame stacks remain residual).
 4. **Capability JSON** must not emit `tablesorter: true`.
 5. **`source.html` is the application script** (KD-PRIMARY), not the minimum fid with `source_lines`.
 6. **Call-in/out** is optional (PR-7) and must treat product `(fid,line)==(1,1)` as unusable unless `sub_def` starts there. Calls / Time-in-subs stay `—`, never `0`.

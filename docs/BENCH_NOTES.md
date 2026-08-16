@@ -171,6 +171,8 @@ claim: none
 
 Re-run after collector/decode/report changes and append a new raw block (or `OUT=` file). Compare directionally only; never publish “% faster” from this log.
 
+**2026-08-15 output-size note (flame default-on):** CLI `html` now emits the call-tree flame unless `--no-flame` (oracle `nytprofhtml` parity). On `fixtures/v5/default-calls1`: site total **251,059 → 262,419 B** (+11,360 B ≈ +4.5%; `all_stacks_by_time.svg` 4,854 + `.folded` 354 + index inline section); `index.html` **18,520 → 24,672 B** (+6,152 B ≈ +33% on this small fixture). Bounded by design: sub-pixel frames omitted, labels ≥48 px, depth ≤16; folded is linear in `call_edges`. `--no-flame` reproduces the old footprint exactly.
+
 **2026-08-15 output-size note (HTML report CSS refresh):** `SHARED_STYLE_CSS` was restyled (modern tables/header, `prefers-color-scheme: dark` block). Published `style.css` on `fixtures/v5/default-calls1`: **2,989 → 6,990 bytes** (+4,001 B, one shared asset per multi-file site; single-file summaries inline the same text once). Same-day flame polish (rounded frames, separator stroke, `pointer-events` labels): `all_stacks_by_time.svg` **4,481 → 4,854 bytes** (+373 B ≈ 31 B/frame on this 12-frame fixture; index.html grows the same +373 B from the inlined copy). No fixture or timing change; direction: intentional one-time growth for theming, bounded (constant per site / linear in painted frames, which are themselves capped).
 
 ---

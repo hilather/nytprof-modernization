@@ -272,7 +272,7 @@ This section is the **advertised full R1 MVP product claim** after Phase A. It i
 | Claim level | Status | Meaning |
 |-------------|--------|---------|
 | **Offline R0 / R1-preview ready** | **yes** | Documented surfaces + gates pass when cargo/oracle fixtures are present; dual-path legacy works without Cargo |
-| **Full R1 ready (MVP product scope)** | **yes (scoped)** | ADR-0003 Phase A product cut: OQ-2 FFI/XS **MVP closed**; HTML **A01/A02 closed**; Shared JS/tablesorter **WAIVE** (**PR-M01** / Q4 — not a remaining CLOSE requirement); **A03 flame residual open** (CLOSE path); WAIVE classes residual-honest; **BUILD-006-MVP** + **BUILD-003-DEPTH** closed; public perf **WAIVED**. See non-claims |
+| **Full R1 ready (MVP product scope)** | **yes (scoped)** | ADR-0003 Phase A product cut: OQ-2 FFI/XS **MVP closed**; HTML **A01/A02 closed**; Shared JS/tablesorter **WAIVE** (**PR-M01** / Q4 — not a remaining CLOSE requirement); **A03 flame closed (MVP)** (CLI default-on 2026-08-15; `--no-flame` opt-out; `flamegraph.pl` parity residual); WAIVE classes residual-honest; **BUILD-006-MVP** + **BUILD-003-DEPTH** closed; public perf **WAIVED**. See non-claims |
 | **Full R1 ready (complete residual table)** | **no** | Beyond-MVP rows remain (full RUST-010, COMPAT-007 / pure-XS, flame A03, full BUILD-003/006, oracle DOM) |
 | **Not claimed (binding non-claims)** | — | COL-007 C writer; v6 wire freeze; CLI v6 default; full oracle `nytprofhtml` DOM; full BUILD-003 XS CPAN dual-build; full multi-OS product certification; full RUST-010 beyond open/query/close MVP; public perf SLOs; R3/R4 product default flips; CPAN upload |
 
@@ -282,7 +282,7 @@ This section is the **advertised full R1 MVP product claim** after Phase A. It i
 |----|------|------------|
 | **PR-A01** | Shared CSS + structure | **closed (MVP)** for CSS/structure only — Shared JS/tablesorter **WAIVE** for GA-candidate (**PR-M01** / Q4; not a remaining CLOSE requirement; jquery **not** shipped) |
 | **PR-A02** | `index-subs-excl.html` exclusive ranking | **closed (MVP)** — not oracle DOM |
-| **PR-A03** | Optional flame path | **residual open** — not claimed ready on this cut |
+| **PR-A03** | Flame path | **closed (MVP)** — call-tree SVG + folded from `call_edges`; CLI **default-on** with `--no-flame` opt-out since 2026-08-15 (oracle `flame!`=1 parity); `flamegraph.pl`/`nytprofcalls` multi-frame remains residual |
 | **PR-A04** | ADR-0003 residual policy map | **done** (policy) |
 | **PR-A05** | FFI cdylib open/query/close | **closed (MVP)** — not full RUST-010 |
 | **PR-A06** | Product Data/ReadStream over binary | **closed (MVP)** — not COMPAT-007 / pure-XS |
@@ -323,7 +323,7 @@ cargo test -p nytprof-ffi
 | **Drop-in completion (PR-G01 docs-landed + PR-G02 scaffold + PR-G03a–e emit + PR-G04 attach-MVP)** | DoD + annex + isolation profiles **docs-landed**. G02 **v5-only archive** landed. G03a **debugger load** landed (no `nytprof.out` on trivial `-e`). G03b–G03e **emit-MVP** landed. G04 **attach-MVP** landed (live `-d:NYTProf` default-calls1 **15/3/15**). RPM / CPAN-TRIAL / full BUILD-003 / G05 / G06 **not ready**. See section below. |
 | **Not claimed** | CPAN upload, performance SLOs / **P1–P4 certification**, R3/R4 **runtime** default flips, legacy **component** removal, full nytprofmerge option parity, COL-008 baseline |
 | **Full R1 ready (MVP product scope)** | Per **ADR-0003** + **PR-A10** + **PR-M01**: required OQ-2 CLOSE **A05/A06 MVP** landed; preferred CLOSE **A07/A08 MVP/depth** landed; HTML **A01/A02** closed; Shared JS/tablesorter **WAIVE** (Q4 user-final — not CLOSE); **A03 flame OPEN CLOSE residual**; other WAIVE classes residual-honest; public perf **WAIVED**. Explicit non-claims: COL-007, wire freeze, CLI v6 default, full oracle DOM, full BUILD-003, full RUST-010 beyond MVP, R3–R4 defaults |
-| **Not claimed** | Full multi-OS product certification; CPAN upload; performance SLOs; v6 collection / COL-007 encoder; full RUST-010 ABI freeze / production dylib install; full PERL-004/005 pure-XS / COMPAT-007; full oracle `nytprofhtml` DOM; Shared JS/tablesorter as native-ready (WAIVE, not shipped); native flame site (A03) |
+| **Not claimed** | Full multi-OS product certification; CPAN upload; performance SLOs; v6 collection / COL-007 encoder; full RUST-010 ABI freeze / production dylib install; full PERL-004/005 pure-XS / COMPAT-007; full oracle `nytprofhtml` DOM; Shared JS/tablesorter as native-ready (WAIVE, not shipped); oracle `flamegraph.pl`/`nytprofcalls` flame parity (A03 native flame MVP shipped; CLI default-on 2026-08-15) |
 
 ### Drop-in completion (PR-G01 docs-landed + PR-G02 scaffold + PR-G03a load + PR-G03b/G03c/G03d/G03e emit)
 
@@ -444,7 +444,7 @@ bash tools/oracle/report_semantic_parity.sh
 | `REPORT-HTML-RESIDUAL-INV` | done | [`docs/contracts/REPORT_HTML_RESIDUAL_INVENTORY_v0.md`](https://github.com/hilather/nytprof-modernization/blob/main/docs/contracts/REPORT_HTML_RESIDUAL_INVENTORY_v0.md); lister `tools/oracle/list_html_artifacts.sh` |
 | `REPORT-HTML-SHARED-CSS` | **done** | multi-file `style.css` + single-file inline policy; structure contract [`docs/schemas/html-shared-css-structure-mvp-v0.md`](https://github.com/hilather/nytprof-modernization/blob/main/docs/schemas/html-shared-css-structure-mvp-v0.md); cargo `html_shared_css_structure_contract_default_calls1` (**15/3/15**). Not oracle CSS/JS/tablesorter. **Before COL-007.** |
 | `REPORT-HTML-SUBS-EXCL` | **done** | multi-file `index-subs-excl.html` exclusive ranking; schema [`docs/schemas/html-subs-excl-index-mvp-v0.md`](https://github.com/hilather/nytprof-modernization/blob/main/docs/schemas/html-subs-excl-index-mvp-v0.md); cargo `html_subs_excl_index_default_calls1` (leaf **15** / mid **3**). Inventory Full sub index → **partial**. Not oracle DOM/tablesorter. **Before COL-007.** |
-| `M01-HTML-JS-WAIVE` | **done (docs)** | **PR-M01** / Q4 user-final: Shared JS/tablesorter **WAIVE** for GA-candidate (documentation residual, not CLOSE). jquery **not** shipped. Native HTML remains MVP. Flame A03 remains **OPEN**. |
+| `M01-HTML-JS-WAIVE` | **done (docs)** | **PR-M01** / Q4 user-final: Shared JS/tablesorter **WAIVE** for GA-candidate (documentation residual, not CLOSE). jquery **not** shipped. Native HTML remains MVP. Flame A03 **closed (MVP)**; CLI default-on 2026-08-15 (`--no-flame` opt-out). |
 | `CI-OFFLINE-GATE` | done | `scripts/ci/offline_gate.sh` |
 | `CI-OFFLINE-GATE-EXPAND` | done | offline_gate steps 4–5: `engine_auto_fallback_smoke` + `perl_jsonl_data_all_smoke` (incl. SUB_ENTRY); step **5b** `perl_xs_data_readstream_smoke` (**PERL-XS-DATA-READSTREAM-MVP**) |
 | `CI-QUERY-JSON-GATE` | done | offline_gate step 6: required `perl_query_json_smoke` (QUERY-JSON-MVP / QUERY-JSON-EXPAND golden `--jsonl`; no cargo; after step 5b) |

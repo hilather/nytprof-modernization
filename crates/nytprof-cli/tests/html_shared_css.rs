@@ -62,8 +62,18 @@ fn html_out_dir_writes_style_css_and_lists_on_stderr() {
     let out_str = out.to_string_lossy();
     let fixture_str = fixture.to_string_lossy();
 
+    // --no-flame: this suite contracts the shared page stylesheet
+    // (external style.css, never inlined). The default-on flame SVG carries
+    // its own SVG-scoped <style>, which is a separate contract
+    // (html-optional-flame-mvp-v0.md) and would trip the no-inline assertion.
     let output = Command::new(cli_bin())
-        .args(["html", fixture_str.as_ref(), "--out-dir", out_str.as_ref()])
+        .args([
+            "html",
+            fixture_str.as_ref(),
+            "--out-dir",
+            out_str.as_ref(),
+            "--no-flame",
+        ])
         .output()
         .expect("spawn html --out-dir");
     let code = output.status.code().unwrap_or(-1);

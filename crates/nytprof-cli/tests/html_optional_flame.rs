@@ -1,12 +1,14 @@
-//! PR-A03 / REPORT-HTML-OPTIONAL-FLAME: real CLI `html --flame` publishes
-//! folded + native SVG flame artifacts under `--out-dir` (opt-in only).
+//! PR-A03 / REPORT-HTML-OPTIONAL-FLAME: real CLI `html` publishes folded +
+//! native SVG flame artifacts under `--out-dir`. **Default on** (oracle
+//! `nytprofhtml` parity: its `flame!` option defaults to 1); `--no-flame`
+//! opts out (2026-08-15 contract amendment).
 //!
 //! Schema: `docs/schemas/html-optional-flame-mvp-v0.md`.
 //!
 //! Drives the real `nytprof-dump` binary (`nytprof-cli` package). Asserts
-//! default-calls1: default path has no flame files; `--flame` writes
-//! `all_stacks_by_time.{svg,folded}`, lists them on stderr, index links them,
-//! and leaf/mid **15/3** remain greppable.
+//! default-calls1: default path writes `all_stacks_by_time.{svg,folded}`,
+//! lists them on stderr, and index links them; `--no-flame` has no flame
+//! files or links; leaf/mid **15/3** remain greppable either way.
 
 use std::fs;
 use std::path::PathBuf;
@@ -55,7 +57,7 @@ fn unique_out_dir(label: &str) -> PathBuf {
 }
 
 #[test]
-fn html_out_dir_default_has_no_flame_files() {
+fn html_out_dir_default_writes_flame_files() {
     let fixture = fixture_default_calls1();
     assert!(fixture.is_file(), "missing fixture {}", fixture.display());
     let out = unique_out_dir("default");
@@ -74,22 +76,70 @@ fn html_out_dir_default_has_no_flame_files() {
         "html --out-dir must succeed\nstdout:\n{stdout}\nstderr:\n{stderr}"
     );
 
+    // Default on (oracle nytprofhtml parity): no flags needed for flame.
+    assert!(
+        out.join("all_stacks_by_time.svg").is_file(),
+        "default path must write flame SVG"
+    );
+    assert!(
+        out.join("all_stacks_by_time.folded").is_file(),
+        "default path must write flame folded"
+    );
+    assert!(
+        stderr.contains("all_stacks_by_time.svg"),
+        "stderr must list flame files by default:\n{stderr}"
+    );
+    let index = fs::read_to_string(out.join("index.html")).expect("index");
+    assert!(
+        index.contains("href=\"all_stacks_by_time.svg\"") && index.contains("<svg"),
+        "default index must link + inline flame SVG:\n{index}"
+    );
+
+    let _ = fs::remove_dir_all(&out);
+}
+
+#[test]
+fn html_out_dir_no_flame_writes_no_flame_files() {
+    let fixture = fixture_default_calls1();
+    assert!(fixture.is_file(), "missing fixture {}", fixture.display());
+    let out = unique_out_dir("noflame");
+    let out_str = out.to_string_lossy();
+    let fixture_str = fixture.to_string_lossy();
+
+    let output = Command::new(cli_bin())
+        .args([
+            "html",
+            fixture_str.as_ref(),
+            "--out-dir",
+            out_str.as_ref(),
+            "--no-flame",
+        ])
+        .output()
+        .expect("spawn html --out-dir --no-flame");
+    let code = output.status.code().unwrap_or(-1);
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert_eq!(
+        code, 0,
+        "html --out-dir --no-flame must succeed\nstdout:\n{stdout}\nstderr:\n{stderr}"
+    );
+
     assert!(
         !out.join("all_stacks_by_time.svg").exists(),
-        "default path must not write flame SVG"
+        "--no-flame must not write flame SVG"
     );
     assert!(
         !out.join("all_stacks_by_time.folded").exists(),
-        "default path must not write flame folded"
+        "--no-flame must not write flame folded"
     );
     assert!(
         !stderr.contains("all_stacks_by_time"),
-        "stderr must not list flame files by default:\n{stderr}"
+        "stderr must not list flame files with --no-flame:\n{stderr}"
     );
     let index = fs::read_to_string(out.join("index.html")).expect("index");
     assert!(
         !index.contains("all_stacks_by_time"),
-        "default index must not link flame:\n{index}"
+        "--no-flame index must not link flame:\n{index}"
     );
 
     let _ = fs::remove_dir_all(&out);

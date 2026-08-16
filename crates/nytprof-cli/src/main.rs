@@ -8,7 +8,7 @@
 //! - `aggregates <file>` — alias for `report --json`
 //! - `csv <file>`    — dual-section CSV (subs + call edges); optional `--subs` / `--edges`
 //! - `html <file>`   — HTML summary (stdout, `-o path.html`, or `--out-dir DIR` multi-file);
-//!   optional `--flame` for folded+SVG flame path (off by default)
+//!   flame folded+SVG path on by default (oracle parity); `--no-flame` opts out
 //! - `folded <file>` — folded-stack lines (flamegraph input)
 //! - `callgrind <file>` / `cg <file>` — Callgrind-style text export
 //! - `verify <file>` / `inspect <file>` — decode + model load; short OK summary
@@ -214,7 +214,7 @@ fn print_usage() {
          nytprof-cli html <profile.out>          HTML summary to stdout\n  \
          nytprof-cli html <profile.out> -o path  HTML summary to file\n  \
          nytprof-cli html <profile.out> --out-dir DIR  Multi-file HTML site\n  \
-         nytprof-cli html … --flame              Opt-in flame (folded+SVG; default off)\n  \
+         nytprof-cli html … --no-flame           Opt out of flame (folded+SVG; default on, oracle parity)\n  \
          nytprof-cli folded <profile.out>        Folded-stack lines (flamegraph)\n  \
          nytprof-cli callgrind <profile.out>     Callgrind-style text export\n  \
          nytprof-cli cg <profile.out>            Alias for callgrind\n  \
@@ -1274,8 +1274,10 @@ fn write_stdout_text(text: &str) -> Result<(), Box<dyn std::error::Error>> {
 /// - `html <profile.out> -o path.html` — single-file to path
 /// - `html <profile.out> --out-dir DIR` — multi-file site:
 ///   `index.html` + `index-subs-excl.html` + `file-*.html` + `source.html` + `style.css` + `nytprof-sort.js`
-/// - `html … --flame` — opt-in flame path (folded + native SVG; **default off**)
-/// - `html … --no-flame` — explicit off (default)
+/// - `html …` — flame path (folded + native SVG) is **on by default** (oracle
+///   `nytprofhtml` parity: its `flame!` option defaults to 1)
+/// - `html … --no-flame` — opt out (no flame files or section)
+/// - `html … --flame` — explicit on (accepted; already the default)
 ///
 /// `-o` / `--output` and `--out-dir` / `--dir` are mutually exclusive.
 /// See `docs/schemas/html-multifile-mvp-v0.md`,
@@ -1347,9 +1349,11 @@ fn cmd_html(args: &[String]) -> Result<(), Box<dyn std::error::Error>> {
 
     let path = path.ok_or(usage)?;
     let model = load_model_for_report(path)?;
-    // Default off: no flame bloat unless operators pass --flame.
+    // Default on: oracle nytprofhtml generates flame artifacts unless
+    // --no-flame ('flame!' => 1). CLI mirrors that; the library default stays
+    // off for embedders (HtmlRenderOptions::default()).
     let opts = HtmlRenderOptions {
-        flame: flame.unwrap_or(false),
+        flame: flame.unwrap_or(true),
     };
 
     if let Some(dir) = out_dir {

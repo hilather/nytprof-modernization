@@ -9,7 +9,7 @@
 
 Name:           perl-NYTProfM
 Version:        6.15
-Release:        4%{?dist}
+Release:        5%{?dist}
 Summary:        NYTProfM 6.15 collection (D1-B v5-only default; -d:NYTProfM)
 License:        GPL+ or Artistic
 URL:            https://github.com/hilather/nytprof-modernization
@@ -115,6 +115,10 @@ fi
 %{_bindir}/nytprofm-dump
 
 %changelog
+* Sat Aug 15 2026 nytprof-modernization <devnull@example.com> - 6.15-5
+- Refresh bundled nytprof-cli: html flame graph now default-on (oracle
+  nytprofhtml parity: its flame! option defaults to 1); --no-flame opts out;
+  flame artifacts skipped when the profile has no call edges
 * Sat Aug 15 2026 nytprof-modernization <devnull@example.com> - 6.15-4
 - Refresh bundled nytprof-cli: operator HTML v2 visual refresh (carded tables,
   sticky thead, prefers-color-scheme dark) + flame frame polish actually ship

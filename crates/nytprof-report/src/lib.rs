@@ -663,7 +663,9 @@ pub fn render_html_summary_with_options(
     push_sub_defs_table(&mut out, model, false);
     push_call_edges_table(&mut out, model, false);
     push_top_exclusive_table(&mut out, model, false);
-    if opts.flame {
+    // Skip the section entirely when the profile has no call edges (oracle
+    // nytprofhtml does not flame a no-calls profile either).
+    if opts.flame && !collect_nonzero_call_edges(model).is_empty() {
         push_flame_section_embedded(&mut out, model);
     }
     push_source_heading(&mut out, model, primary_fid);
@@ -760,14 +762,20 @@ pub fn render_html_site_with_options(
         sort_js_filename.as_str(),
     );
 
+    // Oracle parity: nytprofhtml skips flame when the profile has no calls
+    // data — do not ship an empty SVG / folded pair for edge-less profiles.
     let (flame_folded, flame_folded_filename, flame_svg, flame_svg_filename) = if opts.flame {
         let stacks = collect_nonzero_call_edges(model);
-        (
-            Some(folded_from_stacks(&stacks)),
-            Some(FLAME_FOLDED_FILENAME.to_owned()),
-            Some(render_flame_svg(model)),
-            Some(FLAME_SVG_FILENAME.to_owned()),
-        )
+        if stacks.is_empty() {
+            (None, None, None, None)
+        } else {
+            (
+                Some(folded_from_stacks(&stacks)),
+                Some(FLAME_FOLDED_FILENAME.to_owned()),
+                Some(render_flame_svg(model)),
+                Some(FLAME_SVG_FILENAME.to_owned()),
+            )
+        }
     } else {
         (None, None, None, None)
     };
@@ -785,19 +793,17 @@ pub fn render_html_site_with_options(
     push_page_chrome(&mut index, "Performance Profile Index", &subtitle, false);
     index.push_str("<div class=\"body_content\">\n");
     push_index_summary(&mut index, model);
-    if opts.flame {
-        if let (Some(ref folded_name), Some(ref svg_name)) =
-            (&flame_folded_filename, &flame_svg_filename)
-        {
-            index.push_str("<div class=\"flamegraph\">\n");
-            push_flame_section_links(
-                &mut index,
-                folded_name,
-                svg_name,
-                flame_svg.as_deref().unwrap_or(""),
-            );
-            index.push_str("</div>\n");
-        }
+    if let (Some(ref folded_name), Some(ref svg_name)) =
+        (&flame_folded_filename, &flame_svg_filename)
+    {
+        index.push_str("<div class=\"flamegraph\">\n");
+        push_flame_section_links(
+            &mut index,
+            folded_name,
+            svg_name,
+            flame_svg.as_deref().unwrap_or(""),
+        );
+        index.push_str("</div>\n");
     }
     push_subs_table_v2(
         &mut index,
@@ -5002,6 +5008,31 @@ mod tests {
         assert!(
             svg.contains("height=\"92\""),
             "four stacked rows (RUNTIME→scan_file→tokenize→match): {svg}"
+        );
+    }
+
+    #[test]
+    #[test]
+    fn flame_skipped_when_no_call_edges() {
+        // Oracle parity: no calls data ⇒ no flame artifacts or section, even
+        // with flame requested (matters now that the CLI defaults flame on).
+        let model = ProfileModel::default();
+        let opts = HtmlRenderOptions { flame: true };
+        let site = render_html_site_with_options(&model, "nytprof.out", opts);
+        assert!(
+            site.flame_svg_filename.is_none() && site.flame_folded_filename.is_none(),
+            "edge-less profile must not name flame files"
+        );
+        assert!(
+            !site.index_html.contains("all_stacks_by_time")
+                && !site.index_html.contains("class=\"flame\""),
+            "edge-less index must not reference flame:\n{}",
+            site.index_html
+        );
+        let summary = render_html_summary_with_options(&model, "nytprof.out", opts);
+        assert!(
+            !summary.contains("class=\"flame\""),
+            "edge-less single-file must not embed flame section:\n{summary}"
         );
     }
 
