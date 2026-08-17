@@ -1,6 +1,16 @@
 Revision history for NYTProfM (product modernization)
 
 6.15  2026-08-17
+        PR-16: default DB::sub wrap uses C wrap_push/wrap_pop (site,
+        clock, pending-excl, SUB_RETURN/SUB_CALLERS). NYTPROF_WRAP_SLOW=1
+        keeps the old Perl caller+XSUB path as a bench control. Not
+        DI-03 / stock 6.15 XS. Smoke g16_wrap_enter_smoke.sh.
+
+        PR-15: default stmts=1 TIME_LINE from C OP_DBSTATE (not Perl
+        DB::DB). INIT leaves $DB::single=0; last-COP fid pointer cache;
+        skip/goto name cache on DB::sub. Not full opcode / entersub.
+        Smoke g15_dbstate_timeline_smoke.sh.
+
         v0.2.16 testdrive: exclusive = incl − child inclusive; stmts=0
         skips TIME_LINE; ATTRIBUTE application=$0 so HTML is not
         Config_heavy.pl. RPM 6.15-10. Smoke g14_nested_excl_smoke.sh.

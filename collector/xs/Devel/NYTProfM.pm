@@ -26,7 +26,8 @@
 # PR-3    — savesrc default 1: PL_perldb SAVESRC|SAVESRC_NOSUBS via XS
 # (not $^P |= 0x400). finish_profiler emits SRC_LINE + SUB_INFO.
 # PR-7    — Compile-safe start: do not set $DB::single at file= enable.
-# INIT sets it so use/BEGIN compile without DB::DB. DB::sub goto-all
+# INIT chooses C OP_DBSTATE ($DB::single=0) or Perl DB::DB fallback.
+# DB::sub goto-all
 # until INIT; after, goto &$raw for Exporter / Getopt / vars / constant
 # / overload / any ::import / Moo / Moose / Class:: / Rex:: / DateTime::
 # / Memoize:: (not &$raw wrap). Workload wrap must not `eval { &$raw }`:
@@ -90,7 +91,14 @@ $Devel::NYTProfM::PRODUCT_CALLS         = 1;
 $Devel::NYTProfM::PRODUCT_SLOWOPS       = 2;
 $Devel::NYTProfM::PRODUCT_STMTS         = 1;
 $Devel::NYTProfM::PRODUCT_STMT_OPS      = 0;
+$Devel::NYTProfM::PRODUCT_DBSTATE_LINE  = 0;
 $Devel::NYTProfM::PRODUCT_SLOWOPS_OPS   = 0;
+# Bench control only (not an NYTPROF colon option). 1 = old Perl
+# caller(0)+fid XSUB wrap so g16 can measure the C site crossing.
+$Devel::NYTProfM::PRODUCT_WRAP_SLOW =
+  (  defined $ENV{NYTPROF_WRAP_SLOW}
+  && $ENV{NYTPROF_WRAP_SLOW} ne ''
+  && $ENV{NYTPROF_WRAP_SLOW} ne '0' ) ? 1 : 0;
 $Devel::NYTProfM::PRODUCT_SIGEXIT        = '';
 $Devel::NYTProfM::PRODUCT_SIGEXIT_DONE   = 0;
 # PR-3: 6.15 NYTP_OPTf_SAVESRC default on. set_savesrc applies PL_perldb.
@@ -100,11 +108,14 @@ our @product_sub_stack;
 our $product_in_hook = 0;
 # 0 until INIT after file= enable. Compile-time DB::sub must goto so
 # caller-sensitive pragmas (vars/constant/overload/Exporter) see the
-# real caller. Set together with $DB::single in INIT.
+# real caller. Set in INIT with the statement-hook choice ($DB::single
+# or C OP_DBSTATE TIME_LINE).
 our $product_after_init = 0;
 
 # G04 / DI-01 statement hook (enabled only with NYTPROF file= + $^P 0x02).
-# Default (blocks=0): TIME_LINE via shipped nytp_emit_time_line.
+# Default (blocks=0, PR-15): C OP_DBSTATE emits TIME_LINE and INIT leaves
+# $DB::single=0, so this Perl DB::DB is not entered. Fallback if the C
+# hook is not installed: TIME_LINE via shipped nytp_emit_time_line.
 # blocks=1: TIME_BLOCK via fid_for_filename + block_and_sub_lines, unless
 # a targeted DBSTATE/NEXTSTATE slice (PRODUCT_STMT_OPS) already emits.
 # Not full 6.15 opcode / DI-03.
@@ -113,6 +124,7 @@ sub DB {
     return unless $Devel::NYTProfM::PRODUCT_STMTS;
     return if $product_in_hook;
     return if $Devel::NYTProfM::PRODUCT_STMT_OPS;
+    return if $Devel::NYTProfM::PRODUCT_DBSTATE_LINE;
     my ( undef, $file, $line ) = caller;
     $product_in_hook = 1;
     eval {
@@ -192,6 +204,25 @@ sub _product_skip_sub {
 # see DB so `use vars qw($VERSION)` / `use constant` fail under strict.
 # Compile-time calls also goto (`$product_after_init` is 0 until INIT).
 # Never pair this with a pushed stack frame — goto unwinds the pad.
+our %product_sub_disp;    # name => 0 wrap / 1 skip / 2 goto
+
+sub _product_sub_disp {
+    my ($name) = @_;
+    return 1 unless defined $name && length $name;
+    return 1 if ref $name;
+    my $hit = $product_sub_disp{$name};
+    return $hit if defined $hit;
+    my $d = 0;
+    if ( _product_skip_sub($name) ) {
+        $d = 1;
+    }
+    elsif ( _product_needs_goto($name) ) {
+        $d = 2;
+    }
+    $product_sub_disp{$name} = $d;
+    return $d;
+}
+
 sub _product_needs_goto {
     my ($name) = @_;
     return 0 unless defined $name && length $name;
@@ -221,9 +252,8 @@ sub _product_needs_goto {
     return 0;
 }
 
-# Smallest G04 hook: Perl DB::sub + $^P 0x01. Emits SUB_RETURN (A5) and
-# SUB_CALLERS (A7) through shipped DB::emit_* → nytp_emit_*. Not 6.15
-# entersub / opcode TIME_* / XSUB / goto.
+# Smallest G04 hook: Perl DB::sub + $^P 0x01. Default wrap is C
+# wrap_push/wrap_pop → nytp_emit_* (PR-16). Not 6.15 entersub.
 # $DB::sub is a CV ref for BEGIN (and some evals); resolve to
 # Package::BEGIN@line like 6.15.
 sub sub {
@@ -249,52 +279,53 @@ sub sub {
     if (  !$Devel::NYTProfM::PRODUCT_XS_ATTACH
         || $product_in_hook
         || !$product_after_init
-        || _product_skip_sub($called)
-        || _product_needs_goto($called) )
+        || _product_sub_disp($called) )
     {
         die "NYTProfM: \$DB::sub is missing; cannot tail-call\n"
           unless defined $raw && ( ref($raw) || ( !ref($raw) && length $raw ) );
         goto &$raw;
     }
 
-    my $caller =
-      @product_sub_stack
-      ? $product_sub_stack[-1]{name}
-      : 'main::RUNTIME';
-    my ( undef, $cfile, $cline ) = caller(0);
-    $cline ||= 1;
-    my $cfid = 1;
-    if ( defined $cfile && length $cfile ) {
-        $product_in_hook = 1;
-        eval { $cfid = DB::fid_for_filename($cfile) || 1; 1 };
-        $product_in_hook = 0;
-    }
-
-    # Absorb MATCH/PRINT exclusive that ran in the parent since last child.
-    if (@product_sub_stack) {
-        $product_sub_stack[-1]{child_excl} += DB::take_pending_child_excl();
+    if ($Devel::NYTProfM::PRODUCT_WRAP_SLOW) {
+        my $caller =
+          @product_sub_stack
+          ? $product_sub_stack[-1]{name}
+          : 'main::RUNTIME';
+        my ( undef, $cfile, $cline ) = caller(0);
+        $cline ||= 1;
+        my $cfid = 1;
+        if ( defined $cfile && length $cfile ) {
+            $product_in_hook = 1;
+            eval { $cfid = DB::fid_for_filename($cfile) || 1; 1 };
+            $product_in_hook = 0;
+        }
+        if (@product_sub_stack) {
+            $product_sub_stack[-1]{child_excl} +=
+              DB::take_pending_child_excl();
+        }
+        else {
+            DB::take_pending_child_excl();
+        }
+        push @product_sub_stack,
+          {
+            name       => $called,
+            caller     => $caller,
+            t0         => DB::clock_now_ticks(),
+            child_excl => 0,
+            fid        => $cfid,
+            line       => $cline,
+          };
+        if ( $Devel::NYTProfM::PRODUCT_CALLS >= 2 ) {
+            $product_in_hook = 1;
+            eval {
+                DB::emit_sub_entry( $cfid, $cline );
+                1;
+            };
+            $product_in_hook = 0;
+        }
     }
     else {
-        DB::take_pending_child_excl();
-    }
-
-    push @product_sub_stack,
-      {
-        name       => $called,
-        caller     => $caller,
-        t0         => DB::clock_now_ticks(),
-        child_excl => 0,
-        fid        => $cfid,
-        line       => $cline,
-      };
-
-    if ( $Devel::NYTProfM::PRODUCT_CALLS >= 2 ) {
-        $product_in_hook = 1;
-        eval {
-            DB::emit_sub_entry( $cfid, $cline );
-            1;
-        };
-        $product_in_hook = 0;
+        DB::wrap_push($called);
     }
 
     die "NYTProfM: \$DB::sub is missing; cannot wrap\n"
@@ -323,6 +354,10 @@ sub sub {
 }
 
 sub _product_finish_current_frame {
+    if ( !$Devel::NYTProfM::PRODUCT_WRAP_SLOW ) {
+        DB::wrap_pop();
+        return;
+    }
     my $frame     = pop @product_sub_stack;
     my $depth     = @product_sub_stack + 1;
     my $incl      = 0;
@@ -580,6 +615,14 @@ init_profiler();    # G03a: hold in-memory v5 sink — never writes nytprof.out
                 $Devel::NYTProfM::PRODUCT_STMT_OPS = 1;
             }
         }
+        elsif ( $Devel::NYTProfM::PRODUCT_STMTS ) {
+            # Install before the user script compiles so OP_DBSTATE
+            # copies our ppaddr. Stay inactive until INIT.
+            my $st_line = DB::install_product_dbstate_timeline();
+            if ( $st_line == 0 ) {
+                $Devel::NYTProfM::PRODUCT_DBSTATE_LINE = 1;
+            }
+        }
         if (  $Devel::NYTProfM::PRODUCT_SLOWOPS == 2
             && $Devel::NYTProfM::PRODUCT_CALLS >= 1 )
         {
@@ -608,13 +651,32 @@ init_profiler();    # G03a: hold in-memory v5 sink — never writes nytprof.out
     }
 }
 
-# PR-7: statement hooks after compile. $DB::single at file= enable
-# would run DB::DB during use/BEGIN (Getopt::Long $VERSION / Exporter).
-# $^P 0x01|0x02|0x20 stay on from enable; only this bit is deferred.
+# PR-7 / PR-15: statement emit after compile. $DB::single at file=
+# enable would run DB::DB during use/BEGIN (Getopt::Long $VERSION).
+# C OP_DBSTATE is installed at enable (so compile copies op_ppaddr)
+# but stays inactive until INIT. Then $DB::single stays 0.
 INIT {
     if ($Devel::NYTProfM::PRODUCT_XS_ATTACH) {
-        $DB::single           = 1;
-        $product_after_init   = 1;
+        $product_after_init = 1;
+        if ( $Devel::NYTProfM::PRODUCT_DBSTATE_LINE ) {
+            my $st_on = DB::activate_product_dbstate_timeline();
+            if ( $st_on != 0 ) {
+                $Devel::NYTProfM::PRODUCT_DBSTATE_LINE = 0;
+                $DB::single = 1;
+            }
+            else {
+                $DB::single = 0;
+            }
+        }
+        elsif ( $Devel::NYTProfM::PRODUCT_STMT_OPS ) {
+            $DB::single = 0;
+        }
+        elsif ( $Devel::NYTProfM::PRODUCT_STMTS ) {
+            $DB::single = 1;
+        }
+        else {
+            $DB::single = 0;
+        }
         if ($Devel::NYTProfM::PRODUCT_SLOWOPS_OPS) {
             DB::rebind_stash_slowops('warnings');
         }

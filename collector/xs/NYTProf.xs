@@ -31,6 +31,11 @@
  * PR-9    — Slowop exclusive is folded into the parent Perl frame via
  *           product_pending_child_excl + DB::take_pending_child_excl so
  *           tokenize-shaped excl = incl − children (not ≈ CORE:match).
+ * PR-15   — Default stmts=1 TIME_LINE from OP_DBSTATE (pp_product_dbstate_line)
+ *           + last-COP fid pointer cache. Not NEXTSTATE/UNSTACK (blocks=1).
+ *           INIT leaves $DB::single=0 so Perl DB::DB does not run.
+ * PR-16   — wrap_push / wrap_pop: one C crossing for wrap COP pin +
+ *           fid + clock + pending-excl + SUB_RETURN/SUB_CALLERS.
  *
  * MODULE Devel::NYTProfM; PACKAGE = DB
  * Default link: libnytp_sink_v5.a + -lz only (D1-B).
@@ -90,6 +95,11 @@ product_v5_sink(void)
 /* First-seen fid table (6.15 get_file_id VIA_STMT, no eval fold). */
 static HV *product_fid_map = NULL;
 static UV product_next_fid = 1;
+/* Same-file statement hot path: OutCopFILE pointer is stable per COP. */
+static const char *product_fid_last_pv = NULL;
+static STRLEN product_fid_last_len = 0;
+static UV product_fid_last_id = 0;
+static void product_wrap_reset(void);
 
 /* visit_contexts pin + last_* (6.15 ~1643–1651; counts only, no ticks). */
 static COP *product_pin_cop = NULL;
@@ -424,6 +434,9 @@ product_fid_reset(pTHX)
     if (product_fid_map != NULL) {
         hv_clear(product_fid_map);
     }
+    product_fid_last_pv = NULL;
+    product_fid_last_len = 0;
+    product_fid_last_id = 0;
     product_next_fid = 1;
     product_last_stmt_cop = NULL;
     product_unstack_cop = NULL;
@@ -432,20 +445,12 @@ product_fid_reset(pTHX)
 }
 
 static UV
-product_fid_for_filename(pTHX_ SV *path_sv)
+product_fid_for_pv(pTHX_ const char *pv, STRLEN len)
 {
-    STRLEN len = 0;
-    const char *pv;
     SV **slot;
     UV fid;
 
-    if (path_sv != NULL && SvOK(path_sv)) {
-        pv = SvPVbyte(path_sv, len);
-    } else {
-        pv = "-";
-        len = 1;
-    }
-    if (len == 0) {
+    if (pv == NULL || len == 0) {
         pv = "-";
         len = 1;
     }
@@ -463,6 +468,43 @@ product_fid_for_filename(pTHX_ SV *path_sv)
     }
     (void)hv_store(product_fid_map, pv, (I32)len, newSVuv(fid), 0);
     return fid;
+}
+
+/* OutCopFILE is interned and stable. Do not cache SvPVbyte from
+ * fid_for_filename — that pointer dies with the SV and evicts this hit. */
+static UV
+product_fid_for_file_ptr(pTHX_ const char *pv)
+{
+    UV fid;
+    STRLEN len;
+
+    if (pv == NULL || pv[0] == '\0') {
+        pv = "-";
+    }
+    if (product_fid_last_pv == pv && product_fid_last_id != 0) {
+        return product_fid_last_id;
+    }
+    len = (STRLEN)strlen(pv);
+    fid = product_fid_for_pv(aTHX_ pv, len);
+    product_fid_last_pv = pv;
+    product_fid_last_len = len;
+    product_fid_last_id = fid;
+    return fid;
+}
+
+static UV
+product_fid_for_filename(pTHX_ SV *path_sv)
+{
+    STRLEN len = 0;
+    const char *pv;
+
+    if (path_sv != NULL && SvOK(path_sv)) {
+        pv = SvPVbyte(path_sv, len);
+    } else {
+        pv = "-";
+        len = 1;
+    }
+    return product_fid_for_pv(aTHX_ pv, len);
 }
 
 /* Lookup-only (KD-N). Never emit NEW_FID. Missing → 0. */
@@ -759,6 +801,7 @@ nytp_product_sink_hold(const char *path, int compress_level, int durable)
 
     nytp_product_sink_drop();
     product_fid_reset(aTHX);
+    product_wrap_reset();
     product_durable = durable ? 1 : 0;
     product_compress_level = compress_level;
     if (product_compress_level < 0 || product_compress_level > 9) {
@@ -1094,6 +1137,127 @@ product_db_pin_cop(pTHX)
     }
 }
 
+/* Skip every package-DB frame (DB::sub and this XSUB). Last DB
+ * blk_oldcop is the user entersub site — same as Perl caller(0)
+ * from package DB, without walking names in Perl. */
+#define PRODUCT_WRAP_NAME 256
+
+typedef struct {
+    char called[PRODUCT_WRAP_NAME];
+    char caller[PRODUCT_WRAP_NAME];
+    nytp_ticks t0;
+    double child_excl;
+    UV fid;
+    UV line;
+} product_wrap_frame;
+
+static product_wrap_frame *product_wrap_stack = NULL;
+static int product_wrap_cap = 0;
+static int product_wrap_sp = 0;
+
+static void
+product_wrap_reset(void)
+{
+    product_wrap_sp = 0;
+}
+
+static void
+product_wrap_grow(pTHX)
+{
+    int ncap = product_wrap_cap ? product_wrap_cap * 2 : 64;
+    if (product_wrap_stack == NULL) {
+        Newxz(product_wrap_stack, ncap, product_wrap_frame);
+    } else {
+        Renew(product_wrap_stack, ncap, product_wrap_frame);
+    }
+    product_wrap_cap = ncap;
+}
+
+static void
+product_wrap_copy_name(char *dst, size_t dstlen, const char *src)
+{
+    if (dst == NULL || dstlen == 0)
+        return;
+    if (src == NULL || src[0] == '\0')
+        src = "main::RUNTIME";
+    (void)snprintf(dst, dstlen, "%s", src);
+}
+
+static int
+product_is_debugger_file(const char *file)
+{
+    if (file == NULL || file[0] == '\0')
+        return 0;
+    if (strstr(file, "NYTProfM.pm") != NULL)
+        return 1;
+    if (strstr(file, "NYTProf.xs") != NULL)
+        return 1;
+    return 0;
+}
+
+static int
+product_cv_is_debugger(pTHX_ CV *cv)
+{
+    HV *stash;
+
+    if (cv == NULL)
+        return 0;
+    stash = CvSTASH(cv);
+    if (PL_debstash != NULL && stash == PL_debstash)
+        return 1;
+    if (stash != NULL) {
+        const char *hvname = HvNAME(stash);
+        if (hvname != NULL && hvname[0] == 'D' && hvname[1] == 'B'
+            && hvname[2] == '\0')
+            return 1;
+    }
+    return 0;
+}
+
+static COP *
+product_wrap_pin_cop(pTHX)
+{
+    I32 cxix = cxstack_ix;
+    PERL_CONTEXT *ccstack = cxstack;
+    PERL_SI *top_si = PL_curstackinfo;
+    COP *site = NULL;
+
+    while (1) {
+        while (cxix < 0 && top_si && top_si->si_type != PERLSI_MAIN) {
+            top_si = top_si->si_prev;
+            if (top_si == NULL)
+                return site ? site : PL_curcop;
+            ccstack = top_si->si_cxstack;
+            cxix = top_si->si_cxix;
+        }
+        if (top_si == NULL || cxix < 0
+            || (cxix == 0 && !top_si->si_prev)) {
+            return site ? site : PL_curcop;
+        }
+        {
+            PERL_CONTEXT *cx = &ccstack[cxix];
+            if (CxTYPE(cx) != CXt_SUB) {
+                cxix--;
+                continue;
+            }
+            if (product_cv_is_debugger(aTHX_ cx->blk_sub.cv)) {
+                if (cx->blk_oldcop
+                    && !product_is_debugger_file(
+                            OutCopFILE((COP *)cx->blk_oldcop))) {
+                    site = (COP *)cx->blk_oldcop;
+                }
+                cxix--;
+                continue;
+            }
+            if (site != NULL)
+                return site;
+            if (cx->blk_oldcop)
+                return (COP *)cx->blk_oldcop;
+            return PL_curcop;
+        }
+    }
+}
+
 static void
 product_fill_block_sub(pTHX_ COP *pin, UV exec_line, UV *bl_out, UV *sl_out)
 {
@@ -1135,6 +1299,25 @@ product_emit_time_block_for_cop(pTHX_ COP *cop)
     /* Same last-site clock as TIME_LINE (PR-8); first hit seeds, overflow skips. */
     (void)product_emit_attributed_time_block((nytp_fid)fid, (nytp_line)line,
                                              (nytp_line)bl, (nytp_line)sl);
+}
+
+/* TIME_LINE from COP without a Perl SV / caller() (default stmts=1).
+ * Only installed when stmts=1; do not get_sv PRODUCT_STMTS on this path. */
+static void
+product_emit_time_line_for_cop(pTHX_ COP *cop)
+{
+    const char *file;
+    UV line;
+    UV fid;
+
+    if (product_sink == NULL || cop == NULL)
+        return;
+    file = OutCopFILE(cop);
+    line = (UV)CopLINE(cop);
+    if (line == 0)
+        line = 1;
+    fid = product_fid_for_file_ptr(aTHX_ file);
+    (void)product_emit_attributed_time_line((nytp_fid)fid, (nytp_line)line);
 }
 
 static OP *
@@ -1211,6 +1394,51 @@ product_install_stmt_ops(pTHX)
     PL_ppaddr[OP_LEAVELOOP] = pp_product_stmt;
 #endif
     product_stmt_ops_installed = 1;
+    return 0;
+}
+
+/* Default stmts=1: TIME_LINE on OP_DBSTATE only (same sites as Perl DB::DB).
+ * Do not hook NEXTSTATE/UNSTACK here — that is the blocks=1 780 path.
+ * Install at file= enable so later compile copies our op_ppaddr; stay
+ * inactive until INIT so BEGIN/use do not emit (same as $DB::single=0). */
+static int product_dbstate_line_installed = 0;
+static int product_timeline_active = 0;
+static Perl_ppaddr_t product_orig_pp_dbstate_line = NULL;
+
+static OP *
+pp_product_dbstate_line(pTHX)
+{
+    OP *ret;
+
+    ret = product_orig_pp_dbstate_line ? product_orig_pp_dbstate_line(aTHX)
+                                       : NORMAL;
+    if (product_sink != NULL && product_timeline_active)
+        product_emit_time_line_for_cop(aTHX_ PL_curcop);
+    return ret;
+}
+
+static int
+product_install_dbstate_timeline(pTHX)
+{
+    PERL_UNUSED_CONTEXT;
+    /* blocks=1 already owns OP_DBSTATE for TIME_BLOCK. Do not steal it. */
+    if (product_stmt_ops_installed)
+        return 1;
+    if (product_dbstate_line_installed)
+        return 0;
+    product_orig_pp_dbstate_line = PL_ppaddr[OP_DBSTATE];
+    PL_ppaddr[OP_DBSTATE] = pp_product_dbstate_line;
+    product_dbstate_line_installed = 1;
+    return 0;
+}
+
+static int
+product_activate_dbstate_timeline(pTHX)
+{
+    PERL_UNUSED_CONTEXT;
+    if (!product_dbstate_line_installed)
+        return 1;
+    product_timeline_active = 1;
     return 0;
 }
 
@@ -1549,6 +1777,7 @@ enable_sink_v6(path)
             nytp_status st;
             nytp_product_sink_drop();
             product_fid_reset(aTHX);
+            product_wrap_reset();
             product_sink = nytp_v6_sink_create(path);
             if (product_sink == NULL) {
                 croak("DB::enable_sink_v6: nytp_v6_sink_create(%s) failed",
@@ -1587,6 +1816,110 @@ clock_now_ticks()
             croak("DB::clock_now_ticks: negative ticks");
         }
         RETVAL = (UV)ticks;
+    OUTPUT:
+        RETVAL
+
+int
+wrap_push(called)
+    SV *called
+    PREINIT:
+        product_wrap_frame *fr;
+        COP *pin;
+        const char *file;
+        const char *called_pv;
+        STRLEN called_len = 0;
+        nytp_ticks ticks = 0;
+        nytp_status st;
+        double pending;
+        IV calls;
+    CODE:
+        if (product_wrap_sp >= product_wrap_cap)
+            product_wrap_grow(aTHX);
+        pending = product_take_pending_child_excl();
+        if (product_wrap_sp > 0)
+            product_wrap_stack[product_wrap_sp - 1].child_excl += pending;
+        pin = product_wrap_pin_cop(aTHX);
+        file = pin ? OutCopFILE(pin) : NULL;
+        fr = &product_wrap_stack[product_wrap_sp];
+        fr->line = pin ? (UV)CopLINE(pin) : 1;
+        if (fr->line == 0)
+            fr->line = 1;
+        fr->fid = product_fid_for_file_ptr(aTHX_ file);
+        fr->child_excl = 0.0;
+        if (called != NULL && SvOK(called))
+            called_pv = SvPVbyte(called, called_len);
+        else
+            called_pv = NULL;
+        product_wrap_copy_name(fr->called, sizeof(fr->called), called_pv);
+        if (product_wrap_sp > 0) {
+            product_wrap_copy_name(fr->caller, sizeof(fr->caller),
+                                   product_wrap_stack[product_wrap_sp - 1].called);
+        } else {
+            product_wrap_copy_name(fr->caller, sizeof(fr->caller),
+                                   "main::RUNTIME");
+        }
+        st = nytp_clock_now(&ticks);
+        if (st != NYTP_OK) {
+            croak("DB::wrap_push: nytp_clock_now failed (status=%d)", (int)st);
+        }
+        if (ticks < 0)
+            croak("DB::wrap_push: negative ticks");
+        fr->t0 = ticks;
+        product_wrap_sp++;
+        calls = product_opt_calls(aTHX);
+        if (calls >= 2 && product_sink != NULL) {
+            (void)nytp_emit_sub_entry(product_sink, (nytp_fid)fr->fid,
+                                      (nytp_line)fr->line);
+        }
+        RETVAL = 0;
+    OUTPUT:
+        RETVAL
+
+int
+wrap_pop()
+    PREINIT:
+        product_wrap_frame *fr;
+        nytp_ticks now = 0;
+        nytp_ticks incl_ticks;
+        nytp_status st;
+        double pending;
+        double incl;
+        double excl;
+        int depth;
+    CODE:
+        if (product_wrap_sp <= 0) {
+            RETVAL = 0;
+        } else {
+            pending = product_take_pending_child_excl();
+            st = nytp_clock_now(&now);
+            if (st != NYTP_OK) {
+                croak("DB::wrap_pop: nytp_clock_now failed (status=%d)",
+                      (int)st);
+            }
+            if (now < 0)
+                croak("DB::wrap_pop: negative ticks");
+            fr = &product_wrap_stack[product_wrap_sp - 1];
+            fr->child_excl += pending;
+            incl_ticks = (now >= fr->t0) ? (now - fr->t0) : 0;
+            incl = (double)incl_ticks;
+            excl = incl - fr->child_excl;
+            if (excl < 0.0)
+                excl = 0.0;
+            depth = product_wrap_sp;
+            if (product_wrap_sp > 1)
+                product_wrap_stack[product_wrap_sp - 2].child_excl += incl;
+            product_wrap_sp--;
+            if (product_sink != NULL) {
+                (void)nytp_emit_sub_return(product_sink, (nytp_depth)depth,
+                                           incl, excl,
+                                           nytp_sv_cstr(fr->called));
+                (void)nytp_emit_sub_callers(
+                    product_sink, (nytp_fid)fr->fid, (nytp_line)fr->line, 1U,
+                    incl, excl, 0.0, 0U, nytp_sv_cstr(fr->called),
+                    nytp_sv_cstr(fr->caller));
+            }
+            RETVAL = 0;
+        }
     OUTPUT:
         RETVAL
 
@@ -1679,6 +2012,20 @@ int
 install_product_stmt_ops()
     CODE:
         RETVAL = product_install_stmt_ops(aTHX);
+    OUTPUT:
+        RETVAL
+
+int
+install_product_dbstate_timeline()
+    CODE:
+        RETVAL = product_install_dbstate_timeline(aTHX);
+    OUTPUT:
+        RETVAL
+
+int
+activate_product_dbstate_timeline()
+    CODE:
+        RETVAL = product_activate_dbstate_timeline(aTHX);
     OUTPUT:
         RETVAL
 
@@ -1947,6 +2294,7 @@ finish_profiler()
             }
             nytp_product_sink_drop();
             product_fid_reset(aTHX);
+            product_wrap_reset();
             RETVAL = 1;
         }
     OUTPUT:

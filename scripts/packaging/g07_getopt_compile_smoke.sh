@@ -197,9 +197,12 @@ PL
   cat <<'PL'
 my $x;
 Getopt::Long::GetOptionsFromArray(["--x", "1"], "x=i" => \$x);
-die "DB::single must be 1 after INIT\n" unless $DB::single;
 die "PRODUCT_XS_ATTACH must be 1 when file= is set\n"
   unless $Devel::NYTProfM::PRODUCT_XS_ATTACH;
+die "need C TIME_LINE (PRODUCT_DBSTATE_LINE) or \$DB::single after INIT\n"
+  unless $Devel::NYTProfM::PRODUCT_DBSTATE_LINE || $DB::single;
+die "DB::single must be 0 when C OP_DBSTATE TIME_LINE is installed\n"
+  if $Devel::NYTProfM::PRODUCT_DBSTATE_LINE && $DB::single;
 print "ok\n";
 PL
 } >"$WORKLOAD"

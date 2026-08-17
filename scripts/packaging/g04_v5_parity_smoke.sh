@@ -192,8 +192,16 @@ STAMP_OUT="$(
     my $attach = (defined $Devel::NYTProfM::PRODUCT_XS_ATTACH && $Devel::NYTProfM::PRODUCT_XS_ATTACH) ? 1 : 0;
     print "PRODUCT_XS_LOAD=", $load, "\n";
     print "PRODUCT_XS_ATTACH=", $attach, "\n";
+    my $dbstate = ($Devel::NYTProfM::PRODUCT_DBSTATE_LINE ? 1 : 0);
+    my $single  = ($DB::single ? 1 : 0);
+    print "PRODUCT_DBSTATE_LINE=", $dbstate, "\n";
+    print "DB_single=", $single, "\n";
     die "PRODUCT_XS_LOAD stamp missing\n" unless $load;
     die "PRODUCT_XS_ATTACH must be true when NYTPROF file= is set\n" unless $attach;
+    die "PRODUCT_DBSTATE_LINE must be 1 on default stmts=1 (C TIME_LINE)\n"
+      unless $dbstate;
+    die "DB::single must be 0 when C OP_DBSTATE TIME_LINE is installed\n"
+      if $single;
     print "G04_STAMP_OK\n";
   ' 2>&1
 )"

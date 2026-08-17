@@ -312,6 +312,27 @@ plus same corpus `NYTPROF=file=…:compress=0` native control.
 
 ---
 
+## PR-16 wrap_push / wrap_pop (engineering only)
+
+**Date:** 2026-08-17  
+**Host:** local Linux x86_64  
+**Command:** `./scripts/packaging/g16_wrap_enter_smoke.sh` (dest `collector/build/xs-nytprof`, `stmts=0`, N=120000 leaf wraps, inner-loop `Time::HiRes`; control `NYTPROF_WRAP_SLOW=1` still does Perl `caller(0)` + fid/clock/emit XSUBs).  
+**Samples (g16 smoke captured in-session):** default loops **0.94s / 1.09s** (mean **1.01s**) vs WRAP_SLOW **1.72s**; both default runs `leaf SUB_RETURN=120000`; leaf `SUB_CALLERS` file is `wrap.pl` (not `NYTProfM.pm`).  
+**Direction:** fewer C crossings on the instrumented wrap (COP pin + emit in `wrap_push`/`wrap_pop`) is cheaper than the Perl caller+XSUB control. **Does not** beat 6.15 `entersub`. Not DI-03 / not stock 6.15 XS.  
+**claim:** none
+
+---
+
+## PR-15 C `OP_DBSTATE` TIME_LINE (engineering only)
+
+**Date:** 2026-08-17  
+**What changed:** default `stmts=1` no longer enters Perl `DB::DB` (`caller` + `fid_for_filename` XSUB) on every statement. `TIME_LINE` comes from `pp_product_dbstate_line` after `INIT`; `$DB::single=0`. Last-COP fid pointer cache is CopFILE-only.  
+**Direction:** cheaper than the previous native Perl `DB::DB` path on statement-heavy work. **Does not** automatically beat 6.15 C `entersub` / opcode attach — Perl `DB::sub` wrap remains.  
+**Gates:** `g15_dbstate_timeline_smoke.sh`, `g04_v5_parity_smoke.sh`, `g09_tokenize_excl_smoke.sh`, `di01_blocks_780_smoke.sh` green.  
+**claim:** none
+
+---
+
 ## Out of scope for this note
 
 - CI performance gates (`BENCH-014` continuous monitoring)
