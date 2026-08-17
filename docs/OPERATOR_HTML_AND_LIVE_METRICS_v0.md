@@ -266,7 +266,7 @@ $incl = 0 if $incl < 0;                    # fail-soft one sample
 my $excl  = $incl - $frame->{child_excl};
 $excl = 0 if $excl < 0;
 if (@product_sub_stack) {
-    $product_sub_stack[-1]{child_excl} += $excl;   # credit parent after pop
+    $product_sub_stack[-1]{child_excl} += $incl;   # child inclusive
 }
 DB::emit_sub_return( $depth, $incl, $excl, $called );
 DB::emit_sub_callers( $cfid, $cline || 1, 1, $incl, $excl, 0, 0,
@@ -611,7 +611,7 @@ No schema migration of on-disk profiles. Old product profiles with zero times re
 | **KD-P — PID pair** | **PR-1 emits both** `PID_START` (enable) and `PID_END` (`finish_profiler` after flush). PR-3 does not introduce the pair; it only inserts SRC/SUB_INFO before the existing `PID_END`. | COMPAT-010 + Rocky `verify` `^OK:` go red if `PID_START` lands without `PID_END`. Deferring both to PR-3 is the rejected alternative (would leave PR-1 header-only of attrs, also valid, but we want process bookends with the clock slice). |
 | **KD-N — No NEW_FID after finalize** | After `begin_finalize`, SUB_INFO uses **lookup-only** `product_fid_lookup`. Skip `%DB::sub` rows with no existing fid. Same as 6.15 `get_file_id(..., 0)` + `continue` (~3579–3584). If a fid must be created, emit `NEW_FID` **while ACTIVE**. | `nytp_sink_can_emit` rejects `NEW_FID` in FINALIZING; `product_fid_for_filename` always creates. |
 | **KD-O — Other writers** | PR-1 measures **Perl `DB::DB` + `DB::sub` only**. `product_emit_time_block_for_cop` and `pp_product_slowop` stay visit-1 / 0.0 until PR-8. Rocky / g04 assert **workload** subs (`main::leaf` / `main::tokenize`), not every incl column. | Stmt ops bypass Perl `DB` when installed; scanner regex still has a measured `tokenize` `DB::sub`. Over-claiming “all zeros gone” would fail on `CORE::match`. |
-| **KD-E — Exclusive** | `excl = incl − Σ child excl` on the Perl hash stack. Capture `$caller = $stack[-1]{name}` **before** push; `$depth` after pop; credit parent `child_excl` after pop. Regression: no `HASH(` callers. | Today the stack is name strings; a naive hash rewrite corrupts A7 edges. |
+| **KD-E — Exclusive** | `excl = incl − Σ child inclusive` on the Perl hash stack. Capture `$caller = $stack[-1]{name}` **before** push; `$depth` after pop; credit parent with child **incl** after pop. 3-level smoke [`g14_nested_excl_smoke.sh`](https://github.com/hilather/nytprof-modernization/blob/main/scripts/packaging/g14_nested_excl_smoke.sh). | Crediting child *excl* leaked grandchildren into the parent. |
 | **KD-G — goto / compile-safe** | **PR-7 landed.** Delay `$DB::single=1` until `INIT`; `goto &$raw` for Exporter / Getopt / `vars`. Do **not** convert the entire hook to goto-only (no leavesub ⇒ lose incl). Rocky demo still uses the core-only scanner until ack is retried. | Host Perl 5.38 reproduced the EL8 `$VERSION` abort; `g07_getopt_compile_smoke.sh` is the real entry point. |
 | **KD-J — JS** | Vanilla `nytprof-sort.js` only. **Never** vendor jquery/tablesorter. | User wants sort; M01 still waives jquery; smaller XSS surface; greppable static constant. |
 | **KD-H — Heat** | Quartile rank in Rust. CSS class names **`heat-hot` / `heat-high` / `heat-mid` / `heat-low` only** — **not** oracle `c0`–`c3`. | Tests/`SHARED_STYLE_CSS` need one set; `c0` hottest in oracle would confuse greps. |

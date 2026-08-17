@@ -9,7 +9,7 @@
 
 Name:           perl-NYTProfM
 Version:        6.15
-Release:        9%{?dist}
+Release:        10%{?dist}
 Summary:        NYTProfM 6.15 collection (D1-B v5-only default; -d:NYTProfM)
 License:        GPL+ or Artistic
 URL:            https://github.com/hilather/nytprof-modernization
@@ -115,6 +115,9 @@ fi
 %{_bindir}/nytprofm-dump
 
 %changelog
+* Mon Aug 17 2026 nytprof-modernization <devnull@example.com> - 6.15-10
+- Exclusive = incl − child inclusive; stmts=0 skips TIME_LINE;
+  ATTRIBUTE application=$0 (HTML not Config_heavy.pl); refresh nytprof-cli
 * Mon Aug 17 2026 nytprof-modernization <devnull@example.com> - 6.15-9
 - Attach: do not eval around &$raw (loggers reported NYTProfM.pm:308);
   DESTROY still emits SUB_RETURN if the callee dies

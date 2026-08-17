@@ -2540,10 +2540,23 @@ fn path_basename(path: &str) -> &str {
 }
 
 fn is_inc_ish_path(path: &str) -> bool {
-    path.contains("/lib/perl")
-        || path.contains("site_perl")
-        || path.contains("vendor_perl")
-        || path.contains("/usr/share/perl")
+    let base = path_basename(path);
+    // Bare names from eval/INC without a directory still match core files.
+    if base.eq_ignore_ascii_case("Config_heavy.pl")
+        || base.eq_ignore_ascii_case("Config.pm")
+        || base.eq_ignore_ascii_case("sitecustomize.pl")
+        || base.eq_ignore_ascii_case("warnings.pm")
+    {
+        return true;
+    }
+    let p = path.replace('\\', "/");
+    p.contains("/lib/perl")
+        || p.contains("/lib64/perl")
+        || p.contains("site_perl")
+        || p.contains("vendor_perl")
+        || p.contains("/usr/share/perl")
+        || p.contains("/usr/lib/perl")
+        || p.contains("/usr/lib64/perl")
 }
 
 fn fid_exclusive_ticks(model: &ProfileModel, fid: u32) -> i64 {
@@ -5012,7 +5025,6 @@ mod tests {
     }
 
     #[test]
-    #[test]
     fn flame_skipped_when_no_call_edges() {
         // Oracle parity: no calls data ⇒ no flame artifacts or section, even
         // with flame requested (matters now that the CLI defaults flame on).
@@ -5436,6 +5448,58 @@ mod tests {
         assert_eq!(format_compact_secs(4.72), "4.72s");
         assert_eq!(format_compact_secs(150.0), "150s");
         assert_eq!(format_compact_secs(-0.129), "-129ms");
+    }
+
+    #[test]
+    fn primary_workload_fid_skips_el8_config_heavy() {
+        let mut model = ProfileModel::default();
+        model.files.insert(
+            1,
+            "/usr/lib64/perl5/5.26.3/x86_64-linux-thread-multi/Config_heavy.pl"
+                .to_owned(),
+        );
+        model
+            .files
+            .insert(2, "/home/app/myscript.pl".to_owned());
+        model
+            .source_lines
+            .insert((1, 1), "$Config{archname} = ...".to_owned());
+        model
+            .source_lines
+            .insert((2, 1), "print \"hi\\n\";".to_owned());
+        model.line_totals.insert(
+            (1, 10),
+            nytprof_model::LineTotal {
+                calls: 50_000,
+                ticks: 9_000_000,
+            },
+        );
+        model.line_totals.insert(
+            (2, 1),
+            nytprof_model::LineTotal {
+                calls: 10,
+                ticks: 100,
+            },
+        );
+        assert_eq!(
+            primary_workload_fid(&model),
+            2,
+            "EL8 Config_heavy.pl must not beat the user script"
+        );
+        assert_eq!(application_basename(&model), "myscript.pl");
+        model.files.insert(3, "Config_heavy.pl".to_owned());
+        model.line_totals.insert(
+            (3, 1),
+            nytprof_model::LineTotal {
+                calls: 99_000,
+                ticks: 99_000_000,
+            },
+        );
+        assert_eq!(
+            primary_workload_fid(&model),
+            2,
+            "basename-only Config_heavy.pl must stay INC-ish"
+        );
     }
 
     #[test]

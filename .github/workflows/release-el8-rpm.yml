@@ -51,7 +51,7 @@ jobs:
             scripts/packaging/make_nytprofm_dist.sh
           ./scripts/packaging/build_el8_module_rpm.sh dist/el8
           ls -la dist/el8
-          test -f dist/el8/perl-NYTProfM-6.15-9.el8.x86_64.rpm
+          test -f dist/el8/perl-NYTProfM-6.15-10.el8.x86_64.rpm
 
       - name: Upload RPM artifacts
         uses: actions/upload-artifact@v4
@@ -86,7 +86,7 @@ jobs:
         run: |
           set -euo pipefail
           shopt -s nullglob
-          notes=docs/RELEASE_NOTES_v0.2.15.md
+          notes=docs/RELEASE_NOTES_v0.2.16.md
           test -f "$notes"
           mapfile -t rpms < <(ls -1 dist/el8/perl-NYTProfM-*.rpm)
           test "${#rpms[@]}" -ge 2

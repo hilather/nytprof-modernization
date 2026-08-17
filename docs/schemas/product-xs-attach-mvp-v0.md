@@ -95,6 +95,8 @@
 | `nodebug_stash` GP-safe | **PR-11:** `GvCV` requires a GP. Walk stash slots with `isGV_with_GP` / `product_stash_val_cv`; do not treat `CvROOT` of an XSUB as an `OP*`. Smoke [`g11_nodebug_stash_nogp_smoke.sh`](https://github.com/hilather/nytprof-modernization/blob/main/scripts/packaging/g11_nodebug_stash_nogp_smoke.sh). |
 | Memoize `caller` | **PR-12:** goto `Memoize::`. `memoize('fn')` uses `caller` as the package; wrap looks up `DB::fn` (`Cannot operate on nonexistent function`). Smoke [`g12_memoize_caller_smoke.sh`](https://github.com/hilather/nytprof-modernization/blob/main/scripts/packaging/g12_memoize_caller_smoke.sh). |
 | Logger `caller` | **PR-13:** do not `eval` around `&$raw` (`CXt_EVAL` is visible; package-DB subs are not). DESTROY emits `SUB_RETURN` on die. Smoke [`g13_logger_caller_smoke.sh`](https://github.com/hilather/nytprof-modernization/blob/main/scripts/packaging/g13_logger_caller_smoke.sh). |
+| Nested exclusive | **PR-14:** parent exclusive = incl − Σ child **inclusive**. `stmts=0` skips TIME_LINE. Smoke [`g14_nested_excl_smoke.sh`](https://github.com/hilather/nytprof-modernization/blob/main/scripts/packaging/g14_nested_excl_smoke.sh). |
+| `ATTRIBUTE application` | **$0** at `file=` enable (6.15 `output_header`). HTML primary file / “Profile of …” must not pick `Config_heavy.pl`. |
 | `DB::sub` | Emits `SUB_RETURN` + `SUB_CALLERS` via shipped `DB::emit_*` → `nytp_emit_*` |
 | `DB::emit_sub_callers` | Call **only** shipped `nytp_emit_sub_callers` |
 | `DB::DB` | Emits `TIME_LINE` via shipped `nytp_emit_time_line` |

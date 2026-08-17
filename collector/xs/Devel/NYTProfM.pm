@@ -88,6 +88,7 @@ $Devel::NYTProfM::PRODUCT_FORK_HOOK     = 0;
 $Devel::NYTProfM::PRODUCT_BLOCKS        = 0;
 $Devel::NYTProfM::PRODUCT_CALLS         = 1;
 $Devel::NYTProfM::PRODUCT_SLOWOPS       = 2;
+$Devel::NYTProfM::PRODUCT_STMTS         = 1;
 $Devel::NYTProfM::PRODUCT_STMT_OPS      = 0;
 $Devel::NYTProfM::PRODUCT_SLOWOPS_OPS   = 0;
 $Devel::NYTProfM::PRODUCT_SIGEXIT        = '';
@@ -109,6 +110,7 @@ our $product_after_init = 0;
 # Not full 6.15 opcode / DI-03.
 sub DB {
     return unless $Devel::NYTProfM::PRODUCT_XS_ATTACH;
+    return unless $Devel::NYTProfM::PRODUCT_STMTS;
     return if $product_in_hook;
     return if $Devel::NYTProfM::PRODUCT_STMT_OPS;
     my ( undef, $file, $line ) = caller;
@@ -337,8 +339,10 @@ sub _product_finish_current_frame {
         $frame->{child_excl} += DB::take_pending_child_excl();
         $excl = $incl - ( $frame->{child_excl} || 0 );
         $excl = 0 if $excl < 0;
+        # Exclusive = incl − Σ child *inclusive*. Crediting child excl
+        # leaked grandchildren into the parent (lab_run excl ≈ YAML).
         if (@product_sub_stack) {
-            $product_sub_stack[-1]{child_excl} += $excl;
+            $product_sub_stack[-1]{child_excl} += $incl;
         }
         $site_fid  = $frame->{fid}  || 1;
         $site_line = $frame->{line} || 1;
@@ -472,6 +476,8 @@ sub _product_install_fork_hook {
     # DI-01: stamp blocks/calls/slowops. Honor blocks=1 for TIME_BLOCK.
     # slowops=2 is the 6.15 default — do not fail-closed. slowops=1 is
     # residual until PR-B2 / full opcode. PRINT/MATCH install is PR-B2.
+    my $stmts = _product_int_opt( $opts, 'stmts', 1 );
+    $Devel::NYTProfM::PRODUCT_STMTS = $stmts ? 1 : 0;
     my $blocks = _product_int_opt( $opts, 'blocks', 0 );
     $Devel::NYTProfM::PRODUCT_BLOCKS = $blocks ? 1 : 0;
     my $calls = _product_int_opt( $opts, 'calls', 1 );

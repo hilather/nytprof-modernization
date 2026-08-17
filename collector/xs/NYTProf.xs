@@ -348,10 +348,13 @@ product_emit_attributed_time_block(nytp_fid fid, nytp_line line,
 }
 
 static nytp_status
-product_emit_header_and_pid_start(void)
+product_emit_header_and_pid_start(pTHX)
 {
     char tps[16];
     nytp_status st;
+    SV *app_sv;
+    STRLEN app_len = 0;
+    const char *argv0;
 
     if (product_sink == NULL) {
         return NYTP_ERR_NULL;
@@ -359,6 +362,20 @@ product_emit_header_and_pid_start(void)
     (void)snprintf(tps, sizeof(tps), "%d", NYTP_TICKS_PER_SEC);
     st = nytp_emit_attribute(product_sink, nytp_sv_cstr("ticks_per_sec"),
                              nytp_sv_cstr(tps));
+    if (st != NYTP_OK) {
+        return st;
+    }
+    /* 6.15 output_header: ATTRIBUTE application = $0. Without this the
+     * HTML primary-fid heuristic can pick Config_heavy.pl (EL8
+     * /usr/lib64/perl5/... is not matched by /lib/perl). */
+    app_sv = get_sv("0", 0);
+    argv0 = (app_sv != NULL && SvOK(app_sv)) ? SvPV(app_sv, app_len) : NULL;
+    if (argv0 == NULL || app_len == 0) {
+        argv0 = "-";
+        app_len = 1;
+    }
+    st = nytp_emit_attribute(product_sink, nytp_sv_cstr("application"),
+                             nytp_sv(argv0, app_len, 0));
     if (st != NYTP_OK) {
         return st;
     }
@@ -1466,7 +1483,7 @@ enable_sink(path, compress_level = 0, durable = 0)
                 croak("DB::enable_sink: nytp_v5_sink_create(%s) failed", path);
             }
             product_last_site_reset();
-            RETVAL = (int)product_emit_header_and_pid_start();
+            RETVAL = (int)product_emit_header_and_pid_start(aTHX);
         }
     OUTPUT:
         RETVAL
@@ -1538,7 +1555,7 @@ enable_sink_v6(path)
                       path);
             }
             product_last_site_reset();
-            RETVAL = (int)product_emit_header_and_pid_start();
+            RETVAL = (int)product_emit_header_and_pid_start(aTHX);
         }
 #else
         croak("format=v6 requires v6-enabled build (install v6_collect "

@@ -1,6 +1,10 @@
 Revision history for NYTProfM (product modernization)
 
 6.15  2026-08-17
+        v0.2.16 testdrive: exclusive = incl − child inclusive; stmts=0
+        skips TIME_LINE; ATTRIBUTE application=$0 so HTML is not
+        Config_heavy.pl. RPM 6.15-10. Smoke g14_nested_excl_smoke.sh.
+
         v0.2.15 testdrive: do not eval around &$raw — caller() showed
         NYTProfM.pm on every logger (CXt_EVAL is visible; package-DB
         subs are not). DESTROY still emits SUB_RETURN if the callee
