@@ -100,6 +100,17 @@ run_attach "file=$WORKDIR/som.out" "$WORKDIR/som"
 [[ "$(cat "$WORKDIR/som.rc")" == "0" ]] || fail "slowops omit must not croak: $(cat "$WORKDIR/som.stderr")"
 ok "slowops omit/=2 do not croak"
 
+# --- E4: slowops=3 / full parse; other values fail-closed ---
+run_attach "file=$WORKDIR/s3.out:slowops=3" "$WORKDIR/s3"
+[[ "$(cat "$WORKDIR/s3.rc")" == "0" ]] || fail "slowops=3 must not croak: $(cat "$WORKDIR/s3.stderr")"
+run_attach "file=$WORKDIR/sfull.out:slowops=full" "$WORKDIR/sfull"
+[[ "$(cat "$WORKDIR/sfull.rc")" == "0" ]] || fail "slowops=full must not croak: $(cat "$WORKDIR/sfull.stderr")"
+run_attach "file=$WORKDIR/s4.out:slowops=4" "$WORKDIR/s4"
+[[ "$(cat "$WORKDIR/s4.rc")" != "0" ]] || fail "slowops=4 must fail-closed"
+grep -E -q 'unknown NYTPROF option: slowops' "$WORKDIR/s4.stderr" \
+  || fail "slowops=4 missing unknown-option text"
+ok "slowops=3/full parse; =4 fail-closed"
+
 # --- slowops=0: no CORE: names ---
 run_attach "file=$WORKDIR/s0.out:calls=2:slowops=0" "$WORKDIR/s0"
 [[ "$(cat "$WORKDIR/s0.rc")" == "0" ]] || fail "slowops=0 attach failed: $(cat "$WORKDIR/s0.stderr")"
@@ -124,7 +135,9 @@ perl -e '
   die "bad header\n" unless $hdr && $hdr =~ /^NYTProf 5/;
   my $rest;
   { local $/; $rest = <$fh> // "" }
-  my $z = index($rest, "z");
+  # Tag 'z' + zlib CMF 0x78. Do not take the first 'z' in OPTION strings
+  # (application=.../nytprof-modernization/...).
+  my $z = index($rest, "zx");
   die "no START_DEFLATE z tag after header\n" if $z < 0;
   my $body = substr($rest, $z + 1);
   die "no zlib body after z\n" if length($body) < 2;
@@ -147,6 +160,7 @@ grep -E -q '"tag":[[:space:]]*"TIME_LINE"|"tag":[[:space:]]*"SUB_RETURN"' "$WORK
   || fail "compress=1 dump missing post-deflate events (inflate path)"
 ok "compress=1 live attach: START_DEFLATE + dump/verify inflate"
 
-echo "NOT-YET: findcaller/evals/full slowops.h / S2"
 echo "E3: leave=1 opt-in (default stays 0); see g19_leave_discount_smoke.sh"
+echo "E4: full 6.15 slowops.h is opt-in (slowops=full / =3); default stays PRINT/MATCH"
+echo "NOT-YET: findcaller/evals / S2"
 ok "DI-09 advertised-options subset"

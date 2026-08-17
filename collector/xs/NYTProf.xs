@@ -42,6 +42,8 @@
  * DI-03 E3  — unstatic last-site flush/seed for grafted pp_leave.c.
  *           leave=1 only; default leave stays 0. UNSTACK/LEAVELOOP stay
  *           on pp_product_stmt when PRODUCT_BLOCKS. No NEXTSTATE here.
+ * DI-03 E4  — full 6.15 slowops.h behind slowops=full / =3. Product
+ *           slowops=2 stays PRINT/MATCH (KD-35). slowops=1 fail-closed.
  *
  * MODULE Devel::NYTProfM; PACKAGE = DB
  * Default link: libnytp_sink_v5.a + -lz only (D1-B).
@@ -1451,9 +1453,24 @@ product_activate_dbstate_timeline(pTHX)
 
 /* Thin slowops: OP_PRINT + OP_MATCH only (KD-26/35). Not full slowops.h. */
 static int product_slowops_installed = 0;
+static int product_slowops_full_installed = 0;
 static Perl_ppaddr_t product_orig_pp_print = NULL;
 static Perl_ppaddr_t product_orig_pp_match = NULL;
+static Perl_ppaddr_t product_ppaddr_orig[OP_max];
+static int product_ppaddr_orig_saved = 0;
 static int product_in_slowop = 0;
+
+static void
+product_save_ppaddr_orig(pTHX)
+{
+    PERL_UNUSED_CONTEXT;
+    if (product_ppaddr_orig_saved)
+        return;
+    Copy(PL_ppaddr, product_ppaddr_orig, OP_max, Perl_ppaddr_t);
+    product_ppaddr_orig_saved = 1;
+}
+
+static OP *pp_slowop_profiler(pTHX);
 
 IV
 product_opt_calls(pTHX)
@@ -1548,33 +1565,30 @@ product_fill_slowop_name(pTHX_ U16 type, char *buf, size_t buflen)
     (void)snprintf(buf, buflen, "%s::CORE:%s", pkg, opn);
 }
 
+/* Shared emit for thin PRINT/MATCH and full-table pp_slowop_profiler. */
 static OP *
-pp_product_slowop(pTHX)
+product_profile_one_slowop(pTHX_ Perl_ppaddr_t orig, U16 type)
 {
-    Perl_ppaddr_t orig = NULL;
-    U16 type = PL_op ? PL_op->op_type : 0;
     IV calls;
-    IV slowops;
     char name[256];
     char caller[256];
     UV fid = 1;
     UV line = 1;
     OP *ret;
+    nytp_ticks t0 = 0;
+    nytp_ticks now = 0;
+    nytp_ticks incl = 0;
+    double incl_nv;
+    nytp_status st;
 
-    if (type == OP_PRINT)
-        orig = product_orig_pp_print;
-    else if (type == OP_MATCH)
-        orig = product_orig_pp_match;
-    else
-        orig = product_orig_pp_print;
-
+    if (orig == NULL)
+        return NORMAL;
     if (product_in_slowop || product_sink == NULL)
-        return orig ? orig(aTHX) : NORMAL;
+        return orig(aTHX);
 
-    slowops = product_opt_slowops(aTHX);
     calls = product_opt_calls(aTHX);
-    if (slowops != 2 || calls < 1)
-        return orig ? orig(aTHX) : NORMAL;
+    if (calls < 1)
+        return orig(aTHX);
 
     product_in_slowop = 1;
     product_fill_slowop_name(aTHX_ type, name, sizeof(name));
@@ -1590,43 +1604,94 @@ pp_product_slowop(pTHX)
     }
     if (calls >= 2)
         (void)nytp_emit_sub_entry(product_sink, (nytp_fid)fid, (nytp_line)line);
-    {
-        nytp_ticks t0 = 0;
-        nytp_ticks now = 0;
-        nytp_ticks incl = 0;
-        double incl_nv;
-        nytp_status st;
 
-        /* Same nytp_clock_now as last-site / DB::sub — not a second clock. */
-        st = nytp_clock_now(&t0);
-        ret = orig ? orig(aTHX) : NORMAL;
-        if (st == NYTP_OK && nytp_clock_now(&now) == NYTP_OK) {
-            incl = (now >= t0) ? (now - t0) : 0;
-        }
-        incl_nv = (double)incl;
-        (void)nytp_emit_sub_return(product_sink, (nytp_depth)1, incl_nv,
-                                   incl_nv, nytp_sv_cstr(name));
-        (void)nytp_emit_sub_callers(product_sink, (nytp_fid)fid,
-                                    (nytp_line)line, 1U, incl_nv, incl_nv, 0.0,
-                                    0U, nytp_sv_cstr(name),
-                                    nytp_sv_cstr(caller));
-        /* Opcode credits the current subr_entry; wrap still uses mailbox. */
-        product_credit_child_excl(incl_nv);
+    /* Same nytp_clock_now as last-site / DB::sub — not a second clock. */
+    st = nytp_clock_now(&t0);
+    ret = orig(aTHX);
+    if (st == NYTP_OK && nytp_clock_now(&now) == NYTP_OK) {
+        incl = (now >= t0) ? (now - t0) : 0;
     }
+    incl_nv = (double)incl;
+    (void)nytp_emit_sub_return(product_sink, (nytp_depth)1, incl_nv,
+                               incl_nv, nytp_sv_cstr(name));
+    (void)nytp_emit_sub_callers(product_sink, (nytp_fid)fid,
+                                (nytp_line)line, 1U, incl_nv, incl_nv, 0.0,
+                                0U, nytp_sv_cstr(name),
+                                nytp_sv_cstr(caller));
+    /* Opcode credits the current subr_entry; wrap still uses mailbox. */
+    product_credit_child_excl(incl_nv);
     product_in_slowop = 0;
     return ret;
+}
+
+static OP *
+pp_product_slowop(pTHX)
+{
+    Perl_ppaddr_t orig = NULL;
+    U16 type = PL_op ? PL_op->op_type : 0;
+    IV slowops;
+
+    if (type == OP_PRINT)
+        orig = product_orig_pp_print;
+    else if (type == OP_MATCH)
+        orig = product_orig_pp_match;
+    else
+        orig = product_orig_pp_print;
+
+    if (orig == NULL)
+        return NORMAL;
+
+    slowops = product_opt_slowops(aTHX);
+    if (slowops != 2)
+        return orig(aTHX);
+    return product_profile_one_slowop(aTHX_ orig, type);
+}
+
+/* 6.15 pp_slowop_profiler: run orig op as an xsub-like call. Names stay
+ * pkg::CORE:op (product_fill_slowop_name). Used only when slowops=3. */
+static OP *
+pp_slowop_profiler(pTHX)
+{
+    U16 type = PL_op ? PL_op->op_type : 0;
+    Perl_ppaddr_t orig = NULL;
+    IV slowops;
+
+    if (type < OP_max && product_ppaddr_orig_saved)
+        orig = product_ppaddr_orig[type];
+    if (orig == NULL || orig == pp_slowop_profiler)
+        return NORMAL;
+
+    slowops = product_opt_slowops(aTHX);
+    if (slowops != 3)
+        return orig(aTHX);
+    return product_profile_one_slowop(aTHX_ orig, type);
 }
 
 static int
 product_install_slowops(pTHX)
 {
     PERL_UNUSED_CONTEXT;
-    if (product_slowops_installed)
+    product_save_ppaddr_orig(aTHX);
+    if (product_slowops_installed || product_slowops_full_installed)
         return 0;
-    product_orig_pp_print = PL_ppaddr[OP_PRINT];
+    product_orig_pp_print = product_ppaddr_orig[OP_PRINT];
     PL_ppaddr[OP_PRINT] = pp_product_slowop;
-    product_orig_pp_match = PL_ppaddr[OP_MATCH];
+    product_orig_pp_match = product_ppaddr_orig[OP_MATCH];
     PL_ppaddr[OP_MATCH] = pp_product_slowop;
+    product_slowops_installed = 1;
+    return 0;
+}
+
+static int
+product_install_slowops_full(pTHX)
+{
+    PERL_UNUSED_CONTEXT;
+    product_save_ppaddr_orig(aTHX);
+    if (product_slowops_full_installed)
+        return 0;
+    /* Pin assignments: PL_ppaddr[OP_*] = pp_slowop_profiler. */
+#include "slowops.h"
+    product_slowops_full_installed = 1;
     product_slowops_installed = 1;
     return 0;
 }
@@ -1641,9 +1706,16 @@ product_rebind_op(pTHX_ OP *o)
     PERL_UNUSED_CONTEXT;
     if (o == NULL)
         return;
-    if (o->op_type == OP_PRINT)
+    if (product_slowops_full_installed) {
+        if (o->op_type < OP_max
+            && PL_ppaddr[o->op_type] == pp_slowop_profiler) {
+            o->op_ppaddr = pp_slowop_profiler;
+            if (o->op_type == OP_MATCH)
+                product_rebind_match_hits++;
+        }
+    } else if (o->op_type == OP_PRINT) {
         o->op_ppaddr = pp_product_slowop;
-    else if (o->op_type == OP_MATCH) {
+    } else if (o->op_type == OP_MATCH) {
         o->op_ppaddr = pp_product_slowop;
         product_rebind_match_hits++;
     }
@@ -1669,9 +1741,16 @@ product_rebind_cv(pTHX_ CV *cv)
     /* Execution chain (ck_match may leave MATCH off the kid walk). */
     o = CvSTART(cv);
     for (n = 0; o != NULL && n < 100000; n++, o = o->op_next) {
-        if (o->op_type == OP_PRINT)
+        if (product_slowops_full_installed) {
+            if (o->op_type < OP_max
+                && PL_ppaddr[o->op_type] == pp_slowop_profiler) {
+                o->op_ppaddr = pp_slowop_profiler;
+                if (o->op_type == OP_MATCH)
+                    product_rebind_match_hits++;
+            }
+        } else if (o->op_type == OP_PRINT) {
             o->op_ppaddr = pp_product_slowop;
-        else if (o->op_type == OP_MATCH) {
+        } else if (o->op_type == OP_MATCH) {
             o->op_ppaddr = pp_product_slowop;
             product_rebind_match_hits++;
         }
@@ -2060,6 +2139,13 @@ int
 install_product_slowops()
     CODE:
         RETVAL = product_install_slowops(aTHX);
+    OUTPUT:
+        RETVAL
+
+int
+install_product_slowops_full()
+    CODE:
+        RETVAL = product_install_slowops_full(aTHX);
     OUTPUT:
         RETVAL
 

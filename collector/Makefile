@@ -178,7 +178,7 @@ $(NYTP_C): $(NYTP_XS) | dirs
 		'process_file(filename => "$(NYTP_XS)", output => "$(NYTP_C)", prototypes => 0)'
 
 $(NYTP_O): $(NYTP_C) include/nytp_sink.h include/nytp_sink_v5.h include/nytp_clock.h \
-		include/nytp_fork.h xs/nytprof_pp.h
+		include/nytp_fork.h xs/nytprof_pp.h xs/slowops.h
 	$(CC) $(CPPFLAGS) -Ixs -fPIC -O2 -g \
 		`$(PERL) -MExtUtils::Embed -e ccopts` \
 		-c -o $@ $(NYTP_C)
@@ -234,7 +234,8 @@ $(LIB_V6C): $(OBJ_V5) $(PIC_V6_O) | dirs
 	$(AR) rcs $@ $^
 
 $(NYTP_O_V6): $(NYTP_C) include/nytp_sink.h include/nytp_sink_v5.h \
-		include/nytp_sink_v6.h include/nytp_clock.h xs/nytprof_pp.h
+		include/nytp_sink_v6.h include/nytp_clock.h xs/nytprof_pp.h \
+		xs/slowops.h
 	$(CC) $(CPPFLAGS) -Ixs -fPIC -O2 -g -DNYTPROF_V6_COLLECT \
 		`$(PERL) -MExtUtils::Embed -e ccopts` \
 		-c -o $@ $(NYTP_C)

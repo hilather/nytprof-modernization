@@ -87,7 +87,7 @@ resolve_cc() {
 }
 
 print_residuals() {
-  echo "NOT-YET: full 6.15 opcode/entersub / full slowops.h"
+  echo "E4: full 6.15 slowops.h is opt-in (slowops=full / =3); default stays PRINT/MATCH"
 }
 
 if ! CC_BIN="$(resolve_cc)"; then

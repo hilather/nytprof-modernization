@@ -111,7 +111,7 @@
 
 | Residual | Rule |
 |----------|------|
-| Full 6.15 opcode / `entersub` / XSUB / goto / full `slowops.h` | **Not** grafted. PR-8 measures the **thin** PRINT/MATCH + stmt-ops `TIME_BLOCK` last-site path only. |
+| Full 6.15 opcode / `entersub` / XSUB / goto / full `slowops.h` | Full `slowops.h` is **opt-in** `slowops=full`/`=3` (E4). Product default `slowops=2` stays PRINT/MATCH. Opcode `entersub` remains E1a opt-in. |
 | G05 `format=v6` D1-A / D1-B fail-closed | **Landed** — [`g05_options_format_smoke.sh`](https://github.com/hilather/nytprof-modernization/blob/main/scripts/packaging/g05_options_format_smoke.sh) |
 | G06 fork / `addpid` / mid-deflate continue-in-child | **Residual** |
 | blocks-calls1 line5 **780** | **Not** claimed |

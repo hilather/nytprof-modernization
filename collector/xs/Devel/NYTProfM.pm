@@ -536,8 +536,9 @@ sub _product_install_fork_hook {
       ( defined $addpid && $addpid ne '' && $addpid ne '0' ) ? 1 : 0;
 
     # DI-01: stamp blocks/calls/slowops. Honor blocks=1 for TIME_BLOCK.
-    # slowops=2 is the 6.15 default — do not fail-closed. slowops=1 is
-    # residual until PR-B2 / full opcode. PRINT/MATCH install is PR-B2.
+    # slowops=2 is the 6.15 default — PRINT/MATCH subset (KD-35). Do not
+    # fail-closed on 2. slowops=1 stays residual fail-closed. E4: 3/full
+    # is the explicit full 6.15 table; other values fail-closed.
     my $stmts = _product_int_opt( $opts, 'stmts', 1 );
     $Devel::NYTProfM::PRODUCT_STMTS = $stmts ? 1 : 0;
     my $blocks = _product_int_opt( $opts, 'blocks', 0 );
@@ -547,13 +548,21 @@ sub _product_install_fork_hook {
         die "unknown NYTPROF option: calls\n";
     }
     $Devel::NYTProfM::PRODUCT_CALLS = $calls;
-    my $slowops = _product_int_opt( $opts, 'slowops', 2 );
+    my $slowops;
+    if ( exists $opts->{slowops} && defined $opts->{slowops}
+        && lc( $opts->{slowops} ) eq 'full' )
+    {
+        $slowops = 3;
+    }
+    else {
+        $slowops = _product_int_opt( $opts, 'slowops', 2 );
+    }
     if ( $slowops == 1 ) {
         die "slowops=1 (collapsed CORE:: package) is residual until full "
           . "opcode attach; use default/slowops=2 (PRINT/MATCH subset) or "
           . "slowops=0\n";
     }
-    if ( $slowops != 0 && $slowops != 2 ) {
+    if ( $slowops != 0 && $slowops != 2 && $slowops != 3 ) {
         die "unknown NYTPROF option: slowops\n";
     }
     $Devel::NYTProfM::PRODUCT_SLOWOPS = $slowops;
@@ -701,10 +710,21 @@ init_profiler();    # G03a: hold in-memory v5 sink — never writes nytprof.out
                 $Devel::NYTProfM::PRODUCT_LEAVE_OPS = 1;
             }
         }
-        if (  $Devel::NYTProfM::PRODUCT_SLOWOPS == 2
+        if (  $Devel::NYTProfM::PRODUCT_SLOWOPS == 3
             && $Devel::NYTProfM::PRODUCT_CALLS >= 1 )
         {
-            # Thin PRINT/MATCH only (KD-35). Not full slowops.h / DI-03.
+            # E4: full 6.15 slowops.h. Names stay pkg::CORE:op.
+            my $st_so = DB::install_product_slowops_full();
+            if ( $st_so == 0 ) {
+                $Devel::NYTProfM::PRODUCT_SLOWOPS_OPS = 1;
+            }
+            require warnings;
+            DB::rebind_stash_slowops('warnings');
+        }
+        elsif ( $Devel::NYTProfM::PRODUCT_SLOWOPS == 2
+            && $Devel::NYTProfM::PRODUCT_CALLS >= 1 )
+        {
+            # Thin PRINT/MATCH only (KD-35). Not the default full table.
             my $st_so = DB::install_product_slowops();
             if ( $st_so == 0 ) {
                 $Devel::NYTProfM::PRODUCT_SLOWOPS_OPS = 1;

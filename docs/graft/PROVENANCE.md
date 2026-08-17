@@ -1,6 +1,7 @@
 # Product XS graft provenance
 
-**Status:** E2+E3 — default opcode hooks `OP_ENTERSUB` + `OP_GOTO`; `pp_leave.c` on `nytp_emit_discount` behind `leave=1` (default 0). Wrap list stays `wrap=1` only. DI-03 not fully done (E4 full table opt-in, di02 27 remain).  
+**Status:** E2–E4 — default opcode hooks `OP_ENTERSUB` + `OP_GOTO`; `pp_leave.c` on `nytp_emit_discount` behind `leave=1` (default 0); `slowops.h` full table behind `slowops=full` / `=3` (`slowops=2` stays PRINT/MATCH). Wrap list stays `wrap=1` only. Residual: live di02 27, leave default not 6.15.  
+
 
 **Annex:** [product-xs-graft-annex-v0.md](https://github.com/hilather/nytprof-modernization/blob/main/docs/schemas/product-xs-graft-annex-v0.md) A.1  
 **DI-03 design:** [DI03_OPCODE_ENTERSUB_ATTACH_v0.md](https://github.com/hilather/nytprof-modernization/blob/main/docs/plan/DI03_OPCODE_ENTERSUB_ATTACH_v0.md)  
@@ -41,6 +42,27 @@ Pin `baseline/6.15/src/NYTProf.xs` is **not** present in this tree. Functions we
 | `pp_leave_profiler` ~2940–2946 | `collector/xs/pp_leave.c` (`pp_product_leave`) | E3 |
 | `DB_leave` + `NYTP_write_discount` ~1666–1728 | `collector/xs/pp_leave.c` (`product_db_leave` → last-site flush + `nytp_emit_discount`) | E3 |
 
+## Files copied from the pin (E4)
+
+Pin `baseline/6.15/src/slowops.h` is **not** present / not edited. The table was read from the committed archive `baseline/6.15/archives/Devel-NYTProf-6.15.tar.gz` (`devel-nytprof-6.15/slowops.h`, extracted to a temp dir only — never written into `baseline/`).
+
+| Pin source | Product destination | When |
+|------------|---------------------|------|
+| `slowops.h` (generated Makefile.PL table) | `collector/xs/slowops.h` (provenance header + pin body) | E4 |
+| `pp_slowop_profiler` / `pp_subcall_profiler(is_slowop=1)` ~2637–2640 | `collector/xs/NYTProf.xs` (`pp_slowop_profiler` → shared emit + `product_credit_child_excl`) | E4 |
+
+## Deltas vs pin (E4)
+
+| Delta | Status |
+|-------|--------|
+| Product `slowops=2` stays PRINT/MATCH only (`pp_product_slowop`) | KD-35 / KD-E15 — not a silent full-table flip |
+| `slowops=full` / `=3` installs the copied table | explicit opt-in |
+| `slowops=1` still fail-closed (collapsed `CORE::` package) | unchanged residual |
+| Names stay `pkg::CORE:op` (`product_fill_slowop_name`) | not `CORE::op` |
+| Mailbox stays for wrap; opcode path uses `product_credit_child_excl` | KD-E12 |
+| Orig `PL_ppaddr` snapshot before any hook | needed so full-table PRINT/MATCH keep the real orig after BOOT thin install |
+| Parse accepts `0`, `2`, `3`, string `full`; rejects other values | advertised-options |
+
 ## Deltas vs pin (E1a)
 
 | Delta | Status |
@@ -57,7 +79,7 @@ Pin `baseline/6.15/src/NYTProf.xs` is **not** present in this tree. Functions we
 | Install `OP_ENTERSUB` at `file=`; emit only after INIT | KD-E17 / di02 **27** |
 | Opcode when `PRODUCT_ENTERSUB && !PRODUCT_WRAP`; E1b omit-default is opcode | KD-E01 / KD-E16 |
 | Keep pending-excl mailbox; `product_credit_child_excl` branches | KD-E12 |
-| E1b omits `OP_GOTO` / leave / full `slowops.h` | E2–E4 (E2 landed) |
+| E1b omits `OP_GOTO` / leave / full `slowops.h` | E2–E4 (E2–E4 landed; leave default still 0; full table opt-in) |
 | E2 `goto &CV` only; other gotos run orig | pin pre-condition ~2667–2670 |
 | E2 `subr_entry_ix == -1` → orig only | pin ~2670 |
 | E2 caller_* from copied frame; fid:line from goto COP | pin ~2731–2735 / ~2509–2513 |
@@ -69,7 +91,7 @@ Pin `baseline/6.15/src/NYTProf.xs` is **not** present in this tree. Functions we
 | Last-site flush/seed via `product_emit_time_*_for_cop` (blocks=1 uses `product_fill_block_sub`) | E3; clock stays `nytp_clock_now` inside those helpers |
 | UNSTACK/LEAVELOOP stay on `pp_product_stmt` when `PRODUCT_BLOCKS` | KD-E14 |
 | Leave install only when `leave=1` + `stmts`; emit after INIT | E3 |
-| E3 omits full `slowops.h` / flipping default `leave=1` | E4 / later honesty PR |
+| E4 full table is opt-in `slowops=full`/`=3` only | product `slowops=2` stays PRINT/MATCH |
 
 ## Security backports
 

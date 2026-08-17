@@ -165,7 +165,7 @@ Sources: `baseline/6.15/src/NYTProf.xs` options table (~lines 249–283) + strin
 | `subs` | sub profiling | **work** (G03c) | work | |
 | `calls` | 0/1/2 entry-return | **work** 0/1/2 on primary fixtures | work | XSUB/goto/exception residual OI-003-03 |
 | `leave` | leave correction | **opt-in work** (`leave=1` → DISCOUNT + last-site flush) | work if green else residual | **E3 landed.** Default stays **0** (not 6.15 `leave=1`). UNSTACK/LEAVELOOP stay on stmt-ops when `blocks=1`. Smoke [`g19_leave_discount_smoke.sh`](https://github.com/hilather/nytprof-modernization/blob/main/scripts/packaging/g19_leave_discount_smoke.sh). |
-| `slowops` | slow op profiling | residual | residual or work | fail-closed if unsupported |
+| `slowops` | slow op profiling | **work subset** | **work subset** | omit/`2` PRINT/MATCH; `0` off; `1` fail-closed; `full`/`3` opt-in full table (E4) |
 | `usecputime` | removed in 6.15 | fail-closed / warn like 6.15 | same | 6.15 warns removed |
 | `clock` | clock_id | work default clock | work | platform matrix residual |
 | `trace` | debug trace | work or residual | residual OK | |
