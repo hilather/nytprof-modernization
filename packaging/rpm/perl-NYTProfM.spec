@@ -9,7 +9,7 @@
 
 Name:           perl-NYTProfM
 Version:        6.15
-Release:        5%{?dist}
+Release:        6%{?dist}
 Summary:        NYTProfM 6.15 collection (D1-B v5-only default; -d:NYTProfM)
 License:        GPL+ or Artistic
 URL:            https://github.com/hilather/nytprof-modernization
@@ -115,6 +115,11 @@ fi
 %{_bindir}/nytprofm-dump
 
 %changelog
+* Mon Aug 17 2026 nytprof-modernization <devnull@example.com> - 6.15-6
+- Attach: no CORE::GLOBAL::require wrap; CvNODEBUG hint-magic CVs before
+  $^P 0x01; goto inherited ::import / XSLoader / DynaLoader (DateTime
+  namespace::autoclean, Rex Shared::Var, Fcntl bootstrap)
+- Field: 20-app catalog + 10 diverse top-10 drivers; --app / --engine both
 * Sat Aug 15 2026 nytprof-modernization <devnull@example.com> - 6.15-5
 - Refresh bundled nytprof-cli: html flame graph now default-on (oracle
   nytprofhtml parity: its flame! option defaults to 1); --no-flame opts out;

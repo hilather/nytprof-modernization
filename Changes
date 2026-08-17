@@ -1,5 +1,12 @@
 Revision history for NYTProfM (product modernization)
 
+6.15  2026-08-17
+        v0.2.12 testdrive: attach survival for DateTime/Rex/CPAN graphs —
+        no CORE::GLOBAL::require wrap; CvNODEBUG on BHES/Variable::Magic
+        before $^P 0x01; goto inherited ::import, XSLoader, DynaLoader.
+        20-app catalog + 10 diverse top-10 Docker drivers (--app, --engine
+        both attach-survival vs 6.15). RPM 6.15-6. Not exclusive-time match.
+
 6.15  2026-08-15
         v0.2.11 testdrive: flame default-on — nytprof-cli html emits the
         call-tree flame (all_stacks_by_time.svg/.folded + inlined index

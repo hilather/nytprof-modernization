@@ -11,6 +11,7 @@ Hybrid modernization of [Devel::NYTProf](https://metacpan.org/dist/Devel-NYTProf
 | [`docs/FIRST_SLICE_BOARD.md`](https://github.com/hilather/nytprof-modernization/blob/main/docs/FIRST_SLICE_BOARD.md) | Ordered first-slice work board |
 | [`docs/RELEASE_NOTES_R2_PREVIEW.md`](https://github.com/hilather/nytprof-modernization/blob/main/docs/RELEASE_NOTES_R2_PREVIEW.md) | **R2-preview** packaging notes (v6 **opt-in only**; not R3 / R4) |
 | [`docs/RELEASE_NOTES_R2_STABLE.md`](https://github.com/hilather/nytprof-modernization/blob/main/docs/RELEASE_NOTES_R2_STABLE.md) | **R2-stable** packaging notes (Phase C tools + residual honesty; not R3/R4; public perf waived) |
+| [`docs/RELEASE_NOTES_v0.2.12.md`](https://github.com/hilather/nytprof-modernization/blob/main/docs/RELEASE_NOTES_v0.2.12.md) | **v0.2.12** testdrive: DateTime/Rex attach survival, 20-app catalog, RPM 6.15-6 |
 | [`docs/RELEASE_NOTES_v0.2.8.md`](https://github.com/hilather/nytprof-modernization/blob/main/docs/RELEASE_NOTES_v0.2.8.md) | **v0.2.8** testdrive: zlib-6 default, opt-in durable seals, collection-only RPM 6.15-3 (`nytprofm-cli`) |
 | [`docs/OPERATOR_PROFILE_SIZE_AND_DURABILITY_v0.md`](https://github.com/hilather/nytprof-modernization/blob/main/docs/OPERATOR_PROFILE_SIZE_AND_DURABILITY_v0.md) | Profile size + durability (zlib default, sealed publish, `aggregate=1` ADR-0013) |
 | [`docs/R4_FIELD_WINDOW.md`](https://github.com/hilather/nytprof-modernization/blob/main/docs/R4_FIELD_WINDOW.md) | R4 `format=v6` field-window evidence pack (no runtime flip; PR-E01) |
