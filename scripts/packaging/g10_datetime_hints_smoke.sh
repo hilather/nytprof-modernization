@@ -54,6 +54,16 @@ ok() { printf 'OK: %s\n' "$*"; }
 fail() { printf 'ERROR: %s\n' "$*" >&2; exit 1; }
 fail2() { printf 'ERROR: %s\n' "$*" >&2; exit 2; }
 
+# g17 overlays entersub=1 (this smoke hardcodes file= only).
+nytprof_attach() {
+  local spec="$1"
+  if [[ -n "${NYTPROF_ATTACH_OPTS:-}" ]]; then
+    printf '%s:%s' "$spec" "${NYTPROF_ATTACH_OPTS}"
+  else
+    printf '%s' "$spec"
+  fi
+}
+
 while [[ $# -gt 0 ]]; do
   case "$1" in
     -h|--help)
@@ -179,7 +189,7 @@ echo "running: NYTPROF=file=${PROFILE} perl -d:NYTProfM <no CORE::GLOBAL::requir
 
 set +e
 RUN_OUT="$(
-  cd "$WORKDIR" && NYTPROF="file=${PROFILE}" perl -I"$NYTP_DEST" -d:NYTProfM "$WORKLOAD" 2>&1
+  cd "$WORKDIR" && NYTPROF="$(nytprof_attach "file=${PROFILE}")" perl -I"$NYTP_DEST" -d:NYTProfM "$WORKLOAD" 2>&1
 )"
 RUN_RC=$?
 set -e
@@ -229,7 +239,7 @@ PL
   echo "running: NYTPROF=file=${DT_PROFILE} perl -d:NYTProfM <DateTime::Duration>"
   set +e
   DT_OUT="$(
-    cd "$WORKDIR" && NYTPROF="file=${DT_PROFILE}" perl -I"$NYTP_DEST" -d:NYTProfM "$DT_WORKLOAD" 2>&1
+    cd "$WORKDIR" && NYTPROF="$(nytprof_attach "file=${DT_PROFILE}")" perl -I"$NYTP_DEST" -d:NYTProfM "$DT_WORKLOAD" 2>&1
   )"
   DT_RC=$?
   set -e

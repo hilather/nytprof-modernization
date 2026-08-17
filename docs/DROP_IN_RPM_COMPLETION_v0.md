@@ -459,7 +459,7 @@ sequenceDiagram
 
 ### DI-03 — Opcode / `entersub` attach (milestone E)
 
-**Status:** **in progress, not done.** E0 landed parse/stamp of `wrap` / `entersub` / `use_db_sub` (0/1 only) with **no hook change**. Default attach is still wrap + C `OP_DBSTATE`. Design: [`docs/plan/DI03_OPCODE_ENTERSUB_ATTACH_v0.md`](https://github.com/hilather/nytprof-modernization/blob/main/docs/plan/DI03_OPCODE_ENTERSUB_ATTACH_v0.md). Provenance pin (no files copied in E0): [`docs/graft/PROVENANCE.md`](https://github.com/hilather/nytprof-modernization/blob/main/docs/graft/PROVENANCE.md).
+**Status:** **in progress, not done.** E1a landed opt-in `entersub=1` (`OP_ENTERSUB` → `nytp_emit_*`, emit after INIT). Default attach is still wrap + C `OP_DBSTATE`. `wrap=1` / `use_db_sub=1` still wins. E1b default flip, E2 `OP_GOTO`, and di02 exact **27** (live wrap/opcode **21** after INIT) remain. Design: [`docs/plan/DI03_OPCODE_ENTERSUB_ATTACH_v0.md`](https://github.com/hilather/nytprof-modernization/blob/main/docs/plan/DI03_OPCODE_ENTERSUB_ATTACH_v0.md). Provenance: [`docs/graft/PROVENANCE.md`](https://github.com/hilather/nytprof-modernization/blob/main/docs/graft/PROVENANCE.md).
 
 **When:** after **B-collection** is green and advertised-options residuals are listed. **Not** first GA-candidate.
 
@@ -908,8 +908,8 @@ No v6 wire ID changes (ADR-0006). Product still emits COL-006 v5. New files only
 | `NYTPROF=slowops=` omit/`2` | PRINT/MATCH subset + optional XSUB ENTERSUB (DI-02) |
 | `NYTPROF=slowops=0` | slice off; no CORE: events |
 | `NYTPROF=slowops=1` | fail-closed residual message (not DI-03 croak on `2`) |
-| `NYTPROF=wrap=1` | product wrap-escape stamp (DI-03 E0); **no hook change** (default still wrap + C DBSTATE) |
-| `NYTPROF=entersub=1` | product opcode opt-in stamp (DI-03 E0); **opcode not installed**; wrap wins if both set |
+| `NYTPROF=wrap=1` | product wrap escape (DI-03); `$^P` 0x01 + `wrap_push`; wins over `entersub=1` (default still wrap) |
+| `NYTPROF=entersub=1` | E1a opt-in: install `OP_ENTERSUB`, emit after INIT, `$^P` 0x01 clear; default omit still wrap; wrap wins if both set |
 | `NYTPROF=use_db_sub=1` | **forked synonym for `wrap=1`**, **not** 6.15 stmt `DB::DB` + opcode calls (KD-E11) |
 | `perl Makefile.PL` dist | ships collector + `t/installed_attach.t` (RPM-01) |
 | `full_build003` | `0` until DI-11 |

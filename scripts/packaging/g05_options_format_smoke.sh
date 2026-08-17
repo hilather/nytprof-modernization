@@ -4,7 +4,8 @@
 # Drives real `perl -d:NYTProfM` (product tree, not baseline/6.15/install):
 #   - unknown option fail-closed
 #   - use_db_sub=2 / wrap=2 / entersub=2 fail-closed (0/1 only)
-#   - use_db_sub=1 / wrap=1 / entersub=1 load (stamps 1) with no hook change
+#   - use_db_sub=1 / wrap=1 / wrap=1:entersub=1 stay wrap ($^P 0x01)
+#   - entersub=1 alone installs OP_ENTERSUB ($^P 0x01 clear; emit after INIT)
 #   - format=dual rejected
 #   - D1-B format=v6 fail-closed (v6_collect rebuild message; no NYTPROF6 file)
 #   - default / format=v5 live attach still leaf 15 / mid 3 / mid→leaf 15
@@ -118,8 +119,8 @@ print_residuals() {
   echo "G06 fork/addpid: g06_fork_addpid_smoke.sh"
   echo "NOT-YET: mid-deflate continue-in-child / TEST-018"
   echo "DI-01 blocks=1 780/810: di01_blocks_780_smoke.sh"
-  echo "DI-03 opcode/entersub: in progress, not done (E0 parse/stamp only)"
-  echo "NOT-YET: full 6.15 opcode/entersub install / DI-02 SUB_ENTRY 27"
+  echo "DI-03 opcode/entersub: E1a opt-in landed; default still wrap (not E1b)"
+  echo "NOT-YET: E1b default flip / E2 GOTO / DI-02 SUB_ENTRY 27"
   echo "NOT-YET: PRODUCT-V6-COLLECT-EL8 / CPAN-TRIAL / EL8 RPM"
 }
 
@@ -307,7 +308,7 @@ fi
 grep -F -q 'PRODUCT_V6_COLLECT=0' <<<"$STAMP_B" || fail "D1-B PRODUCT_V6_COLLECT must be 0"
 ok "D1-B PRODUCT_V6_COLLECT=0"
 
-# DI-03 E0: default stamps 0; =1 stamps 1; attach stays wrap + C DBSTATE.
+# DI-03 E1a: wrap path keeps $^P 0x01; entersub=1 alone installs opcode.
 assert_attach_stamps() {
   local label="$1"
   local nytprof="$2"
@@ -315,6 +316,13 @@ assert_attach_stamps() {
   local want_wrap="$4"
   local want_ent="$5"
   local profile="$6"
+  # wrap=1 / use_db_sub=1 wins; omit-entersub default is wrap.
+  local want_psub=1
+  local want_ops=0
+  if [[ "$want_wrap" == "0" && "$want_ent" == "1" ]]; then
+    want_psub=0
+    want_ops=1
+  fi
   set +e
   local out rc
   out="$(
@@ -324,12 +332,11 @@ assert_attach_stamps() {
       print "PRODUCT_USE_DB_SUB=", ($Devel::NYTProfM::PRODUCT_USE_DB_SUB ? 1 : 0), "\n";
       print "PRODUCT_WRAP=", ($Devel::NYTProfM::PRODUCT_WRAP ? 1 : 0), "\n";
       print "PRODUCT_ENTERSUB=", ($Devel::NYTProfM::PRODUCT_ENTERSUB ? 1 : 0), "\n";
+      print "PRODUCT_ENTERSUB_OPS=", ($Devel::NYTProfM::PRODUCT_ENTERSUB_OPS ? 1 : 0), "\n";
       print "P_SUB=", (($^P & 0x01) ? 1 : 0), "\n";
       print "DBSTATE_LINE=", ($Devel::NYTProfM::PRODUCT_DBSTATE_LINE ? 1 : 0), "\n";
       print "XS_ATTACH=", ($Devel::NYTProfM::PRODUCT_XS_ATTACH ? 1 : 0), "\n";
-      if (DB->can("install_product_entersub")) {
-        die "E0 must not expose DB::install_product_entersub\n";
-      }
+      print "HAS_INSTALL=", (DB->can("install_product_entersub") ? 1 : 0), "\n";
       print "STAMP_OK\n";
     ' 2>&1
   )"
@@ -348,8 +355,14 @@ assert_attach_stamps() {
     || fail "$label: PRODUCT_WRAP want $want_wrap"
   grep -F -q "PRODUCT_ENTERSUB=${want_ent}" <<<"$out" \
     || fail "$label: PRODUCT_ENTERSUB want $want_ent"
-  grep -F -q 'P_SUB=1' <<<"$out" \
-    || fail "$label: PERLDBf_SUB (0x01) must stay on (wrap attach unchanged)"
+  grep -F -q "P_SUB=${want_psub}" <<<"$out" \
+    || fail "$label: PERLDBf_SUB (0x01) want $want_psub"
+  grep -F -q "PRODUCT_ENTERSUB_OPS=${want_ops}" <<<"$out" \
+    || fail "$label: PRODUCT_ENTERSUB_OPS want $want_ops"
+  if [[ "$want_ops" == "1" ]]; then
+    grep -F -q 'HAS_INSTALL=1' <<<"$out" \
+      || fail "$label: entersub=1 must expose DB::install_product_entersub"
+  fi
   grep -F -q 'DBSTATE_LINE=1' <<<"$out" \
     || fail "$label: C OP_DBSTATE must stay installed"
   grep -F -q 'XS_ATTACH=1' <<<"$out" \
@@ -359,7 +372,11 @@ assert_attach_stamps() {
   local magic
   magic="$(head -c 9 "$profile" || true)"
   [[ "$magic" == "NYTProf 5" ]] || fail "$label: want NYTProf 5 (got $(printf %q "$magic"))"
-  ok "$label: stamps + wrap/DBSTATE attach unchanged"
+  if [[ "$want_ops" == "1" ]]; then
+    ok "$label: stamps + opcode attach (P_SUB=0 OPS=1)"
+  else
+    ok "$label: stamps + wrap attach (P_SUB=1 OPS=0)"
+  fi
 }
 
 assert_attach_stamps "default stamps 0" \
@@ -426,7 +443,7 @@ assert_v5_parity "format=v5" "format=v5:file=${WORKDIR}/v5.nytprof" \
 assert_v5_parity "stmts=1:file=" "stmts=1:file=${WORKDIR}/stmts.nytprof" \
   "$WORKDIR/stmts.nytprof" "$NYTP_DEST"
 
-# DI-03 E0: wrap=1 + entersub=1 must not change attach counts (no opcode yet).
+# wrap=1 wins: 15/3/15 still holds when both flags are set.
 assert_v5_parity "wrap=1:entersub=1" \
   "wrap=1:entersub=1:file=${WORKDIR}/wrap-entersub.nytprof" \
   "$WORKDIR/wrap-entersub.nytprof" "$NYTP_DEST"

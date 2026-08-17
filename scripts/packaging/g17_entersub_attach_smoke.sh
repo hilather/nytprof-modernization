@@ -2,10 +2,10 @@
 # DI-03 E1a — Opcode OP_ENTERSUB behind NYTPROF entersub=1.
 #
 # Requires entersub=1 (does not flip the product default). Re-drives
-# g09 tokenize excl, g14 3-level remainder, and di02 exact 27 under
-# NYTPROF_ATTACH_OPTS=entersub=1. Own attach: opcode installed, $^P
-# 0x01 clear, no DB::sub on the leaf stack, no double leaf SUB_RETURN,
-# unit-ratio ~1 (call_edges mid→leaf excl / leaf SUB_RETURN excl).
+# g09 tokenize excl, g14 3-level remainder, di02, and g12 (caller)
+# under NYTPROF_ATTACH_OPTS=entersub=1. Own attach: opcode installed,
+# $^P 0x01 clear, wrap=1:entersub=1 wins (OPS=0, $^P 0x01), no DB::sub
+# on the leaf stack, no double leaf SUB_RETURN, unit-ratio ~1.
 #
 # g16 / t/wrap_enter_attach.t stay default wrap. collection_default v5.
 # Never crates/. Honest skip without CC/XS.
@@ -184,6 +184,36 @@ grep -q '^G17_DBSUB_ON_STACK=0$' <<<"$STACK_OUT" \
   || fail "DB::sub must not appear on the leaf call stack"
 ok "opcode installed; \$^P 0x01 clear; no DB::sub on leaf stack"
 
+# wrap=1 wins over entersub=1; omit-entersub default stays wrap.
+probe_wrap_path() {
+  local label="$1"
+  local nytprof="$2"
+  local pl="$WORKDIR/${label}.pl"
+  cat >"$pl" <<'END_WP'
+use strict;
+use warnings;
+print "G17_P_BIT01=", (($^P & 0x01) ? 1 : 0), "\n";
+print "G17_ENTERSUB_OPS=", ($Devel::NYTProfM::PRODUCT_ENTERSUB_OPS ? 1 : 0), "\n";
+print "G17_WRAP=", ($Devel::NYTProfM::PRODUCT_WRAP ? 1 : 0), "\n";
+print "G17_INSTALLED=", (eval { DB::entersub_is_installed() } ? 1 : 0), "\n";
+END_WP
+  set +e
+  local out rc
+  out="$(
+    cd "$WORKDIR" && NYTPROF="$nytprof" perl -I"$NYTP_DEST" -d:NYTProfM "$pl" 2>&1
+  )"
+  rc=$?
+  set -e
+  printf '%s\n' "$out"
+  [[ "$rc" -eq 0 ]] || fail "$label probe exited $rc"
+  grep -q '^G17_P_BIT01=1$' <<<"$out" || fail "$label: \$^P 0x01 must stay set"
+  grep -q '^G17_ENTERSUB_OPS=0$' <<<"$out" || fail "$label: PRODUCT_ENTERSUB_OPS must be 0"
+  grep -q '^G17_INSTALLED=0$' <<<"$out" || fail "$label: OP_ENTERSUB must not be installed"
+  ok "$label: wrap path (P_SUB=1 OPS=0 INST=0)"
+}
+probe_wrap_path wrap_win "file=${WORKDIR}/wrap-win.out:wrap=1:entersub=1:stmts=0"
+probe_wrap_path default_wrap "file=${WORKDIR}/default-wrap.out:stmts=0"
+
 set +e
 RUN_OUT="$(
   cd "$WORKDIR" && NYTPROF="file=${PROFILE}:entersub=1" \
@@ -332,6 +362,12 @@ else
   echo "RESIDUAL: di02 golden 27 is oracle BEGIN/import; live wrap+opcode=$ES_SE (emit after INIT). Not a silent recount of the di02 script."
   ok "di02 overlay: wrap-parity sub_entry_events=$ES_SE (golden 27 residual)"
 fi
+echo "re-drive g12 with NYTPROF_ATTACH_OPTS=entersub=1"
+bash "$ROOT/scripts/packaging/g12_memoize_caller_smoke.sh"
+ok "g12 Memoize caller-safe under entersub=1"
+echo "re-drive g10 with NYTPROF_ATTACH_OPTS=entersub=1"
+bash "$ROOT/scripts/packaging/g10_datetime_hints_smoke.sh"
+ok "g10 DateTime/%^H under entersub=1"
 unset NYTPROF_ATTACH_OPTS
 
 # --- light wrap vs entersub=1 vs isolated 6.15 (claim: none) ---
