@@ -76,10 +76,40 @@ jobs:
           name: perl-NYTProfM-el8
           path: dist/el8
 
+      # GitHub Releases API 503s (v0.2.12/v0.2.13). action-gh-release retries
+      # 3 times in ~4s and fails the job. Use gh with backoff; if the
+      # release already exists (manual recover), only upload RPMs.
       - name: Upload to release
-        uses: softprops/action-gh-release@v2
-        with:
-          name: ${{ github.ref_name }} — Rocky 8 testdrive RPM
-          files: dist/el8/*.rpm
-          fail_on_unmatched_files: true
-          body_path: docs/RELEASE_NOTES_v0.2.13.md
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.ref_name }}
+        run: |
+          set -euo pipefail
+          shopt -s nullglob
+          notes=docs/RELEASE_NOTES_v0.2.13.md
+          test -f "$notes"
+          mapfile -t rpms < <(ls -1 dist/el8/perl-NYTProfM-*.rpm)
+          test "${#rpms[@]}" -ge 2
+          ok=0
+          for i in 1 2 3 4 5 6 7 8; do
+            if gh release view "$TAG" >/dev/null 2>&1; then
+              echo "release $TAG exists; uploading RPMs"
+              if gh release upload "$TAG" "${rpms[@]}" --clobber; then
+                ok=1
+                break
+              fi
+            else
+              echo "creating release $TAG (try $i)"
+              if gh release create "$TAG" \
+                  --title "$TAG — Rocky 8 testdrive RPM" \
+                  --notes-file "$notes" \
+                  "${rpms[@]}"; then
+                ok=1
+                break
+              fi
+            fi
+            echo "GitHub release API failed; sleep $((i*8))s"
+            sleep $((i*8))
+          done
+          test "$ok" -eq 1
+          gh release view "$TAG"
