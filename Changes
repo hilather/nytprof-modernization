@@ -1,6 +1,11 @@
 Revision history for NYTProfM (product modernization)
 
 6.15  2026-08-17
+        v0.2.15 testdrive: do not eval around &$raw — caller() showed
+        NYTProfM.pm on every logger (CXt_EVAL is visible; package-DB
+        subs are not). DESTROY still emits SUB_RETURN if the callee
+        dies. RPM 6.15-9. Smoke g13_logger_caller_smoke.sh.
+
         v0.2.14 testdrive: goto Memoize:: so memoize('fn') does not look
         up DB::fn (Cannot operate on nonexistent function). RPM 6.15-8.
         Smoke g12_memoize_caller_smoke.sh.

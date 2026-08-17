@@ -11,6 +11,7 @@ Hybrid modernization of [Devel::NYTProf](https://metacpan.org/dist/Devel-NYTProf
 | [`docs/FIRST_SLICE_BOARD.md`](https://github.com/hilather/nytprof-modernization/blob/main/docs/FIRST_SLICE_BOARD.md) | Ordered first-slice work board |
 | [`docs/RELEASE_NOTES_R2_PREVIEW.md`](https://github.com/hilather/nytprof-modernization/blob/main/docs/RELEASE_NOTES_R2_PREVIEW.md) | **R2-preview** packaging notes (v6 **opt-in only**; not R3 / R4) |
 | [`docs/RELEASE_NOTES_R2_STABLE.md`](https://github.com/hilather/nytprof-modernization/blob/main/docs/RELEASE_NOTES_R2_STABLE.md) | **R2-stable** packaging notes (Phase C tools + residual honesty; not R3/R4; public perf waived) |
+| [`docs/RELEASE_NOTES_v0.2.15.md`](https://github.com/hilather/nytprof-modernization/blob/main/docs/RELEASE_NOTES_v0.2.15.md) | **v0.2.15** testdrive: logger `caller` is the app (not `NYTProfM.pm`), RPM 6.15-9 |
 | [`docs/RELEASE_NOTES_v0.2.14.md`](https://github.com/hilather/nytprof-modernization/blob/main/docs/RELEASE_NOTES_v0.2.14.md) | **v0.2.14** testdrive: Memoize `caller` under attach (no `DB::fn` croak), RPM 6.15-8 |
 | [`docs/RELEASE_NOTES_v0.2.13.md`](https://github.com/hilather/nytprof-modernization/blob/main/docs/RELEASE_NOTES_v0.2.13.md) | **v0.2.13** testdrive: fail-closed `nodebug_stash` (no GP-less GV SEGV), RPM 6.15-7 |
 | [`docs/RELEASE_NOTES_v0.2.12.md`](https://github.com/hilather/nytprof-modernization/blob/main/docs/RELEASE_NOTES_v0.2.12.md) | **v0.2.12** testdrive: DateTime/Rex attach survival, 20-app catalog, RPM 6.15-6 |
@@ -181,6 +182,7 @@ perl Makefile.PL && make offline-gate          # CI-OFFLINE-GATE wrapper
 ./scripts/packaging/g10_datetime_hints_smoke.sh # OK: PR-10 no CORE::GLOBAL::require wrap; DateTime::Duration
 ./scripts/packaging/g11_nodebug_stash_nogp_smoke.sh # OK: PR-11 GP-less stash GV does not SEGV nodebug_stash
 ./scripts/packaging/g12_memoize_caller_smoke.sh # OK: PR-12 Memoize::memoize caller is not DB
+./scripts/packaging/g13_logger_caller_smoke.sh # OK: PR-13 logger caller is the app, not NYTProfM.pm
 ./scripts/field/complex_app_docker_profile.sh   # --app rex\|ppi\|json_xs\|… Rocky 8 attach
 ./scripts/field/complex_app_docker_profile_smoke.sh # --app rex --engine both (honest docker SKIP)
 ./scripts/packaging/product_legacy_smoke.sh    # I01: cargo-free prefix install + live attach 15/3/15

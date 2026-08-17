@@ -29,7 +29,9 @@
 # INIT sets it so use/BEGIN compile without DB::DB. DB::sub goto-all
 # until INIT; after, goto &$raw for Exporter / Getopt / vars / constant
 # / overload / any ::import / Moo / Moose / Class:: / Rex:: / DateTime::
-# (not &$raw wrap). Workload subs keep the hash-stack wrap.
+# / Memoize:: (not &$raw wrap). Workload wrap must not `eval { &$raw }`:
+# that eval frame is visible to caller() (loggers report NYTProfM.pm).
+# Perl already skips package-DB sub frames. DESTROY still emits on die.
 # PR-10   — Do not wrap CORE::require (no CORE::GLOBAL::require).
 # Preload B::Hooks::EndOfScope / Variable::Magic / namespace::* and
 # CvNODEBUG their CVs before $^P 0x01. DB::sub during on_scope_end
@@ -277,6 +279,7 @@ sub sub {
     push @product_sub_stack,
       {
         name       => $called,
+        caller     => $caller,
         t0         => DB::clock_now_ticks(),
         child_excl => 0,
         fid        => $cfid,
@@ -295,30 +298,42 @@ sub sub {
     die "NYTProfM: \$DB::sub is missing; cannot wrap\n"
       unless defined $raw && ( ref($raw) || ( !ref($raw) && length $raw ) );
 
-    my $wa = wantarray;
-    my ( @ret, $scalar, $ok );
-    $ok = eval {
-        if ($wa) {
-            @ret = &$raw;
-        }
-        elsif ( defined $wa ) {
-            $scalar = &$raw;
-        }
-        else {
-            &$raw;
-        }
-        1;
-    };
-    my $err = $@;
-    my $frame = pop @product_sub_stack;
-    my $depth = @product_sub_stack + 1;
-    my $incl  = 0;
-    my $excl  = 0;
+    # Do not wrap the callee in eval. caller() skips package-DB sub
+    # frames but not CXt_EVAL — loggers then report NYTProfM.pm.
+    # DESTROY still emits SUB_RETURN if the callee dies.
+    my $guard = bless { armed => 1 }, 'DB::ProductWrapGuard';
+    my $wa    = wantarray;
+    my ( @ret, $scalar );
+    if ($wa) {
+        @ret = &$raw;
+    }
+    elsif ( defined $wa ) {
+        $scalar = &$raw;
+    }
+    else {
+        &$raw;
+    }
+    $guard->{armed} = 0;
+    _product_finish_current_frame();
+    return @ret    if $wa;
+    return $scalar if defined $wa;
+    return;
+}
+
+sub _product_finish_current_frame {
+    my $frame     = pop @product_sub_stack;
+    my $depth     = @product_sub_stack + 1;
+    my $incl      = 0;
+    my $excl      = 0;
     my $site_fid  = 1;
     my $site_line = 1;
+    my $called    = 'main::RUNTIME';
+    my $caller    = 'main::RUNTIME';
     if ($frame) {
-        $incl = DB::clock_now_ticks() - $frame->{t0};
-        $incl = 0 if $incl < 0;
+        $called = $frame->{name}   || $called;
+        $caller = $frame->{caller} || $caller;
+        $incl   = DB::clock_now_ticks() - $frame->{t0};
+        $incl   = 0 if $incl < 0;
         $frame->{child_excl} += DB::take_pending_child_excl();
         $excl = $incl - ( $frame->{child_excl} || 0 );
         $excl = 0 if $excl < 0;
@@ -328,7 +343,6 @@ sub sub {
         $site_fid  = $frame->{fid}  || 1;
         $site_line = $frame->{line} || 1;
     }
-
     $product_in_hook = 1;
     eval {
         DB::emit_sub_return( $depth, $incl, $excl, $called );
@@ -337,11 +351,17 @@ sub sub {
         1;
     };
     $product_in_hook = 0;
+}
 
-    die $err if !$ok;
-    return @ret    if $wa;
-    return $scalar if defined $wa;
-    return;
+{
+    package    # hide from PAUSE
+        DB::ProductWrapGuard;
+    sub DESTROY {
+        my ($g) = @_;
+        return unless $g && $g->{armed};
+        $g->{armed} = 0;
+        eval { DB::_product_finish_current_frame(); 1 };
+    }
 }
 
 # G06: smallest live fork hook — CORE::GLOBAL::fork around shipped
