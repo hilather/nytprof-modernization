@@ -96,7 +96,7 @@ grep -q 'PRODUCT_USE_DB_SUB' "$NYTP_PM_SRC" \
   || fail "NYTProfM.pm missing PRODUCT_USE_DB_SUB stamp"
 grep -q 'PRODUCT_ENTERSUB' "$NYTP_PM_SRC" \
   || fail "NYTProfM.pm missing PRODUCT_ENTERSUB stamp"
-grep -F -q "\$Devel::NYTProfM::PRODUCT_WRAP" "$NYTP_PM_SRC" \
+grep -E -q '\$Devel::NYTProfM::PRODUCT_WRAP[[:space:]]*=' "$NYTP_PM_SRC" \
   || fail "NYTProfM.pm missing PRODUCT_WRAP stamp"
 ok "G05 sources, parser, D1-A Makefile target present"
 

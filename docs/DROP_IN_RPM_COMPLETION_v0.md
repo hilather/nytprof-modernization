@@ -463,7 +463,7 @@ sequenceDiagram
 
 **When:** after **B-collection** is green and advertised-options residuals are listed. **Not** first GA-candidate.
 
-**How:** graft write-sites already mapped in [`docs/schemas/product-xs-graft-annex-v0.md`](https://github.com/hilather/nytprof-modernization/blob/main/docs/schemas/product-xs-graft-annex-v0.md) A.3. Copy `pp_stmt_profiler`, `pp_leave_profiler`, `pp_subcall_profiler` / `pp_entersub_profiler`, `pp_slowop_profiler`, `pp_fork_profiler` from the 6.15 pin into `collector/xs/`. Replace every `NYTP_write_*` with `nytp_emit_*`. Keep **one** writer (`nytp_sink_v5`). Remove or bypass the Perl `DB::DB` / `DB::sub` hot path when opcode is active (`use_db_sub=0`, 6.15 default).
+**How:** graft write-sites already mapped in [`docs/schemas/product-xs-graft-annex-v0.md`](https://github.com/hilather/nytprof-modernization/blob/main/docs/schemas/product-xs-graft-annex-v0.md) A.3. Copy `pp_stmt_profiler`, `pp_leave_profiler`, `pp_subcall_profiler` / `pp_entersub_profiler`, `pp_slowop_profiler`, `pp_fork_profiler` from the 6.15 pin into `collector/xs/`. Replace every `NYTP_write_*` with `nytp_emit_*`. Keep **one** writer (`nytp_sink_v5`). Install opcode only when `PRODUCT_ENTERSUB && !PRODUCT_WRAP`. Canonical wrap escape is **`wrap=1`**. Product **`use_db_sub=1` is the same escape** (not 6.15 stmt `DB::DB` + opcode still on — do **not** copy `init_profiler` `if (opt_use_db_sub)`). See [`docs/plan/DI03_OPCODE_ENTERSUB_ATTACH_v0.md`](https://github.com/hilather/nytprof-modernization/blob/main/docs/plan/DI03_OPCODE_ENTERSUB_ATTACH_v0.md) **KD-E11**.
 
 Phase the graft:
 
@@ -471,7 +471,7 @@ Phase the graft:
 2. ENTERSUB + GOTO (replace the thin XSUB slice)
 3. leave ops (`leave=1`)
 4. **Full** `slowops.h` table (printf, system, accept, …) — B2 already has PRINT/MATCH subset
-5. `use_db_sub=1` remains the hook path for residual / old perl
+5. Wrap escape remains `wrap=1` / forked `use_db_sub=1` (KD-E11) — not a 6.15 stmt-`DB::DB` hook path
 
 Do not enable opcode and Perl `DB::sub` for the same call (double SUB_RETURN).
 
@@ -954,7 +954,7 @@ Debugger name and `$VERSION` do **not** change.
 | B-ship | S2 / BUILD-003 / PAUSE (each optional-lag) | dual_path revert is a dedicated revert PR; prior TRIAL |
 | C | `nytprof-cli` EL8 | remove tools RPM; module remains |
 | D | fork continue + optional v6_collect | default D1-B package |
-| E | opcode attach | `use_db_sub=1` escape if kept |
+| E | opcode attach | `wrap=1` (or forked `use_db_sub=1`) escape |
 
 Feature flags: `blocks`, `calls`, `compress`, `sigexit` are **NYTPROF options**, not compile flags. D1-A is `--with v6_collect` / `NYTPROF_V6_COLLECT=1`. S2 is a smoke rewrite, not a runtime flag.
 
