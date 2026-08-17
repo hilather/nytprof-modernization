@@ -12,10 +12,12 @@
 # held sink).
 # PR-G03e — DB::emit_start_deflate / is_deflating call nytp_emit_start_deflate
 # / nytp_v5_sink_is_deflating (same held sink). Mid-deflate fork residual.
-# PR-G04  — When NYTPROF contains file=<path>, enable the file sink, set
-# $^P 0x01 (DB::sub) and 0x02 (DB::DB) so live calls emit SUB_RETURN +
-# SUB_CALLERS and statements emit TIME_LINE through shipped nytp_emit_*.
-# Default (no file=) stays in-memory — G03a trivial -e writes no nytprof.out.
+# PR-G04 / DI-03 E1b — When NYTPROF contains file=<path>, enable the
+# file sink. Omit entersub installs OP_ENTERSUB (emit after INIT) and
+# leaves $^P 0x01 off; wrap=1 / use_db_sub=1 / entersub=0 set 0x01
+# (DB::sub wrap_push). $^P 0x02 stays on for OP_DBSTATE TIME_LINE via
+# shipped nytp_emit_*. Default (no file=) stays in-memory — G03a
+# trivial -e writes no nytprof.out.
 # PR-G05  — Parse all NYTPROF keys: unknown and format=dual fail-closed;
 # format=v6 fail-closed on D1-B (v6_collect message); D1-A enable_sink_v6.
 # PR-G06  — addpid=1 installs CORE::GLOBAL::fork → nytp_fork_* + addpid
@@ -55,9 +57,10 @@ package    # hide the package from the PAUSE indexer
 # (sub line ranges etc) of modules loaded as a side effect of loading
 # Devel::NYTProfM::Core (ie XSLoader, strict, Exporter etc.)
 # See "perldoc perlvar" for details of the $^P ($PERLDB) flags.
-# 0x01 is sub enter/exit (DB::sub), *not* single-step (that is 0x20) and
-# *not* line-by-line (0x02 / DB::DB). G03a–G03e omit 0x01; G04 sets it
-# only when NYTPROF file= is present.
+# 0x01 is sub enter/exit (DB::sub wrap escape), *not* single-step
+# (0x20) and *not* line-by-line (0x02 / DB::DB). G03a–G03e omit 0x01.
+# E1b default file= leaves 0x01 off (opcode ENTERSUB). wrap=1 /
+# use_db_sub=1 / entersub=0 set 0x01.
 $^P = 0x010     # record line range of sub definition
     | 0x100     # informative "file" names for evals
     | 0x200;    # informative names for anonymous subroutines
@@ -65,7 +68,7 @@ $^P = 0x010     # record line range of sub definition
 require Devel::NYTProfM::Core;    # loads XS and provides DB::init_profiler
 
 # Greppable load stamp after successful Core/XS load.
-# PRODUCT_XS_ATTACH is 0 until NYTPROF file= enables the live DB::sub hook.
+# PRODUCT_XS_ATTACH is 0 until NYTPROF file= enables live attach.
 # PRODUCT_STMT_EMIT marks G03b nytp_emit_* wrappers (not opcode TIME_*).
 # PRODUCT_SUB_EMIT marks G03c nytp_emit_sub_* wrappers.
 # PRODUCT_META_EMIT marks G03d nytp_emit_* meta/finalize wrappers.

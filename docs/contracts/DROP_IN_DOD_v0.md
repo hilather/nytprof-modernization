@@ -215,7 +215,7 @@ Do **not** market “Full dual-path drop-in” without listing day-one residuals
 | `G03C-SUB-EMIT` | `nytp_emit_sub_entry` / `sub_return` via product XS | G03c lands | **done** — not opcode attach / G04 |
 | `G03D-META-EMIT` | `nytp_emit_attribute` / `option` / `new_fid` / `src_line` / `sub_info` / `pid_*` via product XS | G03d lands | **done** — not opcode attach / G04 |
 | `G03E-COMPRESS-EMIT` | `nytp_emit_start_deflate` via product XS (zlib after `z`; `-lz` only) | G03e lands | **done** — mid-deflate fork residual; not opcode attach / G04 |
-| `PRODUCT-XS-ATTACH-MVP` | Live collection attach (`-d:NYTProf` + default-calls1 15/3/15) | G04 green | **done (MVP)** — not full opcode |
+| `PRODUCT-XS-ATTACH-MVP` | Live collection attach (`-d:NYTProf` + default-calls1 15/3/15) | G04 green | **done (MVP)** — E1b default `OP_ENTERSUB`; wrap=`wrap=1`. **Not** E2 GOTO / E3 leave / E4 full slowops |
 | `PRODUCT-FORK-ADDPID-MVP` | Live `fork` + `addpid=1` parent + `<file>.<pid>` | G06 green | **done (MVP)** — not TEST-018 / mid-deflate-in-child |
 | `PRODUCT-LEGACY-SMOKE` | P-PRODUCT-LEGACY without cargo | `product_legacy_smoke` green | **done (MVP)** — not BUILD-003-FULL / not S2 dual_path |
 | `I02-MAKEMAKER-NATIVE` | MakeMaker `NYTPROF_NATIVE` CLI install | I02 smoke green | **done (MVP)** — not BUILD-003-FULL |

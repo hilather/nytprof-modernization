@@ -161,6 +161,7 @@ sub mid { leaf() }
 print "g17_mid=", mid(), "\n";
 print "G17_P_BIT01=", (($^P & 0x01) ? 1 : 0), "\n";
 print "G17_ENTERSUB_OPS=", ($Devel::NYTProfM::PRODUCT_ENTERSUB_OPS ? 1 : 0), "\n";
+print "G17_WRAP=", ($Devel::NYTProfM::PRODUCT_WRAP ? 1 : 0), "\n";
 print "G17_INSTALLED=", (eval { DB::entersub_is_installed() } ? 1 : 0), "\n";
 print "G17_EMIT=", (eval { DB::entersub_emit_enabled() } ? 1 : 0), "\n";
 END_STACK
@@ -176,6 +177,8 @@ printf '%s\n' "$STACK_OUT"
 [[ "$STACK_RC" -eq 0 ]] || fail "stack probe exited $STACK_RC"
 grep -q '^G17_P_BIT01=0$' <<<"$STACK_OUT" \
   || fail "default opcode must leave \$^P bit 0x01 clear"
+grep -q '^G17_WRAP=0$' <<<"$STACK_OUT" \
+  || fail "default omit entersub must leave PRODUCT_WRAP=0"
 grep -q '^G17_ENTERSUB_OPS=1$' <<<"$STACK_OUT" \
   || fail "default omit entersub must set PRODUCT_ENTERSUB_OPS"
 grep -q '^G17_INSTALLED=1$' <<<"$STACK_OUT" \
@@ -209,9 +212,10 @@ END_WP
   printf '%s\n' "$out"
   [[ "$rc" -eq 0 ]] || fail "$label probe exited $rc"
   grep -q '^G17_P_BIT01=1$' <<<"$out" || fail "$label: \$^P 0x01 must stay set"
+  grep -q '^G17_WRAP=1$' <<<"$out" || fail "$label: PRODUCT_WRAP must be 1"
   grep -q '^G17_ENTERSUB_OPS=0$' <<<"$out" || fail "$label: PRODUCT_ENTERSUB_OPS must be 0"
   grep -q '^G17_INSTALLED=0$' <<<"$out" || fail "$label: OP_ENTERSUB must not be installed"
-  ok "$label: wrap path (P_SUB=1 OPS=0 INST=0)"
+  ok "$label: wrap path (P_SUB=1 WRAP=1 OPS=0 INST=0)"
 }
 probe_wrap_path wrap_win "file=${WORKDIR}/wrap-win.out:wrap=1:entersub=1:stmts=0"
 probe_wrap_path wrap_only "file=${WORKDIR}/wrap-only.out:wrap=1:stmts=0"
