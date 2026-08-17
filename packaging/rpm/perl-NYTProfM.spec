@@ -9,7 +9,7 @@
 
 Name:           perl-NYTProfM
 Version:        6.15
-Release:        7%{?dist}
+Release:        8%{?dist}
 Summary:        NYTProfM 6.15 collection (D1-B v5-only default; -d:NYTProfM)
 License:        GPL+ or Artistic
 URL:            https://github.com/hilather/nytprof-modernization
@@ -115,6 +115,9 @@ fi
 %{_bindir}/nytprofm-dump
 
 %changelog
+* Mon Aug 17 2026 nytprof-modernization <devnull@example.com> - 6.15-8
+- Attach: goto Memoize:: so memoize('fn') does not look up DB::fn
+  (Cannot operate on nonexistent function)
 * Mon Aug 17 2026 nytprof-modernization <devnull@example.com> - 6.15-7
 - Attach: nodebug_stash / rebind_stash_slowops skip GP-less stash GVs
   (GvCV SEGV on the v0.2.12 hint-magic walk); do not walk XSUB CVs as OP*

@@ -209,6 +209,11 @@ sub _product_needs_goto {
     return 1
       if $name =~
       /^(?:Moo(?:::|\z)|Moose(?:::|\z)|Class::|Rex(?:::|\z)|DateTime(?:::|\z))/;
+    # Memoize::memoize does `my $uppack = caller` then looks up
+    # $uppack::$fn. Wrap ⇒ caller is DB ⇒
+    # "Cannot operate on nonexistent function `foo'" for a sub that
+    # exists in the real package (works without -d:NYTProfM).
+    return 1 if $name =~ /^(?:Memoize(?:::|\z))/;
     return 0;
 }
 

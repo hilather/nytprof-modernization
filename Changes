@@ -1,6 +1,10 @@
 Revision history for NYTProfM (product modernization)
 
 6.15  2026-08-17
+        v0.2.14 testdrive: goto Memoize:: so memoize('fn') does not look
+        up DB::fn (Cannot operate on nonexistent function). RPM 6.15-8.
+        Smoke g12_memoize_caller_smoke.sh.
+
         v0.2.13 testdrive: fail-closed nodebug_stash — isGV_with_GP before
         GvCV so a GP-less stash GV no longer SEGV on file= attach (v0.2.12
         hint-magic walk). XSUB CVs are not walked as OP*. RPM 6.15-7.
