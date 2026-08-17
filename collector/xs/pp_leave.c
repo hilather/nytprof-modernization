@@ -7,9 +7,10 @@
  *
  * Product adaptations (binding): nytp_clock_now lives inside the last-site
  * helpers (do not add a second clock); nytp_emit_discount is the only
- * DISCOUNT writer; do not emit TIME_* here (flush/seed via existing
- * product_emit_attributed_*); install only when leave=1; UNSTACK/LEAVELOOP
- * stay on pp_product_stmt when PRODUCT_BLOCKS (KD-E14). Default leave=0.
+ * DISCOUNT writer; do not emit TIME_* here (flush/seed via
+ * product_emit_time_*_for_cop so blocks=1 keeps visit_contexts identity);
+ * install only when leave=1; UNSTACK/LEAVELOOP stay on pp_product_stmt
+ * when PRODUCT_BLOCKS (KD-E14). Default leave=0. Save/restore errno.
  */
 #define PERL_NO_GET_CONTEXT
 #include "EXTERN.h"
@@ -18,9 +19,7 @@
 
 #include "nytprof_pp.h"
 
-#ifndef OutCopFILE
-#define OutCopFILE CopFILE
-#endif
+#include <errno.h>
 
 static int product_leave_installed = 0;
 static int product_leave_emit_on = 0;
@@ -113,44 +112,37 @@ product_leave_set_emit_enabled(int on)
 
 /* 6.15 DB_leave: write previous statement via DB_stmt, then DISCOUNT so
  * the next TIME_* is a continuation (count must not increment). Product
- * attributed emit is that DB_stmt write-site (flush last + seed outer). */
+ * stmt-ops COP helpers are that DB_stmt write-site (flush last + seed
+ * outer with visit_contexts block/sub when blocks=1). */
 static void
 product_db_leave(pTHX_ OP *op)
 {
-    COP *cop;
-    const char *file;
-    UV line;
-    UV fid;
-    nytp_status st;
+    int saved_errno = errno;
 
     PERL_UNUSED_ARG(op);
-    if (!product_leave_emit_enabled())
+    if (!product_leave_emit_enabled()) {
+        SETERRNO(saved_errno, 0);
         return;
+    }
 #ifdef MULTIPLICITY
     if (product_leave_orig_my_perl != NULL
-        && my_perl != product_leave_orig_my_perl)
+        && my_perl != product_leave_orig_my_perl) {
+        SETERRNO(saved_errno, 0);
         return;
+    }
 #endif
     /* 6.15: if (!is_profiling || !out || !profile_stmts) return; */
-    if (product_opt_stmts(aTHX) == 0)
+    if (product_opt_stmts(aTHX) == 0) {
+        SETERRNO(saved_errno, 0);
         return;
-
-    cop = PL_curcop;
-    file = cop ? OutCopFILE(cop) : NULL;
-    line = cop ? (UV)CopLINE(cop) : 1;
-    if (line == 0)
-        line = 1;
-    fid = product_fid_for_file_ptr(aTHX_ file);
+    }
 
     if (product_opt_blocks(aTHX))
-        st = product_emit_attributed_time_block((nytp_fid)fid, (nytp_line)line,
-                                                (nytp_line)line,
-                                                (nytp_line)line);
+        product_emit_time_block_for_cop(aTHX_ PL_curcop);
     else
-        st = product_emit_attributed_time_line((nytp_fid)fid, (nytp_line)line);
-    if (st != NYTP_OK)
-        return;
+        product_emit_time_line_for_cop(aTHX_ PL_curcop);
     (void)nytp_emit_discount(product_sink);
+    SETERRNO(saved_errno, 0);
 }
 
 static OP *

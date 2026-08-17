@@ -66,7 +66,7 @@ Pin `baseline/6.15/src/NYTProf.xs` is **not** present in this tree. Functions we
 | E2 wrap-list `goto &$raw` stays wrap=1 / `use_db_sub=1` only | not a substitute for opcode GOTO |
 | `NYTPROF` `leave` 0/1 stamp (`PRODUCT_LEAVE`); default **0** | product-only E3 (not 6.15 `leave=1`) |
 | Replace `NYTP_write_discount` with `nytp_emit_discount` | E3 write-site substitution |
-| Last-site flush/seed via `product_emit_attributed_*` (no extra TIME_* writer) | E3; clock stays `nytp_clock_now` inside those helpers |
+| Last-site flush/seed via `product_emit_time_*_for_cop` (blocks=1 uses `product_fill_block_sub`) | E3; clock stays `nytp_clock_now` inside those helpers |
 | UNSTACK/LEAVELOOP stay on `pp_product_stmt` when `PRODUCT_BLOCKS` | KD-E14 |
 | Leave install only when `leave=1` + `stmts`; emit after INIT | E3 |
 | E3 omits full `slowops.h` / flipping default `leave=1` | E4 / later honesty PR |

@@ -459,7 +459,7 @@ sequenceDiagram
 
 ### DI-03 — Opcode / `entersub` attach (milestone E)
 
-**Status:** **in progress, not done.** E1b flipped the default: omit `entersub` installs `OP_ENTERSUB` → `nytp_emit_*` (emit after INIT; `$^P` 0x01 off). **E2 landed:** default opcode also hooks `OP_GOTO` so `goto &sub` keeps the original caller and the goto site’s fid:line (smoke [`g18_goto_sub_smoke.sh`](https://github.com/hilather/nytprof-modernization/blob/main/scripts/packaging/g18_goto_sub_smoke.sh)). Wrap list remains **`wrap=1` / `use_db_sub=1` only** — not a substitute for opcode GOTO. Escape is `wrap=1` / `use_db_sub=1` / `entersub=0`. E3 leave default **0**, E4 full slowops, and di02 exact **27** (live wrap/opcode **21** after INIT) remain. Design: [`docs/plan/DI03_OPCODE_ENTERSUB_ATTACH_v0.md`](https://github.com/hilather/nytprof-modernization/blob/main/docs/plan/DI03_OPCODE_ENTERSUB_ATTACH_v0.md). Provenance: [`docs/graft/PROVENANCE.md`](https://github.com/hilather/nytprof-modernization/blob/main/docs/graft/PROVENANCE.md).
+**Status:** **in progress, not done.** E1b flipped the default: omit `entersub` installs `OP_ENTERSUB` → `nytp_emit_*` (emit after INIT; `$^P` 0x01 off). **E2 landed:** default opcode also hooks `OP_GOTO` so `goto &sub` keeps the original caller and the goto site’s fid:line (smoke [`g18_goto_sub_smoke.sh`](https://github.com/hilather/nytprof-modernization/blob/main/scripts/packaging/g18_goto_sub_smoke.sh)). **E3 landed:** opt-in `leave=1` (`pp_leave.c` → last-site flush + `nytp_emit_discount`; product default `leave` stays **0**; UNSTACK/LEAVELOOP stay on `pp_product_stmt` when `blocks=1`; smoke [`g19_leave_discount_smoke.sh`](https://github.com/hilather/nytprof-modernization/blob/main/scripts/packaging/g19_leave_discount_smoke.sh)). Wrap list remains **`wrap=1` / `use_db_sub=1` only** — not a substitute for opcode GOTO. Escape is `wrap=1` / `use_db_sub=1` / `entersub=0`. E4 full slowops and di02 exact **27** (live wrap/opcode **21** after INIT) remain. Design: [`docs/plan/DI03_OPCODE_ENTERSUB_ATTACH_v0.md`](https://github.com/hilather/nytprof-modernization/blob/main/docs/plan/DI03_OPCODE_ENTERSUB_ATTACH_v0.md). Provenance: [`docs/graft/PROVENANCE.md`](https://github.com/hilather/nytprof-modernization/blob/main/docs/graft/PROVENANCE.md).
 
 **When:** after **B-collection** is green and advertised-options residuals are listed. **Not** first GA-candidate.
 
@@ -469,7 +469,7 @@ Phase the graft:
 
 1. NEXTSTATE/DBSTATE (if not already taken as DI-01 fallback)
 2. ENTERSUB + GOTO (replace the thin XSUB slice)
-3. leave ops (`leave=1`)
+3. leave ops (`leave=1`) — **E3 landed** (opt-in only; default stays 0)
 4. **Full** `slowops.h` table (printf, system, accept, …) — B2 already has PRINT/MATCH subset
 5. Wrap escape remains `wrap=1` / forked `use_db_sub=1` (KD-E11) — not a 6.15 stmt-`DB::DB` hook path
 

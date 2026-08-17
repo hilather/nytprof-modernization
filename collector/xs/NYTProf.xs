@@ -1283,7 +1283,7 @@ product_fill_block_sub(pTHX_ COP *pin, UV exec_line, UV *bl_out, UV *sl_out)
         *sl_out = (UV)product_last_sub_line;
 }
 
-static void
+void
 product_emit_time_block_for_cop(pTHX_ COP *cop)
 {
     UV fid;
@@ -1310,7 +1310,7 @@ product_emit_time_block_for_cop(pTHX_ COP *cop)
 
 /* TIME_LINE from COP without a Perl SV / caller() (default stmts=1).
  * Only installed when stmts=1; do not get_sv PRODUCT_STMTS on this path. */
-static void
+void
 product_emit_time_line_for_cop(pTHX_ COP *cop)
 {
     const char *file;

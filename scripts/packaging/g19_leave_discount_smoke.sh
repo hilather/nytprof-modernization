@@ -54,8 +54,12 @@ grep -q 'ExtUtils::Embed' "$MAKEFILE" \
   || fail "Makefile missing ExtUtils::Embed ccopts"
 grep -q 'nytp_emit_discount' "$PP_C" \
   || fail "pp_leave.c missing nytp_emit_discount"
-grep -q 'product_emit_attributed_time_line' "$PP_C" \
-  || fail "pp_leave.c missing last-site attributed flush/seed"
+grep -q 'product_emit_time_line_for_cop' "$PP_C" \
+  || fail "pp_leave.c missing last-site TIME_LINE COP helper"
+grep -q 'product_emit_time_block_for_cop' "$PP_C" \
+  || fail "pp_leave.c missing last-site TIME_BLOCK COP helper (visit_contexts)"
+grep -q 'SETERRNO' "$PP_C" \
+  || fail "pp_leave.c missing errno save/restore (pin DB_leave)"
 grep -q 'product_install_leave' "$PP_C" \
   || fail "pp_leave.c missing product_install_leave"
 if grep -q 'NYTP_write_' "$PP_C"; then

@@ -25,12 +25,15 @@ void     product_add_pending_child_excl(NV);
 NV       product_take_pending_child_excl(void);
 
 /* Last-site clock (PR-8). Leave graft flushes via these — do not add a
- * second TIME_* writer in pp_leave.c. */
+ * second TIME_* writer in pp_leave.c. Continuation seed uses the
+ * stmt-ops COP helpers so blocks=1 keeps visit_contexts block/sub. */
 nytp_status product_flush_last_site(void);
 nytp_status product_emit_attributed_time_line(nytp_fid fid, nytp_line line);
 nytp_status product_emit_attributed_time_block(nytp_fid fid, nytp_line line,
                                                nytp_line block_line,
                                                nytp_line sub_line);
+void product_emit_time_line_for_cop(pTHX_ COP *cop);
+void product_emit_time_block_for_cop(pTHX_ COP *cop);
 
 int  product_install_entersub(pTHX);     /* OP_ENTERSUB + OP_GOTO (E2) */
 int  product_uninstall_entersub(pTHX);
