@@ -34,6 +34,16 @@ ok() { printf 'OK: %s\n' "$*"; }
 fail() { printf 'ERROR: %s\n' "$*" >&2; exit 1; }
 fail2() { printf 'ERROR: %s\n' "$*" >&2; exit 2; }
 
+# g17 overlays entersub=1 (these smokes hardcode file= only).
+nytprof_attach() {
+  local spec="$1"
+  if [[ -n "${NYTPROF_ATTACH_OPTS:-}" ]]; then
+    printf '%s:%s' "$spec" "${NYTPROF_ATTACH_OPTS}"
+  else
+    printf '%s' "$spec"
+  fi
+}
+
 while [[ $# -gt 0 ]]; do
   case "$1" in
     -h|--help) usage; exit 0 ;;
@@ -150,7 +160,7 @@ PERL
 
 set +e
 RUN_OUT="$(
-  cd "$WORKDIR" && NYTPROF="file=${PROFILE}" perl -I"$NYTP_DEST" -d:NYTProfM "$SCRIPT" 2>&1
+  cd "$WORKDIR" && NYTPROF="$(nytprof_attach "file=${PROFILE}")" perl -I"$NYTP_DEST" -d:NYTProfM "$SCRIPT" 2>&1
 )"
 RUN_RC=$?
 set -e

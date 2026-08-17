@@ -36,6 +36,8 @@
  *           INIT leaves $DB::single=0 so Perl DB::DB does not run.
  * PR-16   — wrap_push / wrap_pop: one C crossing for wrap COP pin +
  *           fid + clock + pending-excl + SUB_RETURN/SUB_CALLERS.
+ * DI-03 E1a — unstatic sink/fid/calls/mailbox for grafted pp_entersub.c.
+ *           Default attach stays wrap; opcode only when entersub=1.
  *
  * MODULE Devel::NYTProfM; PACKAGE = DB
  * Default link: libnytp_sink_v5.a + -lz only (D1-B).
@@ -57,6 +59,7 @@
 #ifdef NYTPROF_V6_COLLECT
 #include "nytp_sink_v6.h"
 #endif
+#include "nytprof_pp.h"
 
 #include <limits.h>
 #include <stdio.h>
@@ -80,7 +83,7 @@
 #define NYTP_FIDf_VIA_STMT 0x0002
 #endif
 
-static nytp_sink *product_sink = NULL;
+nytp_sink *product_sink = NULL;
 /* When durable, product_sink is the batch facade and product_v5 is the child. */
 static nytp_sink *product_v5 = NULL;
 static int product_durable = 0;
@@ -144,17 +147,17 @@ product_pending_child_excl_reset(void)
     product_pending_child_excl = 0.0;
 }
 
-static void
-product_add_pending_child_excl(double excl)
+void
+product_add_pending_child_excl(NV excl)
 {
     if (excl > 0.0)
         product_pending_child_excl += excl;
 }
 
-static double
+NV
 product_take_pending_child_excl(void)
 {
-    double v = product_pending_child_excl;
+    NV v = product_pending_child_excl;
     product_pending_child_excl = 0.0;
     return v;
 }
@@ -472,7 +475,7 @@ product_fid_for_pv(pTHX_ const char *pv, STRLEN len)
 
 /* OutCopFILE is interned and stable. Do not cache SvPVbyte from
  * fid_for_filename — that pointer dies with the SV and evicts this hit. */
-static UV
+nytp_fid
 product_fid_for_file_ptr(pTHX_ const char *pv)
 {
     UV fid;
@@ -482,14 +485,14 @@ product_fid_for_file_ptr(pTHX_ const char *pv)
         pv = "-";
     }
     if (product_fid_last_pv == pv && product_fid_last_id != 0) {
-        return product_fid_last_id;
+        return (nytp_fid)product_fid_last_id;
     }
     len = (STRLEN)strlen(pv);
     fid = product_fid_for_pv(aTHX_ pv, len);
     product_fid_last_pv = pv;
     product_fid_last_len = len;
     product_fid_last_id = fid;
-    return fid;
+    return (nytp_fid)fid;
 }
 
 static UV
@@ -1448,7 +1451,7 @@ static Perl_ppaddr_t product_orig_pp_print = NULL;
 static Perl_ppaddr_t product_orig_pp_match = NULL;
 static int product_in_slowop = 0;
 
-static IV
+IV
 product_opt_calls(pTHX)
 {
     SV *sv = get_sv("Devel::NYTProfM::PRODUCT_CALLS", 0);
@@ -1585,8 +1588,8 @@ pp_product_slowop(pTHX)
                                     (nytp_line)line, 1U, incl_nv, incl_nv, 0.0,
                                     0U, nytp_sv_cstr(name),
                                     nytp_sv_cstr(caller));
-        /* Fold MATCH/PRINT exclusive into the wrapping Perl sub (tokenize). */
-        product_add_pending_child_excl(incl_nv);
+        /* Opcode credits the current subr_entry; wrap still uses mailbox. */
+        product_credit_child_excl(incl_nv);
     }
     product_in_slowop = 0;
     return ret;
@@ -1833,6 +1836,8 @@ wrap_push(called)
         double pending;
         IV calls;
     CODE:
+        if (product_entersub_emit_enabled())
+            croak("NYTProfM: opcode entersub and wrap would both emit");
         if (product_wrap_sp >= product_wrap_cap)
             product_wrap_grow(aTHX);
         pending = product_take_pending_child_excl();
@@ -2033,6 +2038,43 @@ int
 install_product_slowops()
     CODE:
         RETVAL = product_install_slowops(aTHX);
+    OUTPUT:
+        RETVAL
+
+int
+install_product_entersub()
+    CODE:
+        RETVAL = product_install_entersub(aTHX);
+    OUTPUT:
+        RETVAL
+
+int
+uninstall_product_entersub()
+    CODE:
+        RETVAL = product_uninstall_entersub(aTHX);
+    OUTPUT:
+        RETVAL
+
+int
+entersub_is_installed()
+    CODE:
+        RETVAL = product_entersub_is_installed();
+    OUTPUT:
+        RETVAL
+
+int
+entersub_emit_enabled()
+    CODE:
+        RETVAL = product_entersub_emit_enabled();
+    OUTPUT:
+        RETVAL
+
+int
+entersub_set_emit_enabled(on)
+    int on
+    CODE:
+        product_entersub_set_emit_enabled(on);
+        RETVAL = product_entersub_emit_enabled();
     OUTPUT:
         RETVAL
 

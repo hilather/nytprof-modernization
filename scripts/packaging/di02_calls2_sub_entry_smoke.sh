@@ -45,6 +45,16 @@ ok() { printf 'OK: %s\n' "$*"; }
 fail() { printf 'ERROR: %s\n' "$*" >&2; exit 1; }
 fail2() { printf 'ERROR: %s\n' "$*" >&2; exit 2; }
 
+# g17 overlays entersub=1 (this smoke hardcodes file= only).
+nytprof_attach() {
+  local spec="$1"
+  if [[ -n "${NYTPROF_ATTACH_OPTS:-}" ]]; then
+    printf '%s:%s' "$spec" "${NYTPROF_ATTACH_OPTS}"
+  else
+    printf '%s' "$spec"
+  fi
+}
+
 while [[ $# -gt 0 ]]; do
   case "$1" in
     -h|--help) usage; exit 0 ;;
@@ -172,7 +182,7 @@ JSON2="$WORKDIR/calls2.json"
 echo "running: NYTPROF=file=…:calls=2 perl -I${NYTP_DEST} -d:NYTProfM <calls2-default workload>"
 set +e
 RUN2="$(
-  cd "$WORKDIR" && NYTPROF="file=${PROFILE2}:calls=2" perl -I"$NYTP_DEST" -d:NYTProfM "$WORKLOAD" 2>&1
+  cd "$WORKDIR" && NYTPROF="$(nytprof_attach "file=${PROFILE2}:calls=2")" perl -I"$NYTP_DEST" -d:NYTProfM "$WORKLOAD" 2>&1
 )"
 RC2=$?
 set -e
@@ -236,7 +246,7 @@ JSON1="$WORKDIR/calls1.json"
 echo "running: NYTPROF=file=… (calls=1 default) perl -I${NYTP_DEST} -d:NYTProfM"
 set +e
 RUN1="$(
-  cd "$WORKDIR" && NYTPROF="file=${PROFILE1}" perl -I"$NYTP_DEST" -d:NYTProfM "$WORKLOAD" 2>&1
+  cd "$WORKDIR" && NYTPROF="$(nytprof_attach "file=${PROFILE1}")" perl -I"$NYTP_DEST" -d:NYTProfM "$WORKLOAD" 2>&1
 )"
 RC1=$?
 set -e
@@ -281,7 +291,7 @@ JSON0="$WORKDIR/slow0.json"
 echo "running: NYTPROF=file=…:calls=2:slowops=0"
 set +e
 RUN0="$(
-  cd "$WORKDIR" && NYTPROF="file=${PROFILE0}:calls=2:slowops=0" perl -I"$NYTP_DEST" -d:NYTProfM "$WORKLOAD" 2>&1
+  cd "$WORKDIR" && NYTPROF="$(nytprof_attach "file=${PROFILE0}:calls=2:slowops=0")" perl -I"$NYTP_DEST" -d:NYTProfM "$WORKLOAD" 2>&1
 )"
 RC0=$?
 set -e

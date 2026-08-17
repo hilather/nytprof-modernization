@@ -99,6 +99,8 @@ $Devel::NYTProfM::PRODUCT_SLOWOPS_OPS   = 0;
 $Devel::NYTProfM::PRODUCT_USE_DB_SUB    = 0;
 $Devel::NYTProfM::PRODUCT_WRAP          = 0;
 $Devel::NYTProfM::PRODUCT_ENTERSUB      = 0;
+# 1 only after file= actually installed OP_ENTERSUB (not wrap=1 win).
+$Devel::NYTProfM::PRODUCT_ENTERSUB_OPS  = 0;
 # Bench control only (not an NYTPROF colon option). 1 = old Perl
 # caller(0)+fid XSUB wrap so g16 can measure the C site crossing.
 $Devel::NYTProfM::PRODUCT_WRAP_SLOW =
@@ -260,11 +262,17 @@ sub _product_needs_goto {
 }
 
 # Smallest G04 hook: Perl DB::sub + $^P 0x01. Default wrap is C
-# wrap_push/wrap_pop → nytp_emit_* (PR-16). Not 6.15 entersub.
+# wrap_push/wrap_pop → nytp_emit_* (PR-16). Opcode path (entersub=1)
+# stubs this so wrap and OP_ENTERSUB never emit the same call.
 # $DB::sub is a CV ref for BEGIN (and some evals); resolve to
 # Package::BEGIN@line like 6.15.
 sub sub {
     my $raw = $DB::sub;
+    if ($Devel::NYTProfM::PRODUCT_ENTERSUB_OPS) {
+        die "NYTProfM: \$DB::sub is missing; cannot tail-call\n"
+          unless defined $raw && ( ref($raw) || ( !ref($raw) && length $raw ) );
+        goto &$raw;
+    }
     my $called = $raw;
     if ( ref $raw ) {
         $called = DB::name_cv($raw);
@@ -625,7 +633,24 @@ init_profiler();    # G03a: hold in-memory v5 sink — never writes nytprof.out
         # 0x01 to INIT — subs compiled without PERLDBf_SUB never call
         # DB::sub (g04 15/3/15 goes to 0).
         _product_nodebug_hint_magic();
-        $^P |= 0x01;    # sub enter/exit → DB::sub
+        # wrap=1 / use_db_sub=1 wins. Opcode only when ENTERSUB && !WRAP.
+        # Default (no entersub) stays wrap + $^P 0x01.
+        if ( $Devel::NYTProfM::PRODUCT_WRAP ) {
+            $^P |= 0x01;    # sub enter/exit → DB::sub
+        }
+        elsif ( $Devel::NYTProfM::PRODUCT_ENTERSUB ) {
+            my $st_es = DB::install_product_entersub();
+            if ( $st_es != 0 ) {
+                die "DB::install_product_entersub status=$st_es\n";
+            }
+            $Devel::NYTProfM::PRODUCT_ENTERSUB_OPS = 1;
+            if ( $^P & 0x01 ) {
+                die "NYTProfM: opcode entersub and wrap would both emit\n";
+            }
+        }
+        else {
+            $^P |= 0x01;    # E1a default: wrap
+        }
         $^P |= 0x02;    # line-by-line (dbstate already compiled when $^P != 0)
         $^P |= 0x20;    # start with single-step on
         # PR-7: do not set $DB::single here. pp_dbstate would run DB::DB
@@ -684,6 +709,12 @@ init_profiler();    # G03a: hold in-memory v5 sink — never writes nytprof.out
 INIT {
     if ($Devel::NYTProfM::PRODUCT_XS_ATTACH) {
         $product_after_init = 1;
+        if ( $Devel::NYTProfM::PRODUCT_ENTERSUB_OPS ) {
+            if ( $^P & 0x01 ) {
+                die "NYTProfM: opcode entersub and wrap would both emit\n";
+            }
+            DB::entersub_set_emit_enabled(1);
+        }
         if ( $Devel::NYTProfM::PRODUCT_DBSTATE_LINE ) {
             my $st_on = DB::activate_product_dbstate_timeline();
             if ( $st_on != 0 ) {

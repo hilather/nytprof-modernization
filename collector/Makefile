@@ -97,6 +97,9 @@ XS_PM_DST  := $(XS_BOOT)/$(XS_PKG_DIR)/$(XS_NAME).pm
 NYTP_XS        := xs/NYTProf.xs
 NYTP_C         := $(BUILD)/NYTProf.c
 NYTP_O         := $(BUILD)/NYTProf.o
+# Embed ccopts like NYTProf.o — not the collector src/%.c sink rule.
+NYTP_PP_ENTERSUB_C := xs/pp_entersub.c
+NYTP_PP_ENTERSUB_O := $(BUILD)/pp_entersub.o
 NYTP_DEST      := $(BUILD)/xs-nytprof
 NYTP_SO_DIR    := $(NYTP_DEST)/auto/Devel/NYTProfM
 NYTP_SO        := $(NYTP_SO_DIR)/NYTProfM.so
@@ -173,10 +176,16 @@ $(NYTP_C): $(NYTP_XS) | dirs
 		'process_file(filename => "$(NYTP_XS)", output => "$(NYTP_C)", prototypes => 0)'
 
 $(NYTP_O): $(NYTP_C) include/nytp_sink.h include/nytp_sink_v5.h include/nytp_clock.h \
-		include/nytp_fork.h
-	$(CC) $(CPPFLAGS) -fPIC -O2 -g \
+		include/nytp_fork.h xs/nytprof_pp.h
+	$(CC) $(CPPFLAGS) -Ixs -fPIC -O2 -g \
 		`$(PERL) -MExtUtils::Embed -e ccopts` \
 		-c -o $@ $(NYTP_C)
+
+$(NYTP_PP_ENTERSUB_O): $(NYTP_PP_ENTERSUB_C) xs/nytprof_pp.h \
+		include/nytp_sink.h include/nytp_clock.h include/nytp_types.h | dirs
+	$(CC) $(CPPFLAGS) -Ixs -fPIC -O2 -g \
+		`$(PERL) -MExtUtils::Embed -e ccopts` \
+		-c -o $@ $(NYTP_PP_ENTERSUB_C)
 
 $(NYTP_PM_DST): $(NYTP_PM_SRC) | dirs
 	@mkdir -p $(dir $@)
@@ -187,10 +196,10 @@ $(NYTP_CORE_DST): $(NYTP_CORE_SRC) | dirs
 	cp -f $(NYTP_CORE_SRC) $@
 
 # XS .so uses Config lddlflags + -lz only (same D1-B / G02 pattern).
-$(NYTP_SO): $(NYTP_O) $(LIB_V5) | dirs
+$(NYTP_SO): $(NYTP_O) $(NYTP_PP_ENTERSUB_O) $(LIB_V5) | dirs
 	@mkdir -p $(NYTP_SO_DIR)
 	$(CC) `$(PERL) -MConfig -e 'print $$Config{lddlflags}'` \
-		-o $@ $(NYTP_O) $(LIB_V5) $(LDFLAGS) $(LDLIBS_V5)
+		-o $@ $(NYTP_O) $(NYTP_PP_ENTERSUB_O) $(LIB_V5) $(LDFLAGS) $(LDLIBS_V5)
 
 xs-nytprof: $(NYTP_SO) $(NYTP_PM_DST) $(NYTP_CORE_DST)
 
@@ -217,8 +226,8 @@ $(LIB_V6C): $(OBJ_V5) $(PIC_V6_O) | dirs
 	$(AR) rcs $@ $^
 
 $(NYTP_O_V6): $(NYTP_C) include/nytp_sink.h include/nytp_sink_v5.h \
-		include/nytp_sink_v6.h include/nytp_clock.h
-	$(CC) $(CPPFLAGS) -fPIC -O2 -g -DNYTPROF_V6_COLLECT \
+		include/nytp_sink_v6.h include/nytp_clock.h xs/nytprof_pp.h
+	$(CC) $(CPPFLAGS) -Ixs -fPIC -O2 -g -DNYTPROF_V6_COLLECT \
 		`$(PERL) -MExtUtils::Embed -e ccopts` \
 		-c -o $@ $(NYTP_C)
 
@@ -230,10 +239,10 @@ $(NYTP_V6_CORE): $(NYTP_CORE_SRC) | dirs
 	@mkdir -p $(dir $@)
 	cp -f $(NYTP_CORE_SRC) $@
 
-$(NYTP_V6_SO): $(NYTP_O_V6) $(LIB_V6C) | dirs
+$(NYTP_V6_SO): $(NYTP_O_V6) $(NYTP_PP_ENTERSUB_O) $(LIB_V6C) | dirs
 	@mkdir -p $(NYTP_V6_SO_DIR)
 	$(CC) `$(PERL) -MConfig -e 'print $$Config{lddlflags}'` \
-		-o $@ $(NYTP_O_V6) $(LIB_V6C) $(LDFLAGS) $(LDLIBS_V6C)
+		-o $@ $(NYTP_O_V6) $(NYTP_PP_ENTERSUB_O) $(LIB_V6C) $(LDFLAGS) $(LDLIBS_V6C)
 
 xs-nytprof-v6: $(NYTP_V6_SO) $(NYTP_V6_PM) $(NYTP_V6_CORE)
 

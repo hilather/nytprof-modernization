@@ -24,6 +24,16 @@ ok() { printf 'OK: %s\n' "$*"; }
 fail() { printf 'ERROR: %s\n' "$*" >&2; exit 1; }
 fail2() { printf 'ERROR: %s\n' "$*" >&2; exit 2; }
 
+# g17 overlays entersub=1 (these smokes hardcode file= only).
+nytprof_attach() {
+  local spec="$1"
+  if [[ -n "${NYTPROF_ATTACH_OPTS:-}" ]]; then
+    printf '%s:%s' "$spec" "${NYTPROF_ATTACH_OPTS}"
+  else
+    printf '%s' "$spec"
+  fi
+}
+
 echo "g14_nested_excl_smoke: repo root $ROOT"
 echo "collection_default remains v5; never crates/ on PERL5LIB"
 
@@ -120,7 +130,7 @@ PROFILE="$WORKDIR/nytprof.out"
 DUMP="$WORKDIR/dump.jsonl"
 set +e
 RUN_OUT="$(
-  cd "$WORKDIR" && NYTPROF="file=${PROFILE}" perl -I"$NYTP_DEST" -d:NYTProfM "$SCRIPT" 2>&1
+  cd "$WORKDIR" && NYTPROF="$(nytprof_attach "file=${PROFILE}")" perl -I"$NYTP_DEST" -d:NYTProfM "$SCRIPT" 2>&1
 )"
 RUN_RC=$?
 set -e
@@ -185,7 +195,7 @@ ST0="$WORKDIR/stmts0.out"
 DUMP0="$WORKDIR/dump0.jsonl"
 set +e
 ST0_OUT="$(
-  cd "$WORKDIR" && NYTPROF="file=${ST0}:stmts=0" perl -I"$NYTP_DEST" -d:NYTProfM "$SCRIPT" 2>&1
+  cd "$WORKDIR" && NYTPROF="$(nytprof_attach "file=${ST0}:stmts=0")" perl -I"$NYTP_DEST" -d:NYTProfM "$SCRIPT" 2>&1
 )"
 ST0_RC=$?
 set -e
