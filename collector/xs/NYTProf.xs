@@ -513,6 +513,42 @@ product_parse_DBsub_value(pTHX_ SV *sv, STRLEN *filename_len_p,
     return 1;
 }
 
+/* Mark every CV in a stash CvNODEBUG so Perl will not call DB::sub.
+ * Needed for B::Hooks::EndOfScope::XS::on_scope_end: even `goto &$raw`
+ * from DB::sub during use/BEGIN corrupts compile-time %^H (Variable::Magic
+ * getdata then returns a source fragment such as "#pod\n").
+ */
+static int
+product_nodebug_stash(pTHX_ const char *name)
+{
+    HV *stash;
+    HE *he;
+    int n = 0;
+
+    if (name == NULL || name[0] == '\0') {
+        return 0;
+    }
+    stash = gv_stashpv(name, 0);
+    if (stash == NULL) {
+        return 0;
+    }
+    hv_iterinit(stash);
+    while ((he = hv_iternext(stash)) != NULL) {
+        SV *val = HeVAL(he);
+        CV *cv;
+        if (val == NULL || val == &PL_sv_placeholder || !isGV(val)) {
+            continue;
+        }
+        cv = GvCV((GV *)val);
+        if (cv == NULL) {
+            continue;
+        }
+        CvNODEBUG_on(cv);
+        n++;
+    }
+    return n;
+}
+
 static void
 product_apply_savesrc_flags(pTHX)
 {
@@ -1620,6 +1656,14 @@ rebind_stash_slowops(name)
     const char *name
     CODE:
         RETVAL = product_rebind_stash_slowops(aTHX_ name);
+    OUTPUT:
+        RETVAL
+
+int
+nodebug_stash(name)
+    const char *name
+    CODE:
+        RETVAL = product_nodebug_stash(aTHX_ name);
     OUTPUT:
         RETVAL
 

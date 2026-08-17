@@ -113,6 +113,21 @@ jobs:
           set -euo pipefail
           ./scripts/field/rocky8_docker_profile_smoke.sh
 
+  # Real CPAN app attach net (Rex + DateTime). Honest SKIP without docker.
+  # Not offline_gate. First run installs Rex/DateTime/YAML via cpanm.
+  complex-app-docker-lab:
+    name: Complex-app Docker lab (Rex)
+    runs-on: ubuntu-latest
+    timeout-minutes: 75
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Rex + DateTime Docker profile smoke
+        run: |
+          set -euo pipefail
+          ./scripts/field/complex_app_docker_profile_smoke.sh
+
   offline-gate-matrix:
     name: offline_gate (${{ matrix.label }})
     needs: [rust-smoke]

@@ -198,6 +198,7 @@ sub MY::postamble {
     my $p01_sm_sh    = 'scripts/packaging/p01_ga_candidate_smoke.sh';
     my $p02_sm_sh    = 'scripts/packaging/p02_sec_cut_smoke.sh';
     my $r8lab_sm_sh  = 'scripts/field/rocky8_docker_profile_smoke.sh';
+    my $rexlab_sm_sh = 'scripts/field/complex_app_docker_profile_smoke.sh';
 
     # Make recipes require real TAB characters. Build lines with "\t" (not
     # backslash-t inside a heredoc, which would stay literal).
@@ -246,6 +247,7 @@ sub MY::postamble {
         '$(NOECHO) $(ECHO) "  make p01-ga-candidate-smoke   # P01 GA-candidate honesty"',
         '$(NOECHO) $(ECHO) "  make p02-sec-cut-smoke        # P02 SEC-012 checklist + SEC-002 job MVP"',
         '$(NOECHO) $(ECHO) "  make rocky8-docker-lab-smoke  # Rocky 8 Docker profile lab (honest docker SKIP)"',
+        '$(NOECHO) $(ECHO) "  make complex-app-docker-lab-smoke # Rex + DateTime Docker attach lab (honest docker SKIP)"',
         '$(NOECHO) $(ECHO) "  make test              # legacy-smoke (cargo-free)"',
         '$(NOECHO) $(ECHO) "  NYTPROF_NATIVE=0|1|auto perl Makefile.PL"',
     );
@@ -320,6 +322,10 @@ sub MY::postamble {
         '$(NOECHO) $(ECHO) "=== make rocky8-docker-lab-smoke -> ' . $r8lab_sm_sh . ' ==="',
         'bash ' . $r8lab_sm_sh,
     );
+    my $rexlab_sm_body = $lines->(
+        '$(NOECHO) $(ECHO) "=== make complex-app-docker-lab-smoke -> ' . $rexlab_sm_sh . ' ==="',
+        'bash ' . $rexlab_sm_sh,
+    );
 
     return <<"MAKE_FRAG";
 
@@ -328,7 +334,7 @@ sub MY::postamble {
 # Never put crates/ on oracle PERL5LIB; child smokes own isolation.
 # ---------------------------------------------------------------------------
 
-.PHONY: legacy-smoke dual-path-smoke offline-gate collector-sink-smoke native-install native native-smoke packaging-help packaging-all install-product-xs product-legacy-smoke install-product-scripts i03-dist-scripts-smoke j01-cpan-hygiene-smoke j02-cpan-trial-notes-smoke k01-el8-module-rpm-smoke k02-el8-tools-rpm-smoke p01-ga-candidate-smoke p02-sec-cut-smoke rocky8-docker-lab-smoke
+.PHONY: legacy-smoke dual-path-smoke offline-gate collector-sink-smoke native-install native native-smoke packaging-help packaging-all install-product-xs product-legacy-smoke install-product-scripts i03-dist-scripts-smoke j01-cpan-hygiene-smoke j02-cpan-trial-notes-smoke k01-el8-module-rpm-smoke k02-el8-tools-rpm-smoke p01-ga-candidate-smoke p02-sec-cut-smoke rocky8-docker-lab-smoke complex-app-docker-lab-smoke
 
 # Hook default `all` so `perl Makefile.PL && make` is meaningful.
 all :: packaging-all
@@ -373,5 +379,7 @@ p02-sec-cut-smoke:
 $p02_sm_body
 rocky8-docker-lab-smoke:
 $r8lab_sm_body
+complex-app-docker-lab-smoke:
+$rexlab_sm_body
 MAKE_FRAG
 }

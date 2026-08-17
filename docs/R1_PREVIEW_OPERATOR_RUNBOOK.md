@@ -575,7 +575,7 @@ Charter **R5** is **governance only** unless a later **per-component** ADR execu
 
 End-to-end **unsigned testdrive** on `rockylinux:8`: install `perl-NYTProfM`, download [ack v3](https://beyondgrep.com/) plus a public-domain text corpus, run `perl -d:NYTProfM` on a **core-only** ~1-minute text analyzer, and write `nytprof.out` + native `nytprofm-cli html` into a host directory.
 
-**PR-7 landed:** `use Getopt::Long` / Exporter / Time::HiRes compile under product `-d:NYTProfM` (`INIT` `$DB::single` + `goto &$raw` for those modules; smoke [`g07_getopt_compile_smoke.sh`](https://github.com/hilather/nytprof-modernization/blob/main/scripts/packaging/g07_getopt_compile_smoke.sh)). The Rocky demo still profiles the **core-only** scanner — **ack is not the profiled process** until a later field retry. Historical fail-closed notes: [failed-attempts.md](https://github.com/hilather/nytprof-modernization/blob/main/docs/agent-notes/failed-attempts.md) (`rocky8-profile-ack-d-nytprofm`).
+**PR-7 landed:** `use Getopt::Long` / Exporter / Time::HiRes compile under product `-d:NYTProfM` (`INIT` `$DB::single` + `goto &$raw` for those modules; smoke [`g07_getopt_compile_smoke.sh`](https://github.com/hilather/nytprof-modernization/blob/main/scripts/packaging/g07_getopt_compile_smoke.sh)). **PR-10:** do not wrap `CORE::require`; preload BHES / Variable::Magic / namespace::* and `CvNODEBUG` their CVs before `$^P` 0x01 — `DB::sub` during `on_scope_end` broke `DateTime::Duration` (`Can't use string ("#pod\n") as an ARRAY ref` at `B/Hooks/EndOfScope/XS.pm`). Smoke [`g10_datetime_hints_smoke.sh`](https://github.com/hilather/nytprof-modernization/blob/main/scripts/packaging/g10_datetime_hints_smoke.sh). The Rocky demo still profiles the **core-only** scanner — **ack is not the profiled process** until a later field retry. Historical fail-closed notes: [failed-attempts.md](https://github.com/hilather/nytprof-modernization/blob/main/docs/agent-notes/failed-attempts.md) (`rocky8-profile-ack-d-nytprofm`).
 
 ```sh
 ./scripts/field/rocky8_docker_profile_demo.sh
@@ -597,6 +597,25 @@ Script: [rocky8_docker_profile_demo.sh](https://github.com/hilather/nytprof-mode
 ```
 
 Schema: [rocky8-docker-profile-lab-mvp-v0.md](https://github.com/hilather/nytprof-modernization/blob/main/docs/schemas/rocky8-docker-profile-lab-mvp-v0.md). GHA job **Rocky 8 Docker lab** on `ubuntu-latest` (timeout ≥45). Native operator HTML v2 ([ADR-0012](https://github.com/hilather/nytprof-modernization/blob/main/docs/adrs/0012-native-operator-html-v2.md)): oracle-shaped chrome/IA via modern CSS + `nytprof-sort.js`. jquery/tablesorter remain **WAIVE** (M01). Dual lab: `--engine native|oracle|both` (smoke uses `--both`; `$OUT/html` is a symlink to `native/html`). Both engines share `--seconds` and the same corpus (apples-to-apples). Host-side paired reports: [`compare_oracle_native_reports.sh`](https://github.com/hilather/nytprof-modernization/blob/main/scripts/field/compare_oracle_native_reports.sh). Oracle container builds 6.15 from the committed archive with **no** `crates/` on `PERL5LIB`.
+
+### 7c.4 Rocky 8 Docker Rex / DateTime attach lab
+
+End-to-end **complex CPAN app** on `rockylinux:8`: build **in-tree** `xs-nytprof`, `cpanm` Rex + DateTime + YAML, run `perl -d:NYTProfM run_lab.pl` (`use Rex` + DateTime + YAML; `rex -T` is an unprofiled load canary), write `nytprof.out` + host `nytprof-cli html --no-flame` into `~/Downloads/nytprof-rex-demo/`.
+
+This is the attach net for module graphs the core-only scanner never loads (`DateTime::Duration` / `namespace::autoclean` / `B::Hooks::EndOfScope::XS`, Getopt, Rex). Fail-closed on `%^H` ARRAY-ref / EndOfScope / `$VERSION` abort.
+
+```sh
+./scripts/field/complex_app_docker_profile.sh
+# default native:
+#   ~/Downloads/nytprof-rex-demo/html/index.html
+./scripts/field/complex_app_docker_profile.sh --engine both
+# same driver + seconds: native NYTProfM and 6.15 -d:NYTProf
+# COMPARE.txt is attach survival only — not exclusive-time match
+./scripts/field/complex_app_docker_profile_smoke.sh
+# make complex-app-docker-lab-smoke
+```
+
+Schema: [complex-app-docker-profile-mvp-v0.md](https://github.com/hilather/nytprof-modernization/blob/main/docs/schemas/complex-app-docker-profile-mvp-v0.md). GHA job **Complex-app Docker lab (Rex)**. **Not** `offline_gate`. **Not** a public perf claim.
 
 ### `fixtures/v5/default-calls1` (leaf / mid)
 

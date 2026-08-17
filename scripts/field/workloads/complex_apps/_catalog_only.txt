@@ -1,0 +1,2 @@
+This id is catalog-only (not top-10). No bounded driver is required for attach
+survival this slice. See docs/schemas/complex-app-catalog-v0.md.

@@ -28,7 +28,15 @@
 # PR-7    — Compile-safe start: do not set $DB::single at file= enable.
 # INIT sets it so use/BEGIN compile without DB::DB. DB::sub goto-all
 # until INIT; after, goto &$raw for Exporter / Getopt / vars / constant
-# / overload (not &$raw wrap). Workload subs keep the hash-stack wrap.
+# / overload / any ::import / Moo / Moose / Class:: / Rex:: / DateTime::
+# (not &$raw wrap). Workload subs keep the hash-stack wrap.
+# PR-10   — Do not wrap CORE::require (no CORE::GLOBAL::require).
+# Preload B::Hooks::EndOfScope / Variable::Magic / namespace::* and
+# CvNODEBUG their CVs before $^P 0x01. DB::sub during on_scope_end
+# (even goto) breaks %^H so DateTime::Duration dies: Can't use string
+# ("#pod\n") as an ARRAY ref at B/Hooks/EndOfScope/XS.pm line 39.
+# Do not defer 0x01 to INIT (subs compiled without PERLDBf_SUB never
+# call DB::sub).
 # Shape follows 6.15 Devel::NYTProf.pm: package Devel::NYTProfM then DB,
 # require Core, init_profiler().
 
@@ -80,7 +88,6 @@ $Devel::NYTProfM::PRODUCT_CALLS         = 1;
 $Devel::NYTProfM::PRODUCT_SLOWOPS       = 2;
 $Devel::NYTProfM::PRODUCT_STMT_OPS      = 0;
 $Devel::NYTProfM::PRODUCT_SLOWOPS_OPS   = 0;
-$Devel::NYTProfM::PRODUCT_REQUIRE_REBIND = 0;
 $Devel::NYTProfM::PRODUCT_SIGEXIT        = '';
 $Devel::NYTProfM::PRODUCT_SIGEXIT_DONE   = 0;
 # PR-3: 6.15 NYTP_OPTf_SAVESRC default on. set_savesrc applies PL_perldb.
@@ -168,7 +175,9 @@ sub _product_skip_sub {
     my ($name) = @_;
     return 1 unless defined $name && length $name;
     return 1 if ref $name;
-    return 1 if $name =~ /^(?:DB::|Devel::NYTProfM::|CORE::GLOBAL::fork)/;
+    return 1
+      if $name =~
+      /^(?:DB::|Devel::NYTProfM::|CORE::GLOBAL::(?:fork|require))/;
     return 1 if $name =~ /::__ANON__\b/;
     return 0;
 }
@@ -183,9 +192,23 @@ sub _product_needs_goto {
     my ($name) = @_;
     return 0 unless defined $name && length $name;
     return 0 if ref $name;
+    # Inherited Exporter::import is named Child::import in $DB::sub
+    # (Rex::Shared::Var::import). Wrapping it exports into DB, so
+    # `share qw(@SUMMARY)` in Rex::TaskList::Base is a syntax error
+    # and ->new is missing. Same for any use/import that uses caller.
+    return 1 if $name =~ /::(?:import|unimport)\z/;
     return 1
       if $name =~
       /^(?:Exporter(?:::|\z)|Getopt::|vars::|constant::|overload::)/;
+    # XSLoader::load() with no args uses caller() as the module name.
+    # Wrapping it looks for DB.so: "Can't locate loadable object for
+    # module DB" (Rex::Shared::Var::Common `use Fcntl` / Storable).
+    return 1
+      if $name =~
+      /^(?:XSLoader(?:::|\z)|DynaLoader(?:::|\z))/;
+    return 1
+      if $name =~
+      /^(?:Moo(?:::|\z)|Moose(?:::|\z)|Class::|Rex(?:::|\z)|DateTime(?:::|\z))/;
     return 0;
 }
 
@@ -202,6 +225,16 @@ sub sub {
         if ( defined $called && $called =~ /::BEGIN$/ && $called !~ /@/ ) {
             my ( undef, undef, $bline ) = caller(0);
             $called .= '@' . ( $bline || 0 );
+        }
+    }
+    elsif ( defined $raw && !ref $raw ) {
+        # Imported alias: Rexfile `task` may be "task" or "main::task"
+        # while the CV lives in Rex::Commands. Resolve defining name
+        # so _product_needs_goto sees Rex:: (not main::).
+        my $cand = $raw =~ /::/ ? $raw : "main::$raw";
+        if ( defined &$cand ) {
+            my $real = eval { DB::name_cv( \&$cand ) };
+            $called = $real if defined $real && length $real && $real =~ /::/;
         }
     }
     if (  !$Devel::NYTProfM::PRODUCT_XS_ATTACH
@@ -327,22 +360,25 @@ sub _product_fork {
     return 0;
 }
 
-sub _product_install_require_rebind {
-    return if $Devel::NYTProfM::PRODUCT_REQUIRE_REBIND;
-    $Devel::NYTProfM::PRODUCT_REQUIRE_REBIND = 1;
-    # After warnings.pm compiles, rebind MATCH/PRINT op_ppaddr (ck_match
-    # may not keep PL_ppaddr[OP_MATCH]). Then import() sees the hook.
-    *CORE::GLOBAL::require = sub {
-        my ($f) = @_;
-        my $ok = CORE::require($f);
-        if (  $Devel::NYTProfM::PRODUCT_SLOWOPS_OPS
-            && defined $f
-            && $f =~ /(?:^|[\/\\])warnings\.pm\z/ )
-        {
-            DB::rebind_stash_slowops('warnings');
-        }
-        return $ok;
-    };
+# Preload compile-time %^H helpers and disable DB::sub on their CVs.
+# Must run before $^P 0x01. Missing modules are skipped (host may not
+# have DateTime / namespace::autoclean).
+sub _product_nodebug_hint_magic {
+    my @pkgs = qw(
+      Variable::Magic
+      B::Hooks::EndOfScope
+      B::Hooks::EndOfScope::XS
+      B::Hooks::EndOfScope::PP
+      namespace::clean
+      namespace::autoclean
+      Package::Stash
+      Package::Stash::XS
+      Sub::Exporter::Progressive
+    );
+    for my $pkg (@pkgs) {
+        eval "require $pkg; 1" or next;
+        eval { DB::nodebug_stash($pkg); 1 };
+    }
 }
 
 sub _product_sigexit_signals {
@@ -484,6 +520,14 @@ init_profiler();    # G03a: hold in-memory v5 sink — never writes nytprof.out
             }
         }
         $Devel::NYTProfM::PRODUCT_XS_ATTACH = 1;
+        # PR-10: preload %^H-magic modules and CvNODEBUG their CVs
+        # *before* $^P 0x01. DB::sub (even `goto &$raw`) during
+        # on_scope_end breaks Variable::Magic::getdata(%^H) so
+        # DateTime::Duration dies: Can't use string ("#pod\n") as an
+        # ARRAY ref at B/Hooks/EndOfScope/XS.pm line 39. Do not defer
+        # 0x01 to INIT — subs compiled without PERLDBf_SUB never call
+        # DB::sub (g04 15/3/15 goes to 0).
+        _product_nodebug_hint_magic();
         $^P |= 0x01;    # sub enter/exit → DB::sub
         $^P |= 0x02;    # line-by-line (dbstate already compiled when $^P != 0)
         $^P |= 0x20;    # start with single-step on
@@ -510,9 +554,13 @@ init_profiler();    # G03a: hold in-memory v5 sink — never writes nytprof.out
             }
             # Compile warnings.pm after PL_ppaddr redirect, then rebind
             # any MATCH ops that kept a specialized op_ppaddr.
+            # Do **not** install CORE::GLOBAL::require: wrapping
+            # CORE::require in a Perl sub breaks compile-time %^H
+            # magic (B::Hooks::EndOfScope::XS / namespace::autoclean /
+            # DateTime::Duration — "Can't use string ("#pod\n") as an
+            # ARRAY ref at .../EndOfScope/XS.pm line 39").
             require warnings;
             DB::rebind_stash_slowops('warnings');
-            _product_install_require_rebind();
         }
         if ( $Devel::NYTProfM::PRODUCT_ADDPID ) {
             _product_install_fork_hook();
@@ -531,6 +579,9 @@ INIT {
     if ($Devel::NYTProfM::PRODUCT_XS_ATTACH) {
         $DB::single           = 1;
         $product_after_init   = 1;
+        if ($Devel::NYTProfM::PRODUCT_SLOWOPS_OPS) {
+            DB::rebind_stash_slowops('warnings');
+        }
     }
 }
 

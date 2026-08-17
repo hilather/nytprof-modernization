@@ -1,0 +1,59 @@
+# Local-only Rexfile for the NYTProfM complex-app Docker lab.
+# Loaded by the real `rex` CLI (Getopt + Rex + DateTime + YAML).
+# Never opens SSH: connection Local, no `run`/`upload`.
+use Rex -feature => ['1.4'];
+use DateTime;
+use YAML;
+
+set connection => 'Local';
+
+desc 'List lab tasks (rex -T canary)';
+task 'ping', sub {
+    say 'rex_ping_ok';
+};
+
+desc 'Bounded local lab: DateTime math + YAML round-trip';
+task 'lab', sub {
+    my $secs = $ENV{NYTPROF_DEMO_SECONDS} || 5;
+    $secs = 5 if $secs !~ /^\d+$/ || $secs < 1;
+    $secs = 120 if $secs > 120;
+    my $until = time + $secs;
+    my $n     = 0;
+    my $base  = DateTime->new(
+        year      => 2020,
+        month     => 1,
+        day       => 1,
+        time_zone => 'UTC',
+    );
+    while ( time < $until ) {
+        $n++;
+        my $dt = $base->clone->add(
+            days  => ( $n % 28 ) + 1,
+            hours => ( $n % 24 ),
+        );
+        my $dur = DateTime::Duration->new(
+            days    => 1,
+            hours   => 2,
+            minutes => ( $n % 60 ),
+        );
+        $dt->add_duration($dur);
+        my $payload = {
+            n     => $n,
+            iso   => $dt->iso8601,
+            ymd   => $dt->ymd,
+            days  => $dur->delta_days,
+            stamp => DateTime->now( time_zone => 'UTC' )->epoch,
+        };
+        my $yaml = YAML::Dump($payload);
+        my $back = YAML::Load($yaml);
+        die "yaml roundtrip n" unless $back->{n} == $n;
+        die "ymd" unless $back->{ymd} =~ /^\d{4}-\d{2}-\d{2}$/;
+        my $blob = reverse($yaml) . ( $n % 7 );
+        $blob =~ s/\s+//g;
+        length $blob > 0 or die 'blob';
+    }
+    die 'rex_lab produced no passes' if $n < 1;
+    say "rex_lab_ok passes=$n secs=$secs";
+};
+
+1;

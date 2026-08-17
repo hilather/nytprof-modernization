@@ -91,6 +91,7 @@
 | `DB::enable_sink` on `file=` | Replaces the held sink; activate; `$PRODUCT_XS_ATTACH=1` for that session only |
 | `$^P \|= 0x01` | Sub enter/exit → `DB::sub` |
 | `$^P \|= 0x02` + `$DB::single=1` in `INIT` | Line-by-line → `DB::DB` (`pp_dbstate` only calls `DB::DB` when `$DB::single` is true). **PR-7:** do **not** set `$DB::single` at `file=` enable — `INIT` turns it on after `use`/`BEGIN` compile. Smoke [`g07_getopt_compile_smoke.sh`](https://github.com/hilather/nytprof-modernization/blob/main/scripts/packaging/g07_getopt_compile_smoke.sh). |
+| No `CORE::GLOBAL::require`; hint-magic `CvNODEBUG` | **PR-10:** do **not** wrap `CORE::require`. Preload BHES / Variable::Magic / namespace::* and `DB::nodebug_stash` **before** `$^P \|= 0x01`. `DB::sub` during `on_scope_end` breaks `%^H` / `DateTime::Duration`. Do **not** defer 0x01 to `INIT`. Smoke [`g10_datetime_hints_smoke.sh`](https://github.com/hilather/nytprof-modernization/blob/main/scripts/packaging/g10_datetime_hints_smoke.sh). |
 | `DB::sub` | Emits `SUB_RETURN` + `SUB_CALLERS` via shipped `DB::emit_*` → `nytp_emit_*` |
 | `DB::emit_sub_callers` | Call **only** shipped `nytp_emit_sub_callers` |
 | `DB::DB` | Emits `TIME_LINE` via shipped `nytp_emit_time_line` |

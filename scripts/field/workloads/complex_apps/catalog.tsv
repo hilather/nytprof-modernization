@@ -1,0 +1,21 @@
+# id	tier	primary_family	token	cpan	yum_extra	driver	reason
+rex	top10	Rex/Moo-automation	rex_lab_ok	Rex@1.16.1,DateTime,YAML,Module::Load	-	scripts/field/workloads/rex_local_lab/run_lab.pl	Rex CLI/stack: inherited Exporter import, Shared::Var, Getopt, DateTime
+mojolicious	top10	Mojolicious/Mojo	mojo_lab_ok	Mojolicious	-	scripts/field/workloads/complex_apps/mojolicious/run_lab.pl	Mojo DOM/URL/util — evented web toolkit without a daemon
+dbi_sqlite	top10	DBI/DBD-SQLite	dbi_sqlite_lab_ok	DBI,DBD::SQLite	-	scripts/field/workloads/complex_apps/dbi_sqlite/run_lab.pl	DBI method resolution + SQLite XS driver
+template_toolkit	top10	Template-Toolkit	tt_lab_ok	Template	-	scripts/field/workloads/complex_apps/template_toolkit/run_lab.pl	TT compile/process stash — stash/eval-heavy
+ppi	top10	PPI-perl-AST	ppi_lab_ok	PPI	-	scripts/field/workloads/complex_apps/ppi/run_lab.pl	PPI document tree — many small classes and find()
+xml_libxml	top10	XML-LibXML-XS	xml_libxml_lab_ok	XML::LibXML	libxml2-devel	scripts/field/workloads/complex_apps/xml_libxml/run_lab.pl	libxml2 XSUB DOM/XPath
+json_xs	top10	Cpanel-JSON-XS	json_xs_lab_ok	Cpanel::JSON::XS	-	scripts/field/workloads/complex_apps/json_xs/run_lab.pl	High-perf JSON XSUB encode/decode
+csv_xs	top10	Text-CSV_XS	csv_xs_lab_ok	Text::CSV_XS	-	scripts/field/workloads/complex_apps/csv_xs/run_lab.pl	CSV parse/print XSUB
+cryptx	top10	CryptX	cryptx_lab_ok	CryptX	-	scripts/field/workloads/complex_apps/cryptx/run_lab.pl	CryptX digest/PRNG XSUBs
+html_tree	top10	HTML-Parser	html_tree_lab_ok	HTML::Tree,HTML::Parser	-	scripts/field/workloads/complex_apps/html_tree/run_lab.pl	HTML::Parser XS + TreeBuilder object walk
+dancer2	catalog	Dancer2/Plack	dancer2_lab_ok	Dancer2	-	scripts/field/workloads/complex_apps/_catalog_only.txt	Plack/Dancer2 web — overlaps Mojo family so not top10
+dbix_class	catalog	DBIx-Class-ORM	dbix_class_lab_ok	DBIx::Class	-	scripts/field/workloads/complex_apps/_catalog_only.txt	ORM — overlaps DBI family so not top10
+app_ack	catalog	App-Ack	ack_lab_ok	App::Ack	-	scripts/field/workloads/complex_apps/_catalog_only.txt	ack file search / Getopt — compile-safe attach residual
+sqitch	catalog	App-Sqitch	sqitch_lab_ok	App::Sqitch	-	scripts/field/workloads/complex_apps/_catalog_only.txt	DB change-management CLI
+git_repository	catalog	Git-Repository	git_repo_lab_ok	Git::Repository	-	scripts/field/workloads/complex_apps/_catalog_only.txt	git porcelain wrapper
+yaml_xs	catalog	YAML-LibYAML	yaml_xs_lab_ok	YAML::XS	-	scripts/field/workloads/complex_apps/_catalog_only.txt	libyaml XSUB — overlaps Rex YAML.pm userland so not top10
+net_dns	catalog	Net-DNS	net_dns_lab_ok	Net::DNS	-	scripts/field/workloads/complex_apps/_catalog_only.txt	DNS packet encode/decode
+dist_zilla	catalog	Dist-Zilla	dzil_lab_ok	Dist::Zilla	-	scripts/field/workloads/complex_apps/_catalog_only.txt	plugin-heavy release toolkit
+io_async	catalog	IO-Async	io_async_lab_ok	IO::Async	-	scripts/field/workloads/complex_apps/_catalog_only.txt	event-loop futures (no listen daemon)
+minion	catalog	Minion/Mojo-jobs	minion_lab_ok	Minion	-	scripts/field/workloads/complex_apps/_catalog_only.txt	Mojo job queue — overlaps Mojo family so not top10

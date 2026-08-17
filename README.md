@@ -175,6 +175,9 @@ perl Makefile.PL && make offline-gate          # CI-OFFLINE-GATE wrapper
 ./scripts/packaging/g05_options_format_smoke.sh # OK: G05 unknown/dual/D1-B v6 fail-closed; D1-A NYTPROF6
 ./scripts/packaging/g06_fork_addpid_smoke.sh    # OK: G06 live fork+addpid parent + <file>.<pid> NYTProf 5
 ./scripts/packaging/g07_getopt_compile_smoke.sh # OK: PR-7 Getopt/Exporter compile under -d:NYTProfM
+./scripts/packaging/g10_datetime_hints_smoke.sh # OK: PR-10 no CORE::GLOBAL::require wrap; DateTime::Duration
+./scripts/field/complex_app_docker_profile.sh   # --app rex\|ppi\|json_xs\|… Rocky 8 attach
+./scripts/field/complex_app_docker_profile_smoke.sh # --app rex --engine both (honest docker SKIP)
 ./scripts/packaging/product_legacy_smoke.sh    # I01: cargo-free prefix install + live attach 15/3/15
 ./scripts/packaging/install_product_xs.sh      # I01: install product Devel::NYTProf (no cargo)
 ./scripts/packaging/i02_makemaker_native_smoke.sh # I02: NYTPROF_NATIVE=1 fail-closed; auto/0 cargo-free; CLI 15/3/15
