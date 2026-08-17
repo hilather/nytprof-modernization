@@ -93,6 +93,12 @@ $Devel::NYTProfM::PRODUCT_STMTS         = 1;
 $Devel::NYTProfM::PRODUCT_STMT_OPS      = 0;
 $Devel::NYTProfM::PRODUCT_DBSTATE_LINE  = 0;
 $Devel::NYTProfM::PRODUCT_SLOWOPS_OPS   = 0;
+# DI-03 E0: parse/stamp only. Default attach stays wrap + C DBSTATE.
+# use_db_sub=1 is a product synonym for wrap=1 (escape), not 6.15 stmt
+# DB::DB + opcode calls (KD-E11). wrap=1 wins over entersub=1.
+$Devel::NYTProfM::PRODUCT_USE_DB_SUB    = 0;
+$Devel::NYTProfM::PRODUCT_WRAP          = 0;
+$Devel::NYTProfM::PRODUCT_ENTERSUB      = 0;
 # Bench control only (not an NYTPROF colon option). 1 = old Perl
 # caller(0)+fid XSUB wrap so g16 can measure the C site crossing.
 $Devel::NYTProfM::PRODUCT_WRAP_SLOW =
@@ -148,6 +154,7 @@ my %PRODUCT_NYTPROF_KNOWN = map { $_ => 1 } qw(
   usecputime clock trace findcaller forkdepth addpid nameevals nameanonsubs
   evals sigexit posix_exit perldb use_db_sub expand log optimize optimise
   savesrc endatexit libcexit addtimestamp
+  wrap entersub
 );
 
 # Parse NYTPROF the way 6.15 Core.pm does: colon-separated, backslash-escapes.
@@ -555,6 +562,25 @@ sub _product_install_fork_hook {
     }
     my $savesrc = _product_int_opt( $opts, 'savesrc', 1 );
     $Devel::NYTProfM::PRODUCT_SAVESRC = $savesrc ? 1 : 0;
+    # DI-03 E0: apply 0/1 only. No hook change (opcode not installed).
+    # wrap=1 / use_db_sub=1 stamp wrap; entersub=1 stamps PRODUCT_ENTERSUB
+    # but wrap wins (escape) — do not install opcode even when both are 1.
+    my $use_db_sub = _product_int_opt( $opts, 'use_db_sub', 0 );
+    if ( $use_db_sub != 0 && $use_db_sub != 1 ) {
+        die "unknown NYTPROF option: use_db_sub\n";
+    }
+    my $wrap = _product_int_opt( $opts, 'wrap', 0 );
+    if ( $wrap != 0 && $wrap != 1 ) {
+        die "unknown NYTPROF option: wrap\n";
+    }
+    my $entersub = _product_int_opt( $opts, 'entersub', 0 );
+    if ( $entersub != 0 && $entersub != 1 ) {
+        die "unknown NYTPROF option: entersub\n";
+    }
+    $Devel::NYTProfM::PRODUCT_USE_DB_SUB = $use_db_sub ? 1 : 0;
+    $Devel::NYTProfM::PRODUCT_WRAP =
+      ( $wrap || $use_db_sub ) ? 1 : 0;
+    $Devel::NYTProfM::PRODUCT_ENTERSUB = $entersub ? 1 : 0;
 }
 
 init_profiler();    # G03a: hold in-memory v5 sink — never writes nytprof.out

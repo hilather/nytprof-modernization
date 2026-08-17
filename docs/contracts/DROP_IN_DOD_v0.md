@@ -100,6 +100,9 @@ Sources: `baseline/6.15/src/NYTProf.xs` options table (~lines 249–283) + strin
 | `evals` | eval profiling | residual | residual | |
 | `sigexit` / posix exit | signal end | **live** `sigexit=1` → INT/TERM/HUP/PIPE flush | work subset | `_exit` / BUS/SEGV residual |
 | `perldb` / embed options | debugger interaction | residual | residual | |
+| `use_db_sub` | 6.15: stmt `DB::DB` + opcode calls still on | **parse/stamp 0/1** (E0) | wrap-escape **fork** | **Not** 6.15 stmt `DB::DB`. Product synonym for `wrap=1`. Values other than 0/1 fail-closed. **No hook change** in E0. |
+| `wrap` | **new product** | **parse/stamp 0/1** (E0) | wrap escape after E1b | Canonical wrap escape. Wins over `entersub=1`. Values other than 0/1 fail-closed. **No hook change** in E0 (default still wrap + C DBSTATE). |
+| `entersub` | **new product** | **parse/stamp 0/1** (E0) | E1a opt-in opcode | Stamp only in E0 — opcode **not installed**. `wrap=1` / `use_db_sub=1` wins. Values other than 0/1 fail-closed. **DI-03 opcode/`entersub` — in progress, not done**. |
 | **`format`** | **new product** | `v5` default; `v6` per **D1-A/D1-B**; `dual` **reject** | **D1-A:** v6 work; **D1-B:** v6 fail-closed | not a 6.15 option; see packaging flavors |
 | unknown option | — | **fail-closed** (croak/warn+abort configure) | fail-closed | prefer over silent ignore |
 

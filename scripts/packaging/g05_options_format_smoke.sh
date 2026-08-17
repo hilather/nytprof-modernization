@@ -3,6 +3,8 @@
 #
 # Drives real `perl -d:NYTProfM` (product tree, not baseline/6.15/install):
 #   - unknown option fail-closed
+#   - use_db_sub=2 / wrap=2 / entersub=2 fail-closed (0/1 only)
+#   - use_db_sub=1 / wrap=1 / entersub=1 load (stamps 1) with no hook change
 #   - format=dual rejected
 #   - D1-B format=v6 fail-closed (v6_collect rebuild message; no NYTPROF6 file)
 #   - default / format=v5 live attach still leaf 15 / mid 3 / mid→leaf 15
@@ -35,8 +37,9 @@ usage() {
   cat <<'EOF'
 Usage: g05_options_format_smoke.sh
 
-G05 options+format: unknown/dual fail-closed; D1-B format=v6 fail-closed;
-default/format=v5 live attach 15/3/15; D1-A format=v6 → NYTPROF6.
+G05 options+format: unknown/dual fail-closed; wrap/entersub/use_db_sub 0/1;
+D1-B format=v6 fail-closed; default/format=v5 live attach 15/3/15;
+D1-A format=v6 → NYTPROF6.
 EOF
 }
 
@@ -86,6 +89,15 @@ grep -q '_product_parse_nytprof' "$NYTP_PM_SRC" || fail "NYTProf.pm missing NYTP
 grep -F -q 'unknown NYTPROF option' "$NYTP_PM_SRC" || fail "NYTProf.pm missing unknown-option croak"
 grep -F -q 'format=dual is rejected' "$NYTP_PM_SRC" || fail "NYTProf.pm missing format=dual reject"
 grep -F -q 'v6_collect' "$NYTP_PM_SRC" || fail "NYTProf.pm missing v6_collect fail-closed text"
+# DI-03 E0: wrap/entersub must be known (else E1a entersub=1 dies unknown).
+grep -F -q 'wrap entersub' "$NYTP_PM_SRC" \
+  || fail "NYTProfM.pm missing wrap/entersub in %PRODUCT_NYTPROF_KNOWN"
+grep -q 'PRODUCT_USE_DB_SUB' "$NYTP_PM_SRC" \
+  || fail "NYTProfM.pm missing PRODUCT_USE_DB_SUB stamp"
+grep -q 'PRODUCT_ENTERSUB' "$NYTP_PM_SRC" \
+  || fail "NYTProfM.pm missing PRODUCT_ENTERSUB stamp"
+grep -F -q "\$Devel::NYTProfM::PRODUCT_WRAP" "$NYTP_PM_SRC" \
+  || fail "NYTProfM.pm missing PRODUCT_WRAP stamp"
 ok "G05 sources, parser, D1-A Makefile target present"
 
 resolve_cc() {
@@ -106,7 +118,8 @@ print_residuals() {
   echo "G06 fork/addpid: g06_fork_addpid_smoke.sh"
   echo "NOT-YET: mid-deflate continue-in-child / TEST-018"
   echo "DI-01 blocks=1 780/810: di01_blocks_780_smoke.sh"
-  echo "NOT-YET: full 6.15 opcode/entersub / DI-02 SUB_ENTRY 27"
+  echo "DI-03 opcode/entersub: in progress, not done (E0 parse/stamp only)"
+  echo "NOT-YET: full 6.15 opcode/entersub install / DI-02 SUB_ENTRY 27"
   echo "NOT-YET: PRODUCT-V6-COLLECT-EL8 / CPAN-TRIAL / EL8 RPM"
 }
 
@@ -197,6 +210,34 @@ if [[ -e "$UNK_PATH" ]]; then
 fi
 ok "unknown NYTPROF option fail-closed (no file)"
 
+# --- DI-03 E0: wrap / entersub / use_db_sub 0/1 only ---
+assert_opt_oor() {
+  local key="$1"
+  local path="$WORKDIR/${key}-oor.out"
+  set +e
+  local out rc
+  out="$(
+    cd "$WORKDIR" && NYTPROF="${key}=2:file=${path}" \
+      perl -I"$NYTP_DEST" -d:NYTProfM -e 'print "UNEXPECTED_OK\n"' 2>&1
+  )"
+  rc=$?
+  set -e
+  printf '%s\n' "$out"
+  [[ "$rc" -ne 0 ]] || fail "${key}=2 must fail-closed (got exit 0)"
+  grep -F -q "unknown NYTPROF option: ${key}" <<<"$out" \
+    || fail "${key}=2 missing greppable out-of-range croak"
+  if grep -F -q 'UNEXPECTED_OK' <<<"$out"; then
+    fail "${key}=2 must abort before the program runs"
+  fi
+  if [[ -e "$path" ]]; then
+    fail "${key}=2 must not write $path"
+  fi
+  ok "${key}=2 fail-closed (no file)"
+}
+assert_opt_oor use_db_sub
+assert_opt_oor wrap
+assert_opt_oor entersub
+
 # --- format=dual rejected ---
 DUAL_PATH="$WORKDIR/dual.out"
 set +e
@@ -266,6 +307,78 @@ fi
 grep -F -q 'PRODUCT_V6_COLLECT=0' <<<"$STAMP_B" || fail "D1-B PRODUCT_V6_COLLECT must be 0"
 ok "D1-B PRODUCT_V6_COLLECT=0"
 
+# DI-03 E0: default stamps 0; =1 stamps 1; attach stays wrap + C DBSTATE.
+assert_attach_stamps() {
+  local label="$1"
+  local nytprof="$2"
+  local want_use="$3"
+  local want_wrap="$4"
+  local want_ent="$5"
+  local profile="$6"
+  set +e
+  local out rc
+  out="$(
+    cd "$WORKDIR" && NYTPROF="$nytprof" perl -I"$NYTP_DEST" -d:NYTProfM -e '
+      my $inc = $INC{"Devel/NYTProfM.pm"} // "";
+      print "INC=", $inc, "\n";
+      print "PRODUCT_USE_DB_SUB=", ($Devel::NYTProfM::PRODUCT_USE_DB_SUB ? 1 : 0), "\n";
+      print "PRODUCT_WRAP=", ($Devel::NYTProfM::PRODUCT_WRAP ? 1 : 0), "\n";
+      print "PRODUCT_ENTERSUB=", ($Devel::NYTProfM::PRODUCT_ENTERSUB ? 1 : 0), "\n";
+      print "P_SUB=", (($^P & 0x01) ? 1 : 0), "\n";
+      print "DBSTATE_LINE=", ($Devel::NYTProfM::PRODUCT_DBSTATE_LINE ? 1 : 0), "\n";
+      print "XS_ATTACH=", ($Devel::NYTProfM::PRODUCT_XS_ATTACH ? 1 : 0), "\n";
+      if (DB->can("install_product_entersub")) {
+        die "E0 must not expose DB::install_product_entersub\n";
+      }
+      print "STAMP_OK\n";
+    ' 2>&1
+  )"
+  rc=$?
+  set -e
+  printf '%s\n' "$out"
+  [[ "$rc" -eq 0 ]] || fail "$label: stamp probe exited $rc"
+  grep -F -q 'collector/build/xs-nytprof' <<<"$out" \
+    || fail "$label: stamp not product dest"
+  if grep -F -q 'baseline/6.15/install' <<<"$out"; then
+    fail "$label: loaded 6.15 oracle pin"
+  fi
+  grep -F -q "PRODUCT_USE_DB_SUB=${want_use}" <<<"$out" \
+    || fail "$label: PRODUCT_USE_DB_SUB want $want_use"
+  grep -F -q "PRODUCT_WRAP=${want_wrap}" <<<"$out" \
+    || fail "$label: PRODUCT_WRAP want $want_wrap"
+  grep -F -q "PRODUCT_ENTERSUB=${want_ent}" <<<"$out" \
+    || fail "$label: PRODUCT_ENTERSUB want $want_ent"
+  grep -F -q 'P_SUB=1' <<<"$out" \
+    || fail "$label: PERLDBf_SUB (0x01) must stay on (wrap attach unchanged)"
+  grep -F -q 'DBSTATE_LINE=1' <<<"$out" \
+    || fail "$label: C OP_DBSTATE must stay installed"
+  grep -F -q 'XS_ATTACH=1' <<<"$out" \
+    || fail "$label: PRODUCT_XS_ATTACH must be 1 with file="
+  grep -F -q 'STAMP_OK' <<<"$out" || fail "$label: missing STAMP_OK"
+  [[ -f "$profile" ]] || fail "$label: missing profile $profile"
+  local magic
+  magic="$(head -c 9 "$profile" || true)"
+  [[ "$magic" == "NYTProf 5" ]] || fail "$label: want NYTProf 5 (got $(printf %q "$magic"))"
+  ok "$label: stamps + wrap/DBSTATE attach unchanged"
+}
+
+assert_attach_stamps "default stamps 0" \
+  "file=${WORKDIR}/stamp-default.nytprof" \
+  0 0 0 "$WORKDIR/stamp-default.nytprof"
+assert_attach_stamps "use_db_sub=1" \
+  "use_db_sub=1:file=${WORKDIR}/stamp-usedb.nytprof" \
+  1 1 0 "$WORKDIR/stamp-usedb.nytprof"
+assert_attach_stamps "wrap=1" \
+  "wrap=1:file=${WORKDIR}/stamp-wrap.nytprof" \
+  0 1 0 "$WORKDIR/stamp-wrap.nytprof"
+assert_attach_stamps "entersub=1" \
+  "entersub=1:file=${WORKDIR}/stamp-entersub.nytprof" \
+  0 0 1 "$WORKDIR/stamp-entersub.nytprof"
+# wrap wins over entersub: stamp both; still wrap attach (no opcode).
+assert_attach_stamps "wrap=1:entersub=1" \
+  "wrap=1:entersub=1:file=${WORKDIR}/stamp-both.nytprof" \
+  0 1 1 "$WORKDIR/stamp-both.nytprof"
+
 assert_v5_parity() {
   local label="$1"
   local nytprof="$2"
@@ -312,6 +425,11 @@ assert_v5_parity "format=v5" "format=v5:file=${WORKDIR}/v5.nytprof" \
 # Known residual option must not fail-closed (stmts=1 is advertised work).
 assert_v5_parity "stmts=1:file=" "stmts=1:file=${WORKDIR}/stmts.nytprof" \
   "$WORKDIR/stmts.nytprof" "$NYTP_DEST"
+
+# DI-03 E0: wrap=1 + entersub=1 must not change attach counts (no opcode yet).
+assert_v5_parity "wrap=1:entersub=1" \
+  "wrap=1:entersub=1:file=${WORKDIR}/wrap-entersub.nytprof" \
+  "$WORKDIR/wrap-entersub.nytprof" "$NYTP_DEST"
 
 # G03a: no file= still no nytprof.out
 LOAD_CWD="$(mktemp -d "$WORKDIR/g03a-load-XXXXXX")"
