@@ -5,7 +5,7 @@
 | **Document title** | Graft 6.15 C opcode / `entersub` attach into NYTProfM; adapt the model only if the C path forces a real semantic change |
 | **Author** | design-doc-writer (Grok) |
 | **Date** | 2026-08-17 |
-| **Status** | Draft (rev 5 — E2 OP_GOTO on default opcode; wrap list stays wrap=1 only; E3/E4 residual) |
+| **Status** | Draft (rev 6 — E2 OP_GOTO on default opcode; E3 `leave=1` opt-in landed, default `leave` stays 0; E4 residual) |
 | **Board / residual** | Milestone E / **DI-03** on [`docs/DROP_IN_RPM_COMPLETION_v0.md`](https://github.com/hilather/nytprof-modernization/blob/main/docs/DROP_IN_RPM_COMPLETION_v0.md); `DROP-IN-REMAINING` stays residual until this series lands |
 | **Does not supersede** | [`docs/PROGRAM_CHARTER.md`](https://github.com/hilather/nytprof-modernization/blob/main/docs/PROGRAM_CHARTER.md), accepted ADRs 0001–0013 (esp. [ADR-0004](https://github.com/hilather/nytprof-modernization/blob/main/docs/adrs/0004-collector-packaging-source-tree.md), [ADR-0007](https://github.com/hilather/nytprof-modernization/blob/main/docs/adrs/0007-production-v6-writer-backend-c-baseline.md)), [`docs/PRODUCT_COMPLETION_DROP_IN_v0.md`](https://github.com/hilather/nytprof-modernization/blob/main/docs/PRODUCT_COMPLETION_DROP_IN_v0.md) (A3 **Reject** / RSK-001), [`docs/schemas/product-xs-graft-annex-v0.md`](https://github.com/hilather/nytprof-modernization/blob/main/docs/schemas/product-xs-graft-annex-v0.md) A.3–A.5, [`docs/contracts/DROP_IN_DOD_v0.md`](https://github.com/hilather/nytprof-modernization/blob/main/docs/contracts/DROP_IN_DOD_v0.md) |
 | **Identity** | Product is `perl -d:NYTProfM` / `Devel::NYTProfM` 6.15. Do **not** ship stock `Devel::NYTProf` as the product `.so`. |

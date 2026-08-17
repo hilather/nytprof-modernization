@@ -187,6 +187,8 @@ perl Makefile.PL && make offline-gate          # CI-OFFLINE-GATE wrapper
 ./scripts/packaging/g14_nested_excl_smoke.sh # OK: PR-14 3-level excl = incl − child incl; stmts=0 size
 ./scripts/packaging/g15_dbstate_timeline_smoke.sh # OK: PR-15 C OP_DBSTATE TIME_LINE; $DB::single=0
 ./scripts/packaging/g16_wrap_enter_smoke.sh # OK: PR-16 wrap_push faster than WRAP_SLOW caller+fid
+./scripts/packaging/g17_entersub_attach_smoke.sh # OK: DI-03 E1a entersub=1 opcode (default still wrap)
+./scripts/packaging/g19_leave_discount_smoke.sh # OK: DI-03 E3 leave=1 DISCOUNT (default leave=0)
 ./scripts/field/complex_app_docker_profile.sh   # --app rex\|ppi\|json_xs\|… Rocky 8 attach
 ./scripts/field/complex_app_docker_profile_smoke.sh # --app rex --engine both (honest docker SKIP)
 ./scripts/packaging/product_legacy_smoke.sh    # I01: cargo-free prefix install + live attach 15/3/15

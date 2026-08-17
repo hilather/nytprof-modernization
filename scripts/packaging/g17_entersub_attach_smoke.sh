@@ -84,7 +84,8 @@ grep -F -q "_product_int_opt( \$opts, 'entersub', 1 )" "$NYTP_PM_SRC" \
 ok "E1b sources: graft + mailbox kept + emit gate; omit entersub ⇒ opcode"
 
 print_residuals() {
-  echo "NOT-YET: E3 leave / E4 full slowops / live di02 27 (E2 OP_GOTO: g18)"
+  echo "NOT-YET: E4 full slowops / live di02 27 (E2 OP_GOTO: g18)"
+  echo "E3 leave=1 opt-in is g19 (default leave stays 0)"
   echo "g16 / t/wrap_enter_attach.t: wrap assertions under wrap=1 only"
 }
 

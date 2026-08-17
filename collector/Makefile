@@ -100,6 +100,8 @@ NYTP_O         := $(BUILD)/NYTProf.o
 # Embed ccopts like NYTProf.o — not the collector src/%.c sink rule.
 NYTP_PP_ENTERSUB_C := xs/pp_entersub.c
 NYTP_PP_ENTERSUB_O := $(BUILD)/pp_entersub.o
+NYTP_PP_LEAVE_C    := xs/pp_leave.c
+NYTP_PP_LEAVE_O    := $(BUILD)/pp_leave.o
 NYTP_DEST      := $(BUILD)/xs-nytprof
 NYTP_SO_DIR    := $(NYTP_DEST)/auto/Devel/NYTProfM
 NYTP_SO        := $(NYTP_SO_DIR)/NYTProfM.so
@@ -187,6 +189,12 @@ $(NYTP_PP_ENTERSUB_O): $(NYTP_PP_ENTERSUB_C) xs/nytprof_pp.h \
 		`$(PERL) -MExtUtils::Embed -e ccopts` \
 		-c -o $@ $(NYTP_PP_ENTERSUB_C)
 
+$(NYTP_PP_LEAVE_O): $(NYTP_PP_LEAVE_C) xs/nytprof_pp.h \
+		include/nytp_sink.h include/nytp_clock.h include/nytp_types.h | dirs
+	$(CC) $(CPPFLAGS) -Ixs -fPIC -O2 -g \
+		`$(PERL) -MExtUtils::Embed -e ccopts` \
+		-c -o $@ $(NYTP_PP_LEAVE_C)
+
 $(NYTP_PM_DST): $(NYTP_PM_SRC) | dirs
 	@mkdir -p $(dir $@)
 	cp -f $(NYTP_PM_SRC) $@
@@ -196,10 +204,10 @@ $(NYTP_CORE_DST): $(NYTP_CORE_SRC) | dirs
 	cp -f $(NYTP_CORE_SRC) $@
 
 # XS .so uses Config lddlflags + -lz only (same D1-B / G02 pattern).
-$(NYTP_SO): $(NYTP_O) $(NYTP_PP_ENTERSUB_O) $(LIB_V5) | dirs
+$(NYTP_SO): $(NYTP_O) $(NYTP_PP_ENTERSUB_O) $(NYTP_PP_LEAVE_O) $(LIB_V5) | dirs
 	@mkdir -p $(NYTP_SO_DIR)
 	$(CC) `$(PERL) -MConfig -e 'print $$Config{lddlflags}'` \
-		-o $@ $(NYTP_O) $(NYTP_PP_ENTERSUB_O) $(LIB_V5) $(LDFLAGS) $(LDLIBS_V5)
+		-o $@ $(NYTP_O) $(NYTP_PP_ENTERSUB_O) $(NYTP_PP_LEAVE_O) $(LIB_V5) $(LDFLAGS) $(LDLIBS_V5)
 
 xs-nytprof: $(NYTP_SO) $(NYTP_PM_DST) $(NYTP_CORE_DST)
 
@@ -239,10 +247,10 @@ $(NYTP_V6_CORE): $(NYTP_CORE_SRC) | dirs
 	@mkdir -p $(dir $@)
 	cp -f $(NYTP_CORE_SRC) $@
 
-$(NYTP_V6_SO): $(NYTP_O_V6) $(NYTP_PP_ENTERSUB_O) $(LIB_V6C) | dirs
+$(NYTP_V6_SO): $(NYTP_O_V6) $(NYTP_PP_ENTERSUB_O) $(NYTP_PP_LEAVE_O) $(LIB_V6C) | dirs
 	@mkdir -p $(NYTP_V6_SO_DIR)
 	$(CC) `$(PERL) -MConfig -e 'print $$Config{lddlflags}'` \
-		-o $@ $(NYTP_O_V6) $(NYTP_PP_ENTERSUB_O) $(LIB_V6C) $(LDFLAGS) $(LDLIBS_V6C)
+		-o $@ $(NYTP_O_V6) $(NYTP_PP_ENTERSUB_O) $(NYTP_PP_LEAVE_O) $(LIB_V6C) $(LDFLAGS) $(LDLIBS_V6C)
 
 xs-nytprof-v6: $(NYTP_V6_SO) $(NYTP_V6_PM) $(NYTP_V6_CORE)
 

@@ -39,6 +39,9 @@
  * DI-03 E1a — unstatic sink/fid/calls/mailbox for grafted pp_entersub.c.
  * DI-03 E1b — default call attach is opcode ENTERSUB (omit entersub ⇒ on).
  *           wrap=1 / use_db_sub=1 (or entersub=0) is the wrap escape.
+ * DI-03 E3  — unstatic last-site flush/seed for grafted pp_leave.c.
+ *           leave=1 only; default leave stays 0. UNSTACK/LEAVELOOP stay
+ *           on pp_product_stmt when PRODUCT_BLOCKS. No NEXTSTATE here.
  *
  * MODULE Devel::NYTProfM; PACKAGE = DB
  * Default link: libnytp_sink_v5.a + -lz only (D1-B).
@@ -259,7 +262,7 @@ product_maybe_durable_seal(nytp_ticks now)
     return NYTP_OK;
 }
 
-static nytp_status
+nytp_status
 product_flush_last_site(void)
 {
     nytp_ticks now = 0;
@@ -283,7 +286,7 @@ product_flush_last_site(void)
     return NYTP_OK;
 }
 
-static nytp_status
+nytp_status
 product_emit_attributed_time_line(nytp_fid fid, nytp_line line)
 {
     nytp_ticks now = 0;
@@ -319,7 +322,7 @@ product_emit_attributed_time_line(nytp_fid fid, nytp_line line)
 }
 
 /* BASE-003: attribute now-last to the previous site, then seed this COP. */
-static nytp_status
+nytp_status
 product_emit_attributed_time_block(nytp_fid fid, nytp_line line,
                                    nytp_line block_line, nytp_line sub_line)
 {
@@ -1461,6 +1464,24 @@ product_opt_calls(pTHX)
     return 1;
 }
 
+IV
+product_opt_stmts(pTHX)
+{
+    SV *sv = get_sv("Devel::NYTProfM::PRODUCT_STMTS", 0);
+    if (sv != NULL && SvOK(sv))
+        return SvIV(sv);
+    return 1;
+}
+
+IV
+product_opt_blocks(pTHX)
+{
+    SV *sv = get_sv("Devel::NYTProfM::PRODUCT_BLOCKS", 0);
+    if (sv != NULL && SvOK(sv))
+        return SvIV(sv);
+    return 0;
+}
+
 static IV
 product_opt_slowops(pTHX)
 {
@@ -2083,6 +2104,43 @@ entersub_set_emit_enabled(on)
     CODE:
         product_entersub_set_emit_enabled(on);
         RETVAL = product_entersub_emit_enabled();
+    OUTPUT:
+        RETVAL
+
+int
+install_product_leave()
+    CODE:
+        RETVAL = product_install_leave(aTHX);
+    OUTPUT:
+        RETVAL
+
+int
+uninstall_product_leave()
+    CODE:
+        RETVAL = product_uninstall_leave(aTHX);
+    OUTPUT:
+        RETVAL
+
+int
+leave_is_installed()
+    CODE:
+        RETVAL = product_leave_is_installed();
+    OUTPUT:
+        RETVAL
+
+int
+leave_emit_enabled()
+    CODE:
+        RETVAL = product_leave_emit_enabled();
+    OUTPUT:
+        RETVAL
+
+int
+leave_set_emit_enabled(on)
+    int on
+    CODE:
+        product_leave_set_emit_enabled(on);
+        RETVAL = product_leave_emit_enabled();
     OUTPUT:
         RETVAL
 

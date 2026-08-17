@@ -147,5 +147,6 @@ grep -E -q '"tag":[[:space:]]*"TIME_LINE"|"tag":[[:space:]]*"SUB_RETURN"' "$WORK
   || fail "compress=1 dump missing post-deflate events (inflate path)"
 ok "compress=1 live attach: START_DEFLATE + dump/verify inflate"
 
-echo "NOT-YET: leave/findcaller/evals/full slowops.h / S2"
+echo "NOT-YET: findcaller/evals/full slowops.h / S2"
+echo "E3: leave=1 opt-in (default stays 0); see g19_leave_discount_smoke.sh"
 ok "DI-09 advertised-options subset"

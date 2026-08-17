@@ -54,6 +54,16 @@ ok() { printf 'OK: %s\n' "$*"; }
 fail() { printf 'ERROR: %s\n' "$*" >&2; exit 1; }
 fail2() { printf 'ERROR: %s\n' "$*" >&2; exit 2; }
 
+# g19 overlays leave=1 to prove UNSTACK stays on stmt-ops (KD-E14).
+nytprof_attach() {
+  local spec="$1"
+  if [[ -n "${NYTPROF_ATTACH_OPTS:-}" ]]; then
+    printf '%s:%s' "$spec" "${NYTPROF_ATTACH_OPTS}"
+  else
+    printf '%s' "$spec"
+  fi
+}
+
 while [[ $# -gt 0 ]]; do
   case "$1" in
     -h|--help)
@@ -184,7 +194,7 @@ echo "running: NYTPROF=file=…:blocks=1 perl -I${NYTP_DEST} -d:NYTProfM <blocks
 # Stamp: blocks=1 must set PRODUCT_BLOCKS.
 set +e
 STAMP_OUT="$(
-  cd "$WORKDIR" && NYTPROF="file=${WORKDIR}/stamp.out:blocks=1" perl -I"$NYTP_DEST" -d:NYTProfM -e '
+  cd "$WORKDIR" && NYTPROF="$(nytprof_attach "file=${WORKDIR}/stamp.out:blocks=1")" perl -I"$NYTP_DEST" -d:NYTProfM -e '
     my $inc = $INC{"Devel/NYTProfM.pm"} // "";
     print "INC=", $inc, "\n";
     my $blocks = defined $Devel::NYTProfM::PRODUCT_BLOCKS ? 0+$Devel::NYTProfM::PRODUCT_BLOCKS : -1;
@@ -213,7 +223,7 @@ ok "product module; blocks=1 sets PRODUCT_BLOCKS=1 (calls=1 slowops=2)"
 
 set +e
 RUN_OUT="$(
-  cd "$WORKDIR" && NYTPROF="file=${PROFILE}:blocks=1" perl -I"$NYTP_DEST" -d:NYTProfM "$WORKLOAD" 2>&1
+  cd "$WORKDIR" && NYTPROF="$(nytprof_attach "file=${PROFILE}:blocks=1")" perl -I"$NYTP_DEST" -d:NYTProfM "$WORKLOAD" 2>&1
 )"
 RUN_RC=$?
 set -e

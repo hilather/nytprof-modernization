@@ -107,6 +107,10 @@ $Devel::NYTProfM::PRODUCT_ENTERSUB_OPS  = 0;
 # 1 after the same install also hooked OP_GOTO (E2). Wrap list stays
 # wrap=1 / use_db_sub=1 only — not a substitute for opcode goto &sub.
 $Devel::NYTProfM::PRODUCT_GOTO_OPS      = 0;
+# DI-03 E3: leave=1 stamps PRODUCT_LEAVE. Default stays 0 (not 6.15 leave=1).
+$Devel::NYTProfM::PRODUCT_LEAVE         = 0;
+# 1 only after file= actually installed leave ops (not leave omitted).
+$Devel::NYTProfM::PRODUCT_LEAVE_OPS     = 0;
 # Bench control only (not an NYTPROF colon option). 1 = old Perl
 # caller(0)+fid XSUB wrap so g16 can measure the C site crossing.
 $Devel::NYTProfM::PRODUCT_WRAP_SLOW =
@@ -592,10 +596,16 @@ sub _product_install_fork_hook {
     if ( $entersub != 0 && $entersub != 1 ) {
         die "unknown NYTPROF option: entersub\n";
     }
+    # DI-03 E3: apply leave 0/1 only. Default remains 0 (not 6.15 leave=1).
+    my $leave = _product_int_opt( $opts, 'leave', 0 );
+    if ( $leave != 0 && $leave != 1 ) {
+        die "unknown NYTPROF option: leave\n";
+    }
     $Devel::NYTProfM::PRODUCT_USE_DB_SUB = $use_db_sub ? 1 : 0;
     $Devel::NYTProfM::PRODUCT_ENTERSUB   = $entersub ? 1 : 0;
     $Devel::NYTProfM::PRODUCT_WRAP =
       ( $wrap || $use_db_sub || !$entersub ) ? 1 : 0;
+    $Devel::NYTProfM::PRODUCT_LEAVE    = $leave ? 1 : 0;
 }
 
 init_profiler();    # G03a: hold in-memory v5 sink — never writes nytprof.out
@@ -682,6 +692,15 @@ init_profiler();    # G03a: hold in-memory v5 sink — never writes nytprof.out
                 $Devel::NYTProfM::PRODUCT_DBSTATE_LINE = 1;
             }
         }
+        # After stmt-ops so blocks=1 already owns UNSTACK/LEAVELOOP (KD-E14).
+        if (  $Devel::NYTProfM::PRODUCT_LEAVE
+            && $Devel::NYTProfM::PRODUCT_STMTS )
+        {
+            my $st_lv = DB::install_product_leave();
+            if ( $st_lv == 0 ) {
+                $Devel::NYTProfM::PRODUCT_LEAVE_OPS = 1;
+            }
+        }
         if (  $Devel::NYTProfM::PRODUCT_SLOWOPS == 2
             && $Devel::NYTProfM::PRODUCT_CALLS >= 1 )
         {
@@ -722,6 +741,9 @@ INIT {
                 die "NYTProfM: opcode entersub and wrap would both emit\n";
             }
             DB::entersub_set_emit_enabled(1);
+        }
+        if ( $Devel::NYTProfM::PRODUCT_LEAVE_OPS ) {
+            DB::leave_set_emit_enabled(1);
         }
         if ( $Devel::NYTProfM::PRODUCT_DBSTATE_LINE ) {
             my $st_on = DB::activate_product_dbstate_timeline();

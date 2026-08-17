@@ -88,7 +88,7 @@ Sources: `baseline/6.15/src/NYTProf.xs` options table (~lines 249–283) + strin
 | `blocks` | TIME_BLOCK | **live attach work** (DI-01 780/810; not full opcode) | work | G03b emit + PR-B1 live `blocks=1`; not DI-03 |
 | `subs` | sub profiling | **work** (G03c) | work | |
 | `calls` | 0/1/2 entry-return | **live attach work** (`calls=2` SUB_ENTRY **27** + CORE:print/match) | work | XSUB/goto/exception residual OI-003-03; not full opcode |
-| `leave` | leave correction | residual or work | work if green else residual | |
+| `leave` | leave correction | **opt-in work** (`leave=1` → DISCOUNT + last-site flush) | work if green else residual | Default stays **0** (not 6.15 `leave=1`). Smoke [`g19_leave_discount_smoke.sh`](https://github.com/hilather/nytprof-modernization/blob/main/scripts/packaging/g19_leave_discount_smoke.sh). UNSTACK/LEAVELOOP stay on stmt-ops when `blocks=1`. |
 | `slowops` | slow op profiling | residual | residual or work | fail-closed if unsupported |
 | `usecputime` | removed in 6.15 | fail-closed / warn like 6.15 | same | 6.15 warns removed |
 | `clock` | clock_id | work default clock | work | platform matrix residual |
