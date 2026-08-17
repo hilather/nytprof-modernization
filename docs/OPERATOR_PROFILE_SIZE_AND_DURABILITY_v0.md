@@ -104,7 +104,7 @@ Both 6.15 and NYTProfM emit one `+` / `*` per last-site interval. A packed `TIME
 | Byte-identical `nytprof.out` vs 6.15 | Never required (COL-006 residual). |
 | Dual_path `compare_jsonl` equality under `aggregate=1` | Charter exception (ADR-0013 / ADR-Q027) explicitly waives dump multiplicity; default attach stays exact. |
 | Certified public perf / size SLOs | Light `BENCH_NOTES.md` rows only; not BENCH-* certification. |
-| Full 6.15 opcode / `entersub` / `slowops.h` | DI-03 residual. |
+| Full 6.15 opcode / `entersub` / default-on `slowops.h` | DI-03 residual. Full `slowops.h` is **E4 opt-in** (`slowops=full`/`=3`); product default stays PRINT/MATCH. |
 | `POSIX::_exit` flush | DI-08 residual (stay fail-closed / empty). |
 | Mid-deflate continue-in-child | KD-R16 / DI-06 residual. |
 | Automatic salvage as default verify | Forbidden (COMPAT-010). |

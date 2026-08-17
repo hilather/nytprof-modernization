@@ -151,7 +151,7 @@ flowchart TB
     DBSUB["DB::sub SUB_RETURN+CALLERS today → + SUB_ENTRY when calls>=2"]
     FID["XS fid table + visit_contexts slice"]
     XSUB["Thin slowops PRINT/MATCH + optional XSUB ENTERSUB"]
-    OP["DI-03 later: OP_NEXTSTATE/LEAVE/GOTO/full slowops.h"]
+    OP["DI-03 later: OP_NEXTSTATE/LEAVE/GOTO; full slowops.h is E4 opt-in"]
     DBDB --> XS
     DBSUB --> XS
     FID --> XS
@@ -360,11 +360,11 @@ Keep skip list (`DB::`, `Devel::NYTProfM::`, `CORE::GLOBAL::fork`). Caller fid/l
 | **omit** / `slowops=2` (6.15 default) | **slowops=2 subset:** if `file=` attach and `calls>=1` and profiling on, install **only** `OP_PRINT` and `OP_MATCH`. Names = `CopSTASHPV` + `::CORE:` + `PL_op_name` (pin ~2475–2485). Optional XSUB-only `OP_ENTERSUB` may install on the same condition. |
 | `slowops=0` | **Do not** install PRINT/MATCH (or XSUB ENTERSUB). No `CORE:` events. **27 is not claimed** on this run. |
 | `slowops=1` | **Fail-closed** with: `slowops=1 (collapsed CORE:: package) is residual until full opcode attach; use default/slowops=2 (PRINT/MATCH subset) or slowops=0`. Do **not** implement package-collapsed `CORE::print` names in B2. |
+| `slowops=full` / `slowops=3` | **E4 opt-in:** install the copied 6.15 `slowops.h` table (`printf`/`prtf`, `system`, `stat`, …). Names stay `pkg::CORE:op`. Product **`slowops=2` stays PRINT/MATCH** (KD-35). Not a silent `=2` flip. Thin exclusive (not 6.15 savestack) — do not claim 6.15 exclusive on `=full`. |
 | other integer / unknown | Fail-closed as unknown or out-of-range (same as other unknown keys). |
-| full `slowops.h` table (printf, system, …) | **DI-03**. Never silent no-op. |
 
 ```text
-# Not full slowops.h / DI-03. Only OP_PRINT + OP_MATCH.
+# Default slowops=2: only OP_PRINT + OP_MATCH. Full table is E4 opt-in (full/3).
 # Install iff PRODUCT_SLOWOPS==2 && calls>=1 && PRODUCT_XS_ATTACH
 save PL_ppaddr[OP_PRINT] and PL_ppaddr[OP_MATCH]
 pp_product_slowop:
@@ -470,7 +470,7 @@ Phase the graft:
 1. NEXTSTATE/DBSTATE (if not already taken as DI-01 fallback)
 2. ENTERSUB + GOTO (replace the thin XSUB slice)
 3. leave ops (`leave=1`) — **E3 landed** (opt-in only; default stays 0)
-4. **Full** `slowops.h` table (printf, system, accept, …) — B2 already has PRINT/MATCH subset
+4. **Full** `slowops.h` table (printf, system, accept, …) — **E4 landed as opt-in** `slowops=full`/`=3`; product default **stays PRINT/MATCH** (KD-35). Not a silent `=2` flip.
 5. Wrap escape remains `wrap=1` / forked `use_db_sub=1` (KD-E11) — not a 6.15 stmt-`DB::DB` hook path
 
 Do not enable opcode and Perl `DB::sub` for the same call (double SUB_RETURN).
@@ -908,6 +908,7 @@ No v6 wire ID changes (ADR-0006). Product still emits COL-006 v5. New files only
 | `NYTPROF=slowops=` omit/`2` | PRINT/MATCH subset + optional XSUB ENTERSUB (DI-02) |
 | `NYTPROF=slowops=0` | slice off; no CORE: events |
 | `NYTPROF=slowops=1` | fail-closed residual message (not DI-03 croak on `2`) |
+| `NYTPROF=slowops=full` / `=3` | E4 opt-in full `slowops.h` table; default `=2` stays PRINT/MATCH |
 | `NYTPROF=wrap=1` | product wrap escape (DI-03 E1b); `$^P` 0x01 + `wrap_push`; wins over default/`entersub=1` |
 | `NYTPROF=entersub=` omit / `=1` | E1b default opcode: install `OP_ENTERSUB`, emit after INIT, `$^P` 0x01 clear; `entersub=0` forces wrap |
 | `NYTPROF=use_db_sub=1` | **forked synonym for `wrap=1`**, **not** 6.15 stmt `DB::DB` + opcode calls (KD-E11) |
@@ -1086,7 +1087,7 @@ One page. Claim language is allowed **only** when every assert in that row is gr
 | **KD-32** (this design) | DI-04 = dual collect + **project both dumps onto MUST_KIND_SET**, then presence/absent rules; **not** unprojected multiset | Oracle-only DISCOUNT/SRC_LINE/… would always fail a raw bag compare |
 | **KD-33** (this design) | S2 prerequisite = **I01 + DI-01/02 green** | BUILD policy already says after G03a+I01; do not invent a BUILD-003 gate |
 | **KD-34** (this design) | Milestone A may be claimed **without public COPR** | A = maintainer-mock + installable dist; A5b is ceremony |
-| **KD-35** (this design) | Default attach = **`slowops=2` subset** (PRINT/MATCH only); `0` disables; `1` fail-closed residual; full table = DI-03 | Matches 6.15 default option without claiming full slowops.h |
+| **KD-35** (this design) | Default attach = **`slowops=2` subset** (PRINT/MATCH only); `0` disables; `1` fail-closed residual; full table is **E4 opt-in** `slowops=full`/`=3` (not a silent `=2` flip). DI-03 opcode/`entersub` default remains open. | Matches 6.15 default option without claiming full `slowops.h` on product default |
 | **KD-36** (user-final) | PAUSE TRIAL = **`6.15_01`**; RPM Version **6.15**; first repo = **internal yum/dnf**; GPG holder later | OQ-TRIAL-ver / OQ-COPR closed 2026-08-13; OQ-GPG-who remains |
 
 ---

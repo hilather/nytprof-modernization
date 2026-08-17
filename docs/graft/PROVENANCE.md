@@ -62,6 +62,7 @@ Pin `baseline/6.15/src/slowops.h` is **not** present / not edited. The table was
 | Mailbox stays for wrap; opcode path uses `product_credit_child_excl` | KD-E12 |
 | Orig `PL_ppaddr` snapshot before any hook | needed so full-table PRINT/MATCH keep the real orig after BOOT thin install |
 | Parse accepts `0`, `2`, `3`, string `full`; rejects other values | advertised-options |
+| Thin emit (not 6.15 `pp_subcall_profiler(is_slowop=1)` savestack) | accepted E4 deviation. `=full` exclusive can double-count if a slowop re-enters Perl (`sort` / backtick / `(?{ })`); `product_in_slowop` is a skip flag, not a nest. Do **not** claim 6.15 exclusive on `=full`. Default `=2` / g08 / g09 unchanged. |
 
 ## Deltas vs pin (E1a)
 

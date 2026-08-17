@@ -75,6 +75,7 @@ resolve_cc() {
 
 print_residuals() {
   echo "E4: full 6.15 slowops.h is opt-in (slowops=full / =3); default stays PRINT/MATCH"
+  echo "RESIDUAL: =full exclusive is thin (not 6.15 savestack); sort/backtick/(?{}) can double-count parent excl"
   echo "NOT-YET: E1b default opcode flip / E2 GOTO / leave=1 default"
 }
 

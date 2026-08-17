@@ -1565,7 +1565,7 @@ product_fill_slowop_name(pTHX_ U16 type, char *buf, size_t buflen)
     (void)snprintf(buf, buflen, "%s::CORE:%s", pkg, opn);
 }
 
-/* Shared emit for thin PRINT/MATCH and full-table pp_slowop_profiler. */
+/* One emit path so wrap mailbox and opcode credit stay in sync. */
 static OP *
 product_profile_one_slowop(pTHX_ Perl_ppaddr_t orig, U16 type)
 {
@@ -1647,14 +1647,15 @@ pp_product_slowop(pTHX)
     return product_profile_one_slowop(aTHX_ orig, type);
 }
 
-/* 6.15 pp_slowop_profiler: run orig op as an xsub-like call. Names stay
- * pkg::CORE:op (product_fill_slowop_name). Used only when slowops=3. */
+/* Thin orig + nytp_emit_* + product_credit_child_excl; not 6.15 savestack.
+ * Only when slowops==3. */
 static OP *
 pp_slowop_profiler(pTHX)
 {
     U16 type = PL_op ? PL_op->op_type : 0;
     Perl_ppaddr_t orig = NULL;
     IV slowops;
+    OP *ret;
 
     if (type < OP_max && product_ppaddr_orig_saved)
         orig = product_ppaddr_orig[type];
@@ -1664,7 +1665,12 @@ pp_slowop_profiler(pTHX)
     slowops = product_opt_slowops(aTHX);
     if (slowops != 3)
         return orig(aTHX);
-    return product_profile_one_slowop(aTHX_ orig, type);
+    /* Restore product_in_slowop if orig() dies. Default =2 path unchanged. */
+    ENTER;
+    SAVEINT(product_in_slowop);
+    ret = product_profile_one_slowop(aTHX_ orig, type);
+    LEAVE;
+    return ret;
 }
 
 static int
@@ -1689,7 +1695,7 @@ product_install_slowops_full(pTHX)
     product_save_ppaddr_orig(aTHX);
     if (product_slowops_full_installed)
         return 0;
-    /* Pin assignments: PL_ppaddr[OP_*] = pp_slowop_profiler. */
+    /* Pin table: only hooked when PRODUCT_SLOWOPS==3. */
 #include "slowops.h"
     product_slowops_full_installed = 1;
     product_slowops_installed = 1;
