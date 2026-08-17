@@ -4,8 +4,8 @@
 # Drives real `perl -d:NYTProfM` (product tree, not baseline/6.15/install):
 #   - unknown option fail-closed
 #   - use_db_sub=2 / wrap=2 / entersub=2 fail-closed (0/1 only)
-#   - use_db_sub=1 / wrap=1 / wrap=1:entersub=1 stay wrap ($^P 0x01)
-#   - entersub=1 alone installs OP_ENTERSUB ($^P 0x01 clear; emit after INIT)
+#   - use_db_sub=1 / wrap=1 / wrap=1:entersub=1 / entersub=0 stay wrap ($^P 0x01)
+#   - omit entersub / entersub=1 install OP_ENTERSUB ($^P 0x01 clear; emit after INIT)
 #   - format=dual rejected
 #   - D1-B format=v6 fail-closed (v6_collect rebuild message; no NYTPROF6 file)
 #   - default / format=v5 live attach still leaf 15 / mid 3 / mid→leaf 15
@@ -119,8 +119,8 @@ print_residuals() {
   echo "G06 fork/addpid: g06_fork_addpid_smoke.sh"
   echo "NOT-YET: mid-deflate continue-in-child / TEST-018"
   echo "DI-01 blocks=1 780/810: di01_blocks_780_smoke.sh"
-  echo "DI-03 opcode/entersub: E1a opt-in landed; default still wrap (not E1b)"
-  echo "NOT-YET: E1b default flip / E2 GOTO / DI-02 SUB_ENTRY 27"
+  echo "DI-03 opcode/entersub: E1b default opcode; wrap=1 / use_db_sub=1 / entersub=0 escape"
+  echo "NOT-YET: E2 GOTO / E3 leave / E4 full slowops / DI-02 SUB_ENTRY 27"
   echo "NOT-YET: PRODUCT-V6-COLLECT-EL8 / CPAN-TRIAL / EL8 RPM"
 }
 
@@ -308,7 +308,7 @@ fi
 grep -F -q 'PRODUCT_V6_COLLECT=0' <<<"$STAMP_B" || fail "D1-B PRODUCT_V6_COLLECT must be 0"
 ok "D1-B PRODUCT_V6_COLLECT=0"
 
-# DI-03 E1a: wrap path keeps $^P 0x01; entersub=1 alone installs opcode.
+# DI-03 E1b: wrap path keeps $^P 0x01; omit entersub / entersub=1 install opcode.
 assert_attach_stamps() {
   local label="$1"
   local nytprof="$2"
@@ -316,7 +316,7 @@ assert_attach_stamps() {
   local want_wrap="$4"
   local want_ent="$5"
   local profile="$6"
-  # wrap=1 / use_db_sub=1 wins; omit-entersub default is wrap.
+  # wrap=1 / use_db_sub=1 / entersub=0 wins; omit-entersub default is opcode.
   local want_psub=1
   local want_ops=0
   if [[ "$want_wrap" == "0" && "$want_ent" == "1" ]]; then
@@ -379,18 +379,21 @@ assert_attach_stamps() {
   fi
 }
 
-assert_attach_stamps "default stamps 0" \
+assert_attach_stamps "default stamps omit=opcode" \
   "file=${WORKDIR}/stamp-default.nytprof" \
-  0 0 0 "$WORKDIR/stamp-default.nytprof"
+  0 0 1 "$WORKDIR/stamp-default.nytprof"
 assert_attach_stamps "use_db_sub=1" \
   "use_db_sub=1:file=${WORKDIR}/stamp-usedb.nytprof" \
-  1 1 0 "$WORKDIR/stamp-usedb.nytprof"
+  1 1 1 "$WORKDIR/stamp-usedb.nytprof"
 assert_attach_stamps "wrap=1" \
   "wrap=1:file=${WORKDIR}/stamp-wrap.nytprof" \
-  0 1 0 "$WORKDIR/stamp-wrap.nytprof"
+  0 1 1 "$WORKDIR/stamp-wrap.nytprof"
 assert_attach_stamps "entersub=1" \
   "entersub=1:file=${WORKDIR}/stamp-entersub.nytprof" \
   0 0 1 "$WORKDIR/stamp-entersub.nytprof"
+assert_attach_stamps "entersub=0 forces wrap" \
+  "entersub=0:file=${WORKDIR}/stamp-entersub0.nytprof" \
+  0 1 0 "$WORKDIR/stamp-entersub0.nytprof"
 # wrap wins over entersub: stamp both; still wrap attach (no opcode).
 assert_attach_stamps "wrap=1:entersub=1" \
   "wrap=1:entersub=1:file=${WORKDIR}/stamp-both.nytprof" \

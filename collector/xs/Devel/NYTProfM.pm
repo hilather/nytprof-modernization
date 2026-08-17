@@ -93,9 +93,9 @@ $Devel::NYTProfM::PRODUCT_STMTS         = 1;
 $Devel::NYTProfM::PRODUCT_STMT_OPS      = 0;
 $Devel::NYTProfM::PRODUCT_DBSTATE_LINE  = 0;
 $Devel::NYTProfM::PRODUCT_SLOWOPS_OPS   = 0;
-# DI-03 E0: parse/stamp only. Default attach stays wrap + C DBSTATE.
-# use_db_sub=1 is a product synonym for wrap=1 (escape), not 6.15 stmt
-# DB::DB + opcode calls (KD-E11). wrap=1 wins over entersub=1.
+# DI-03 E1b: omit entersub ⇒ opcode ON. wrap=1 / use_db_sub=1 is the
+# wrap escape (KD-E11; not 6.15 stmt DB::DB). entersub=0 forces wrap.
+# wrap=1 wins over entersub=1.
 $Devel::NYTProfM::PRODUCT_USE_DB_SUB    = 0;
 $Devel::NYTProfM::PRODUCT_WRAP          = 0;
 $Devel::NYTProfM::PRODUCT_ENTERSUB      = 0;
@@ -261,9 +261,9 @@ sub _product_needs_goto {
     return 0;
 }
 
-# Smallest G04 hook: Perl DB::sub + $^P 0x01. Default wrap is C
-# wrap_push/wrap_pop → nytp_emit_* (PR-16). Opcode path (entersub=1)
-# stubs this so wrap and OP_ENTERSUB never emit the same call.
+# Wrap escape (wrap=1 / use_db_sub=1 / entersub=0): C wrap_push/wrap_pop
+# → nytp_emit_* (PR-16). Default opcode stubs this so wrap and
+# OP_ENTERSUB never emit the same call.
 # $DB::sub is a CV ref for BEGIN (and some evals); resolve to
 # Package::BEGIN@line like 6.15.
 sub sub {
@@ -570,9 +570,8 @@ sub _product_install_fork_hook {
     }
     my $savesrc = _product_int_opt( $opts, 'savesrc', 1 );
     $Devel::NYTProfM::PRODUCT_SAVESRC = $savesrc ? 1 : 0;
-    # DI-03 E0: apply 0/1 only. No hook change (opcode not installed).
-    # wrap=1 / use_db_sub=1 stamp wrap; entersub=1 stamps PRODUCT_ENTERSUB
-    # but wrap wins (escape) — do not install opcode even when both are 1.
+    # DI-03 E1b: omit entersub ⇒ opcode. wrap=1 / use_db_sub=1 stamp
+    # wrap; entersub=0 forces wrap. wrap wins over entersub=1.
     my $use_db_sub = _product_int_opt( $opts, 'use_db_sub', 0 );
     if ( $use_db_sub != 0 && $use_db_sub != 1 ) {
         die "unknown NYTPROF option: use_db_sub\n";
@@ -581,14 +580,14 @@ sub _product_install_fork_hook {
     if ( $wrap != 0 && $wrap != 1 ) {
         die "unknown NYTPROF option: wrap\n";
     }
-    my $entersub = _product_int_opt( $opts, 'entersub', 0 );
+    my $entersub = _product_int_opt( $opts, 'entersub', 1 );
     if ( $entersub != 0 && $entersub != 1 ) {
         die "unknown NYTPROF option: entersub\n";
     }
     $Devel::NYTProfM::PRODUCT_USE_DB_SUB = $use_db_sub ? 1 : 0;
+    $Devel::NYTProfM::PRODUCT_ENTERSUB   = $entersub ? 1 : 0;
     $Devel::NYTProfM::PRODUCT_WRAP =
-      ( $wrap || $use_db_sub ) ? 1 : 0;
-    $Devel::NYTProfM::PRODUCT_ENTERSUB = $entersub ? 1 : 0;
+      ( $wrap || $use_db_sub || !$entersub ) ? 1 : 0;
 }
 
 init_profiler();    # G03a: hold in-memory v5 sink — never writes nytprof.out
@@ -633,8 +632,8 @@ init_profiler();    # G03a: hold in-memory v5 sink — never writes nytprof.out
         # 0x01 to INIT — subs compiled without PERLDBf_SUB never call
         # DB::sub (g04 15/3/15 goes to 0).
         _product_nodebug_hint_magic();
-        # wrap=1 / use_db_sub=1 wins. Opcode only when ENTERSUB && !WRAP.
-        # Default (no entersub) stays wrap + $^P 0x01.
+        # wrap=1 / use_db_sub=1 / entersub=0 wins (escape).
+        # Omit entersub ⇒ opcode; $^P 0x01 stays off; DB::sub is stub.
         if ( $Devel::NYTProfM::PRODUCT_WRAP ) {
             $^P |= 0x01;    # sub enter/exit → DB::sub
         }
@@ -649,7 +648,7 @@ init_profiler();    # G03a: hold in-memory v5 sink — never writes nytprof.out
             }
         }
         else {
-            $^P |= 0x01;    # E1a default: wrap
+            $^P |= 0x01;    # defensive: treat unset as wrap
         }
         $^P |= 0x02;    # line-by-line (dbstate already compiled when $^P != 0)
         $^P |= 0x20;    # start with single-step on

@@ -1,8 +1,7 @@
 #!/usr/bin/env perl
 # Drive shipped g16_wrap_enter_smoke.sh — real perl -d:NYTProfM.
-# Pre-fix: wrap used caller(0)+fid_for_filename on every instrumented
-# call. Post-fix: default wrap uses wrap_push/wrap_pop; WRAP_SLOW is
-# the slower control.
+# After E1b: default attach is opcode (g17). wrap=1 uses wrap_push;
+# WRAP_SLOW is nested under that escape only.
 use strict;
 use warnings;
 use File::Basename qw(dirname);
@@ -21,9 +20,9 @@ ok( -f $pm, "NYTProfM.pm exists" );
 open my $fh, '<', $pm or die "open $pm: $!";
 my $src = do { local $/; <$fh> };
 close $fh;
-like( $src, qr/wrap_push/, 'NYTProfM.pm calls wrap_push' );
+like( $src, qr/wrap_push/, 'NYTProfM.pm still has wrap_push (wrap=1 escape)' );
 like( $src, qr/PRODUCT_WRAP_SLOW/,
-    'NYTProfM.pm has WRAP_SLOW wrap-on control' );
+    'NYTProfM.pm has WRAP_SLOW wrap-on control (wrap=1 only)' );
 
 my $xs = File::Spec->catfile( $root, qw(collector xs NYTProf.xs) );
 ok( -f $xs, "NYTProf.xs exists" );
@@ -44,7 +43,7 @@ like(
     qr/G16 wrap_push|SKIP: no C toolchain|SKIP: perl XS headers/,
     'g16 printed G16 success or an honest skip'
 );
-unlike( $out, qr/default wrap still does caller/,
-    'g16 did not fail the default-wrap caller+fid check' );
+unlike( $out, qr/wrap_push path still does caller/,
+    'g16 did not fail the wrap=1 wrap_push caller+fid check' );
 
 done_testing();

@@ -1,14 +1,14 @@
 #!/usr/bin/env bash
-# DI-03 E1a — Opcode OP_ENTERSUB behind NYTPROF entersub=1.
+# DI-03 E1b — Default call attach is opcode OP_ENTERSUB (omit entersub ⇒ on).
 #
-# Requires entersub=1 (does not flip the product default). Re-drives
-# g09 tokenize excl, g14 3-level remainder, di02, and g12 (caller)
-# under NYTPROF_ATTACH_OPTS=entersub=1. Own attach: opcode installed,
-# $^P 0x01 clear, wrap=1:entersub=1 wins (OPS=0, $^P 0x01), no DB::sub
-# on the leaf stack, no double leaf SUB_RETURN, unit-ratio ~1.
+# entersub=1 is not required. Re-drives g09 tokenize excl, g14 3-level
+# remainder, di02, and g12 (caller) on the default path. Own attach:
+# opcode installed, $^P 0x01 clear, wrap=1 / use_db_sub=1 / entersub=0
+# force wrap (OPS=0, $^P 0x01), no DB::sub on the leaf stack, no double
+# leaf SUB_RETURN, unit-ratio ~1.
 #
-# g16 / t/wrap_enter_attach.t stay default wrap. collection_default v5.
-# Never crates/. Honest skip without CC/XS.
+# g16 / t/wrap_enter_attach.t assert wrap only under wrap=1.
+# collection_default v5. Never crates/. Honest skip without CC/XS.
 #
 # Exit 0 pass or honest skip; 1 fail; 2 misuse.
 set -euo pipefail
@@ -33,7 +33,7 @@ fail2() { printf 'ERROR: %s\n' "$*" >&2; exit 2; }
 
 echo "g17_entersub_attach_smoke: repo root $ROOT"
 echo "collection_default remains v5; never crates/ on PERL5LIB"
-echo "E1a: requires entersub=1; default wrap unchanged"
+echo "E1b: default attach is opcode; wrap=1 / use_db_sub=1 / entersub=0 escape"
 
 if [[ -n "${PERL5LIB:-}" ]]; then
   case ":${PERL5LIB}:" in
@@ -79,11 +79,13 @@ grep -q 'install_product_entersub' "$NYTP_PM_SRC" \
   || fail "NYTProfM.pm missing install_product_entersub"
 grep -q 'entersub_set_emit_enabled' "$NYTP_PM_SRC" \
   || fail "NYTProfM.pm missing emit-gate INIT"
-ok "E1a sources: graft + mailbox kept + emit gate"
+grep -F -q "_product_int_opt( \$opts, 'entersub', 1 )" "$NYTP_PM_SRC" \
+  || fail "NYTProfM.pm omit entersub must default to 1 (opcode)"
+ok "E1b sources: graft + mailbox kept + emit gate; omit entersub ⇒ opcode"
 
 print_residuals() {
-  echo "NOT-YET: E1b default flip / E2 OP_GOTO / E3 leave / E4 full slowops"
-  echo "g16 and t/wrap_enter_attach.t stay default wrap"
+  echo "NOT-YET: E2 OP_GOTO / E3 leave / E4 full slowops / live di02 27"
+  echo "g16 / t/wrap_enter_attach.t: wrap assertions under wrap=1 only"
 }
 
 resolve_cc() {
@@ -137,7 +139,7 @@ trap cleanup EXIT
 unset PERL5OPT || true
 export PERL5LIB="$NYTP_DEST"
 
-# --- own attach: default-calls1 + entersub=1 ---
+# --- own attach: default-calls1 (omit entersub ⇒ opcode) ---
 PROFILE="$WORKDIR/nytprof.out"
 DUMP="$WORKDIR/dump.jsonl"
 JSON="$WORKDIR/report.json"
@@ -165,7 +167,7 @@ END_STACK
 
 set +e
 STACK_OUT="$(
-  cd "$WORKDIR" && NYTPROF="file=${WORKDIR}/stack.out:entersub=1:stmts=0" \
+  cd "$WORKDIR" && NYTPROF="file=${WORKDIR}/stack.out:stmts=0" \
     perl -I"$NYTP_DEST" -d:NYTProfM "$STACK_PL" 2>&1
 )"
 STACK_RC=$?
@@ -173,18 +175,18 @@ set -e
 printf '%s\n' "$STACK_OUT"
 [[ "$STACK_RC" -eq 0 ]] || fail "stack probe exited $STACK_RC"
 grep -q '^G17_P_BIT01=0$' <<<"$STACK_OUT" \
-  || fail "entersub=1 must leave \$^P bit 0x01 clear"
+  || fail "default opcode must leave \$^P bit 0x01 clear"
 grep -q '^G17_ENTERSUB_OPS=1$' <<<"$STACK_OUT" \
-  || fail "entersub=1 must set PRODUCT_ENTERSUB_OPS"
+  || fail "default omit entersub must set PRODUCT_ENTERSUB_OPS"
 grep -q '^G17_INSTALLED=1$' <<<"$STACK_OUT" \
-  || fail "entersub=1 must install OP_ENTERSUB"
+  || fail "default omit entersub must install OP_ENTERSUB"
 grep -q '^G17_EMIT=1$' <<<"$STACK_OUT" \
   || fail "INIT must enable entersub emit"
 grep -q '^G17_DBSUB_ON_STACK=0$' <<<"$STACK_OUT" \
   || fail "DB::sub must not appear on the leaf call stack"
-ok "opcode installed; \$^P 0x01 clear; no DB::sub on leaf stack"
+ok "default opcode installed; \$^P 0x01 clear; no DB::sub on leaf stack"
 
-# wrap=1 wins over entersub=1; omit-entersub default stays wrap.
+# wrap=1 / use_db_sub=1 / entersub=0 force wrap (escape).
 probe_wrap_path() {
   local label="$1"
   local nytprof="$2"
@@ -212,17 +214,19 @@ END_WP
   ok "$label: wrap path (P_SUB=1 OPS=0 INST=0)"
 }
 probe_wrap_path wrap_win "file=${WORKDIR}/wrap-win.out:wrap=1:entersub=1:stmts=0"
-probe_wrap_path default_wrap "file=${WORKDIR}/default-wrap.out:stmts=0"
+probe_wrap_path wrap_only "file=${WORKDIR}/wrap-only.out:wrap=1:stmts=0"
+probe_wrap_path use_db_sub "file=${WORKDIR}/use-db-sub.out:use_db_sub=1:stmts=0"
+probe_wrap_path entersub0 "file=${WORKDIR}/entersub0.out:entersub=0:stmts=0"
 
 set +e
 RUN_OUT="$(
-  cd "$WORKDIR" && NYTPROF="file=${PROFILE}:entersub=1" \
+  cd "$WORKDIR" && NYTPROF="file=${PROFILE}" \
     perl -I"$NYTP_DEST" -d:NYTProfM "$ROOT/fixtures/v5/default-calls1/workload.pl" 2>&1
 )"
 RUN_RC=$?
 set -e
 printf '%s\n' "$RUN_OUT"
-[[ "$RUN_RC" -eq 0 ]] || fail "calls1 entersub=1 attach exited $RUN_RC"
+[[ "$RUN_RC" -eq 0 ]] || fail "calls1 default opcode attach exited $RUN_RC"
 grep -q '^total=' <<<"$RUN_OUT" || fail "workload missing total="
 head -c 9 "$PROFILE" | grep -q 'NYTProf 5' || fail "not NYTProf 5"
 
@@ -260,10 +264,10 @@ echo "$COUNTS" | grep -E -q '^leaf_returns=15$' || fail "leaf_returns must be 15
 echo "$COUNTS" | grep -E -q '^mid_returns=3$' || fail "mid_returns must be 3"
 echo "$COUNTS" | grep -E -q '^mid_leaf_edge=15$' || fail "mid_leaf_edge must be 15"
 echo "$COUNTS" | grep -E -q '^leaf_return_count=15$' \
-  || fail "double leaf SUB_RETURN under entersub=1"
+  || fail "double leaf SUB_RETURN under default opcode"
 echo "$COUNTS" | grep -E -q '^sub_entry_events=0$' \
   || fail "calls=1 sub_entry_events must stay 0"
-ok "entersub=1 calls1: 15/3/15; no double leaf; no SUB_ENTRY"
+ok "default opcode calls1: 15/3/15; no double leaf; no SUB_ENTRY"
 
 # Unit-ratio: sums, both excl > 0, 0.5 < ratio < 2. Do not flip default if red.
 UNIT="$(perl - "$DUMP" "$JSON" <<'PERL'
@@ -321,56 +325,55 @@ perl -e '
 ' "$RATIO" || fail "unit-ratio guard failed (see $DUMP)"
 ok "unit-ratio $RATIO ~1 (ticks on SUB_RETURN and SUB_CALLERS)"
 
-# --- re-drive g09 / g14 / di02 under entersub=1 ---
-export NYTPROF_ATTACH_OPTS=entersub=1
-echo "re-drive g09 with NYTPROF_ATTACH_OPTS=entersub=1"
+# --- re-drive g09 / g14 / di02 on default opcode ---
+unset NYTPROF_ATTACH_OPTS || true
+echo "re-drive g09 on default opcode"
 bash "$ROOT/scripts/packaging/g09_tokenize_excl_smoke.sh"
-ok "g09 tokenize excl green under entersub=1"
-echo "re-drive g14 with NYTPROF_ATTACH_OPTS=entersub=1"
+ok "g09 tokenize excl green on default opcode"
+echo "re-drive g14 on default opcode"
 bash "$ROOT/scripts/packaging/g14_nested_excl_smoke.sh"
-ok "g14 3-level remainder green under entersub=1"
-echo "re-drive di02 with NYTPROF_ATTACH_OPTS=entersub=1"
+ok "g14 3-level remainder green on default opcode"
+echo "re-drive di02 on default opcode"
 set +e
 DI02_OUT="$(bash "$ROOT/scripts/packaging/di02_calls2_sub_entry_smoke.sh" 2>&1)"
 DI02_RC=$?
 set -e
 printf '%s\n' "$DI02_OUT"
 if [[ "$DI02_RC" -eq 0 ]]; then
-  ok "di02 exact 27 green under entersub=1"
+  ok "di02 exact 27 green on default opcode"
 else
   # Emit-after-INIT wrap is 21 on this host (E0 already); 27 is oracle
   # BEGIN/import. Do not profile BEGIN to fake 27 (KD-E17). Require
-  # opcode == wrap, then fail closed only if they diverge.
+  # opcode == wrap=1, then fail closed only if they diverge.
   CALLS2="$ROOT/fixtures/v5/calls2-default/workload.pl"
   WRAP_SE="$(
-    cd "$WORKDIR" && NYTPROF="file=${WORKDIR}/di02-wrap.out:calls=2" \
+    cd "$WORKDIR" && NYTPROF="file=${WORKDIR}/di02-wrap.out:calls=2:wrap=1" \
       perl -I"$NYTP_DEST" -d:NYTProfM "$CALLS2" >/dev/null
     "${CLI_CMD[@]}" report --json "${WORKDIR}/di02-wrap.out" \
       | perl -MJSON::PP -e 'print decode_json(do{local$/;<>})->{sub_entry_events}//-1'
   )"
   ES_SE="$(
-    cd "$WORKDIR" && NYTPROF="file=${WORKDIR}/di02-es.out:calls=2:entersub=1" \
+    cd "$WORKDIR" && NYTPROF="file=${WORKDIR}/di02-es.out:calls=2" \
       perl -I"$NYTP_DEST" -d:NYTProfM "$CALLS2" >/dev/null
     "${CLI_CMD[@]}" report --json "${WORKDIR}/di02-es.out" \
       | perl -MJSON::PP -e 'print decode_json(do{local$/;<>})->{sub_entry_events}//-1'
   )"
-  echo "di02_wrap_sub_entry=$WRAP_SE di02_entersub_sub_entry=$ES_SE"
+  echo "di02_wrap_sub_entry=$WRAP_SE di02_default_opcode_sub_entry=$ES_SE"
   [[ "$WRAP_SE" == "$ES_SE" ]] \
-    || fail "entersub=1 sub_entry_events=$ES_SE != wrap $WRAP_SE"
+    || fail "default opcode sub_entry_events=$ES_SE != wrap=1 $WRAP_SE"
   [[ "$ES_SE" == "21" || "$ES_SE" == "27" ]] \
     || fail "unexpected live sub_entry_events=$ES_SE (want wrap-parity 21 or golden 27)"
   echo "RESIDUAL: di02 golden 27 is oracle BEGIN/import; live wrap+opcode=$ES_SE (emit after INIT). Not a silent recount of the di02 script."
   ok "di02 overlay: wrap-parity sub_entry_events=$ES_SE (golden 27 residual)"
 fi
-echo "re-drive g12 with NYTPROF_ATTACH_OPTS=entersub=1"
+echo "re-drive g12 on default opcode"
 bash "$ROOT/scripts/packaging/g12_memoize_caller_smoke.sh"
-ok "g12 Memoize caller-safe under entersub=1"
-echo "re-drive g10 with NYTPROF_ATTACH_OPTS=entersub=1"
+ok "g12 Memoize caller-safe on default opcode"
+echo "re-drive g10 on default opcode"
 bash "$ROOT/scripts/packaging/g10_datetime_hints_smoke.sh"
-ok "g10 DateTime/%^H under entersub=1"
-unset NYTPROF_ATTACH_OPTS
+ok "g10 DateTime/%^H on default opcode"
 
-# --- light wrap vs entersub=1 vs isolated 6.15 (claim: none) ---
+# --- light wrap=1 vs default opcode vs isolated 6.15 (claim: none) ---
 BENCH_N=40000
 BENCH_PL="$WORKDIR/bench.pl"
 cat >"$BENCH_PL" <<END_BENCH
@@ -410,8 +413,8 @@ bench_loop() {
 }
 
 echo "engineering bench N=$BENCH_N claim: none"
-bench_loop wrap "file=${WORKDIR}/bench-wrap.out:stmts=0" "$NYTP_DEST"
-bench_loop entersub "file=${WORKDIR}/bench-es.out:stmts=0:entersub=1" "$NYTP_DEST"
+bench_loop wrap "file=${WORKDIR}/bench-wrap.out:stmts=0:wrap=1" "$NYTP_DEST"
+bench_loop entersub "file=${WORKDIR}/bench-es.out:stmts=0" "$NYTP_DEST"
 
 ORACLE_LIB=""
 if [[ -f "$ROOT/baseline/6.15/oracle-perl5lib.txt" ]]; then
@@ -444,5 +447,5 @@ fi
 echo "claim: none (engineering only; not BENCH cert; not beat 6.15)"
 
 print_residuals
-ok "G17 entersub=1 attach + overlay g09/g14/di02 + unit-ratio"
+ok "G17 default opcode attach + overlay g09/g14/di02 + unit-ratio"
 exit 0

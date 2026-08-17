@@ -1,6 +1,6 @@
 # Product XS graft provenance
 
-**Status:** E1a — `pp_entersub.c` / `nytprof_pp.h` copied + adapted onto `nytp_emit_*`  
+**Status:** E1b — default call attach is grafted `OP_ENTERSUB` (omit `entersub` ⇒ on); wrap escape is `wrap=1`  
 **Annex:** [product-xs-graft-annex-v0.md](https://github.com/hilather/nytprof-modernization/blob/main/docs/schemas/product-xs-graft-annex-v0.md) A.1  
 **DI-03 design:** [DI03_OPCODE_ENTERSUB_ATTACH_v0.md](https://github.com/hilather/nytprof-modernization/blob/main/docs/plan/DI03_OPCODE_ENTERSUB_ATTACH_v0.md)  
 **ADR:** [0004-collector-packaging-source-tree.md](https://github.com/hilather/nytprof-modernization/blob/main/docs/adrs/0004-collector-packaging-source-tree.md)  
@@ -50,9 +50,9 @@ Pin `baseline/6.15/src/NYTProf.xs` is **not** present in this tree. Functions we
 | Recursion: wrap semantics (`reci=0`, `rec_depth=0`, full incl/excl) | not pin `called_cv_depth <= 1` |
 | Skip `DB::*` and `Devel::NYTProfM` internals | product identity |
 | Install `OP_ENTERSUB` at `file=`; emit only after INIT | KD-E17 / di02 **27** |
-| Opcode only if `PRODUCT_ENTERSUB && !PRODUCT_WRAP`; default still wrap | KD-E16 |
+| Opcode when `PRODUCT_ENTERSUB && !PRODUCT_WRAP`; E1b omit-default is opcode | KD-E01 / KD-E16 |
 | Keep pending-excl mailbox; `product_credit_child_excl` branches | KD-E12 |
-| E1a omits `OP_GOTO` / leave / full `slowops.h` / default flip | E2–E4 / E1b |
+| E1b omits `OP_GOTO` / leave / full `slowops.h` | E2–E4 |
 
 ## Security backports
 

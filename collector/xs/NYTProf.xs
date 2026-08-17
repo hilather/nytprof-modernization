@@ -37,7 +37,8 @@
  * PR-16   — wrap_push / wrap_pop: one C crossing for wrap COP pin +
  *           fid + clock + pending-excl + SUB_RETURN/SUB_CALLERS.
  * DI-03 E1a — unstatic sink/fid/calls/mailbox for grafted pp_entersub.c.
- *           Default attach stays wrap; opcode only when entersub=1.
+ * DI-03 E1b — default call attach is opcode ENTERSUB (omit entersub ⇒ on).
+ *           wrap=1 / use_db_sub=1 (or entersub=0) is the wrap escape.
  *
  * MODULE Devel::NYTProfM; PACKAGE = DB
  * Default link: libnytp_sink_v5.a + -lz only (D1-B).

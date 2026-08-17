@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
-# PR-16 — Default wrap uses C wrap_push / wrap_pop (COP pin + fid +
-# clock + pending-excl + SUB_RETURN/SUB_CALLERS). Perl caller(0)+
-# fid_for_filename + emit XSUBs stay only behind NYTPROF_WRAP_SLOW=1
-# so a tight call-loop can prove the default path is faster.
-# Not 6.15 entersub / DI-03.
+# PR-16 / DI-03 E1b — wrap=1 escape uses C wrap_push / wrap_pop
+# (COP pin + fid + clock + pending-excl + SUB_RETURN/SUB_CALLERS).
+# Default attach is opcode ENTERSUB (g17). WRAP_SLOW is nested under
+# wrap=1 only (not default opcode). wrap=1 C wrap must beat
+# wrap=1 + NYTPROF_WRAP_SLOW=1.
 #
 # Drives real perl -d:NYTProfM + shipped dump. Never crates/.
 # Exit 0 pass or honest skip; 1 fail; 2 misuse.
@@ -51,19 +51,21 @@ grep -q 'PRODUCT_WRAP_SLOW' "$NYTP_PM_SRC" \
 grep -q 'NYTPROF_WRAP_SLOW' "$NYTP_PM_SRC" \
   || fail "NYTProfM.pm missing NYTPROF_WRAP_SLOW env control"
 
-perl - "$NYTP_PM_SRC" <<'PERL' || fail "instrumented wrap still uses Perl caller+fid (or WRAP_SLOW control missing)"
+perl - "$NYTP_PM_SRC" <<'PERL' || fail "wrap=1 path still uses Perl caller+fid (or WRAP_SLOW control missing)"
 use strict;
 use warnings;
 my $pm = shift;
 open my $fh, "<", $pm or die $!;
 my $src = do { local $/; <$fh> };
 close $fh;
+# wrap_push / WRAP_SLOW live only on the wrap escape (wrap=1). Do not
+# treat default DB::sub as the instrumented wrap path (default is opcode).
 my ($body) = $src =~ /\nsub sub \{(.+?)\nsub _product_finish_current_frame/s
   or die "could not extract DB::sub body\n";
-$body =~ /PRODUCT_WRAP_SLOW/ or die "WRAP_SLOW control missing from DB::sub\n";
-$body =~ /wrap_push/         or die "wrap_push missing from DB::sub\n";
+$body =~ /PRODUCT_WRAP_SLOW/ or die "WRAP_SLOW control missing from wrap DB::sub\n";
+$body =~ /wrap_push/         or die "wrap_push missing from wrap DB::sub\n";
 my $idx = index( $body, 'PRODUCT_WRAP_SLOW' );
-$idx >= 0 or die "WRAP_SLOW not in DB::sub\n";
+$idx >= 0 or die "WRAP_SLOW not in wrap DB::sub\n";
 my $open = index( $body, '{', $idx );
 $open >= 0 or die "WRAP_SLOW branch has no opening brace\n";
 my $depth = 0;
@@ -80,17 +82,18 @@ my $rest = substr( $body, 0, $open ) . substr( $body, $end + 1 );
 $slow =~ /caller\s*\(\s*0\s*\)/     or die "WRAP_SLOW control missing caller(0)\n";
 $slow =~ /fid_for_filename/         or die "WRAP_SLOW control missing fid_for_filename\n";
 if ( $rest =~ /caller\s*\(\s*0\s*\)/ && $rest =~ /fid_for_filename/ ) {
-    die "default wrap still does caller(0)+fid_for_filename\n";
+    die "wrap_push path still does caller(0)+fid_for_filename\n";
 }
-$rest =~ /wrap_push/ or die "default wrap missing wrap_push\n";
-print "PARSE_OK default wrap uses wrap_push; WRAP_SLOW control present\n";
+$rest =~ /wrap_push/ or die "wrap=1 path missing wrap_push\n";
+print "PARSE_OK wrap=1 uses wrap_push; WRAP_SLOW nested under escape\n";
 PERL
-ok "PR-16 sources: C wrap_push + WRAP_SLOW control; default is not caller+fid"
+ok "PR-16 sources: wrap=1 wrap_push + WRAP_SLOW under escape; not default attach"
 
 print_residuals() {
   echo "G04 attach 15/3/15: g04_v5_parity_smoke.sh"
   echo "G15 C TIME_LINE: g15_dbstate_timeline_smoke.sh"
-  echo "NOT-YET: full 6.15 opcode/entersub / DI-03 / stock 6.15 XS"
+  echo "G17 default opcode ENTERSUB: g17_entersub_attach_smoke.sh"
+  echo "NOT-YET: E2 OP_GOTO / E3 leave / E4 full slowops / stock 6.15 XS"
 }
 
 resolve_cc() {
@@ -187,6 +190,7 @@ run_attach() {
   local dump="$WORKDIR/${label}.jsonl"
   local out elapsed rc
   unset NYTPROF_WRAP_SLOW || true
+  # WRAP_SLOW only under wrap=1 (default attach is opcode).
   if [[ "$wrap_slow" == "1" ]]; then
     export NYTPROF_WRAP_SLOW=1
   fi
@@ -194,7 +198,7 @@ run_attach() {
   elapsed="$(
     TIMEFORMAT='%R'
     { time \
-      env NYTPROF="file=${profile}:stmts=0" \
+      env NYTPROF="file=${profile}:stmts=0:wrap=1" \
         perl -I"$NYTP_DEST" -d:NYTProfM "$SCRIPT" \
         >"$WORKDIR/${label}.stdout" 2>"$WORKDIR/${label}.stderr"
     } 2>&1
@@ -244,9 +248,9 @@ echo "slow  leaf=$SLOW_LEAF loop=$SLOW_T"
 [[ "$SLOW_LEAF" == "$FAST1_LEAF" ]] || fail "slow leaf $SLOW_LEAF != fast1 $FAST1_LEAF"
 
 grep -q '^PRODUCT_WRAP_SLOW=0$' "$WORKDIR/fast1.stdout" \
-  || fail "default attach must leave PRODUCT_WRAP_SLOW=0"
+  || fail "wrap=1 attach must leave PRODUCT_WRAP_SLOW=0"
 grep -q '^PRODUCT_WRAP_SLOW=1$' "$WORKDIR/slow.stdout" \
-  || fail "NYTPROF_WRAP_SLOW=1 must set PRODUCT_WRAP_SLOW=1"
+  || fail "wrap=1 + NYTPROF_WRAP_SLOW=1 must set PRODUCT_WRAP_SLOW=1"
 
 perl -e '
   my ($f1, $f2, $s) = @ARGV;
@@ -255,10 +259,10 @@ perl -e '
   my $mean = ($f1 + $f2) / 2;
   my $min  = ($f1 < $f2) ? $f1 : $f2;
   print "g16_fast1=$f1 g16_fast2=$f2 g16_slow=$s g16_fast_mean=$mean\n";
-  die "neither default loop beat WRAP_SLOW ($min >= $s)\n" unless $min < $s;
-  die "default mean loop not faster than WRAP_SLOW ($mean >= $s)\n"
+  die "neither wrap=1 loop beat WRAP_SLOW ($min >= $s)\n" unless $min < $s;
+  die "wrap=1 mean loop not faster than WRAP_SLOW ($mean >= $s)\n"
     unless $mean < $s;
-' "$FAST1_T" "$FAST2_T" "$SLOW_T" || fail "default wrap not faster than WRAP_SLOW control"
+' "$FAST1_T" "$FAST2_T" "$SLOW_T" || fail "wrap=1 wrap_push not faster than WRAP_SLOW control"
 
 perl - "$WORKDIR/fast1.jsonl" <<'PERL' || fail "leaf SUB_CALLERS site is NYTProfM.pm (wrap pin missed user COP)"
 use strict;
@@ -289,7 +293,7 @@ die "no leaf SUB_CALLERS in dump\n" unless $n;
 print "SITE_OK leaf SUB_CALLERS n=$n file=wrap.pl (not NYTProfM.pm)\n";
 PERL
 
-ok "two default runs same leaf=$FAST1_LEAF; mean loop faster than WRAP_SLOW"
+ok "two wrap=1 runs same leaf=$FAST1_LEAF; mean loop faster than WRAP_SLOW"
 print_residuals
 ok "G16 wrap_push faster than caller+fid control"
 exit 0
