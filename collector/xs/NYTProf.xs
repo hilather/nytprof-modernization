@@ -513,6 +513,32 @@ product_parse_DBsub_value(pTHX_ SV *sv, STRLEN *filename_len_p,
     return 1;
 }
 
+#ifndef isGV_with_GP
+#define isGV_with_GP(sv) (isGV(sv) && GvGP((GV *)(sv)))
+#endif
+
+/* GvCV derefs GvGP. Stash slots may be a CV, an RV to a CV, or a
+ * GP-less GV (isGV true) — the last is a SEGV without isGV_with_GP.
+ */
+static CV *
+product_stash_val_cv(pTHX_ SV *val)
+{
+    PERL_UNUSED_CONTEXT;
+    if (val == NULL || val == &PL_sv_placeholder) {
+        return NULL;
+    }
+    if (SvTYPE(val) == SVt_PVCV) {
+        return (CV *)val;
+    }
+    if (SvROK(val) && SvRV(val) != NULL && SvTYPE(SvRV(val)) == SVt_PVCV) {
+        return (CV *)SvRV(val);
+    }
+    if (!isGV_with_GP(val)) {
+        return NULL;
+    }
+    return GvCV((GV *)val);
+}
+
 /* Mark every CV in a stash CvNODEBUG so Perl will not call DB::sub.
  * Needed for B::Hooks::EndOfScope::XS::on_scope_end: even `goto &$raw`
  * from DB::sub during use/BEGIN corrupts compile-time %^H (Variable::Magic
@@ -534,13 +560,8 @@ product_nodebug_stash(pTHX_ const char *name)
     }
     hv_iterinit(stash);
     while ((he = hv_iternext(stash)) != NULL) {
-        SV *val = HeVAL(he);
-        CV *cv;
-        if (val == NULL || val == &PL_sv_placeholder || !isGV(val)) {
-            continue;
-        }
-        cv = GvCV((GV *)val);
-        if (cv == NULL) {
+        CV *cv = product_stash_val_cv(aTHX_ HeVAL(he));
+        if (cv == NULL || SvTYPE((SV *)cv) != SVt_PVCV) {
             continue;
         }
         CvNODEBUG_on(cv);
@@ -1216,6 +1237,9 @@ product_fill_cv_name(pTHX_ CV *cv, char *buf, size_t buflen)
         return;
     }
     gv = CvGV(cv);
+    if (gv != NULL && !isGV_with_GP((SV *)gv)) {
+        gv = NULL;
+    }
     stash = CvSTASH(cv);
     pkg = (stash != NULL && HvNAME(stash)) ? HvNAME(stash) : "main";
     name = (gv != NULL && GvNAME(gv)) ? GvNAME(gv) : "?";
@@ -1365,7 +1389,10 @@ product_rebind_cv(pTHX_ CV *cv)
     OP *o;
     int n;
 
-    if (cv == NULL)
+    if (cv == NULL || SvTYPE((SV *)cv) != SVt_PVCV)
+        return;
+    /* CvROOT/CvXSUB share a union. Walking an XSUB as an OP* is a SEGV. */
+    if (CvISXSUB(cv))
         return;
     if (CvROOT(cv))
         product_rebind_op(aTHX_ CvROOT(cv));
@@ -1396,17 +1423,11 @@ product_rebind_stash_slowops(pTHX_ const char *name)
         return -1;
     hv_iterinit(stash);
     while ((he = hv_iternext(stash)) != NULL) {
-        SV *sv = HeVAL(he);
-        GV *gv;
-        CV *cv;
-        if (sv == NULL || SvTYPE(sv) != SVt_PVGV)
+        CV *cv = product_stash_val_cv(aTHX_ HeVAL(he));
+        if (cv == NULL)
             continue;
-        gv = (GV *)sv;
-        cv = GvCV(gv);
-        if (cv != NULL) {
-            cvs++;
-            product_rebind_cv(aTHX_ cv);
-        }
+        cvs++;
+        product_rebind_cv(aTHX_ cv);
     }
     (void)cvs;
     return 0;

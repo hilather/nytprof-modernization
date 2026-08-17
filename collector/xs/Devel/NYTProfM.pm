@@ -243,6 +243,8 @@ sub sub {
         || _product_skip_sub($called)
         || _product_needs_goto($called) )
     {
+        die "NYTProfM: \$DB::sub is missing; cannot tail-call\n"
+          unless defined $raw && ( ref($raw) || ( !ref($raw) && length $raw ) );
         goto &$raw;
     }
 
@@ -284,6 +286,9 @@ sub sub {
         };
         $product_in_hook = 0;
     }
+
+    die "NYTProfM: \$DB::sub is missing; cannot wrap\n"
+      unless defined $raw && ( ref($raw) || ( !ref($raw) && length $raw ) );
 
     my $wa = wantarray;
     my ( @ret, $scalar, $ok );
