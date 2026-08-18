@@ -65,6 +65,24 @@ tar -C "$WORK" -xzf "$OUT"
 UNPACK="$WORK/NYTProfM-6.15"
 [[ -d "$UNPACK/collector" ]] || fail "unpack missing collector/"
 [[ -f "$UNPACK/collector/xs/Devel/NYTProfM.pm" ]] || fail "unpack missing NYTProfM.pm"
+[[ -f "$UNPACK/collector/xs/NYTProf.xs" ]] || fail "unpack missing NYTProf.xs"
+[[ -f "$UNPACK/collector/xs/nytprof_pp.h" ]] || fail "unpack missing nytprof_pp.h (graft header)"
+[[ -f "$UNPACK/collector/xs/pp_entersub.c" ]] || fail "unpack missing pp_entersub.c"
+[[ -f "$UNPACK/collector/xs/pp_leave.c" ]] || fail "unpack missing pp_leave.c"
+[[ -f "$UNPACK/collector/xs/product_callers.c" ]] || fail "unpack missing product_callers.c"
+[[ -f "$UNPACK/collector/xs/slowops.h" ]] || fail "unpack missing slowops.h"
+# Workflow must not pin a NEVRA other than spec Release (v0.2.18 leftover -10).
+WF="$ROOT/.github/workflows/release-el8-rpm.yml"
+rel=$(sed -n 's/^Release:[[:space:]]*\([0-9][0-9]*\).*/\1/p' \
+  "$ROOT/packaging/rpm/perl-NYTProfM.spec" | head -1)
+[[ -n "$rel" ]] || fail "could not parse Release from perl-NYTProfM.spec"
+grep -q 's/^Release:' "$WF" \
+  || fail "release-el8-rpm.yml must parse spec Release (do not pin 6.15-N)"
+if grep -Eoe 'perl-NYTProfM-6\.15-[0-9]+\.el8\.x86_64\.rpm' "$WF" \
+    | grep -vq "6.15-${rel}.el8"; then
+  fail "release-el8-rpm.yml hardcodes a NEVRA that is not spec Release $rel"
+fi
+ok "workflow NEVRA matches spec Release $rel (or is derived)"
 [[ -f "$UNPACK/t/workload-calls1.pl" ]] || fail "unpack missing t/workload-calls1.pl"
 [[ -f "$UNPACK/t/installed_attach.t" ]] || fail "unpack missing t/installed_attach.t"
 [[ -f "$UNPACK/Makefile.PL" ]] || fail "unpack missing staged Makefile.PL"

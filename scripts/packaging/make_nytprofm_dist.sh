@@ -28,9 +28,8 @@ mkdir -p "$STAGE/collector/include" \
 cp -a "$ROOT/collector/Makefile" "$STAGE/collector/Makefile"
 cp -a "$ROOT/collector/include/." "$STAGE/collector/include/"
 cp -a "$ROOT/collector/src/." "$STAGE/collector/src/"
-cp -a "$ROOT/collector/xs/NYTProf.xs" "$STAGE/collector/xs/NYTProf.xs"
-cp -a "$ROOT/collector/xs/Devel/NYTProfM.pm" "$STAGE/collector/xs/Devel/NYTProfM.pm"
-cp -a "$ROOT/collector/xs/Devel/NYTProfM/Core.pm" "$STAGE/collector/xs/Devel/NYTProfM/Core.pm"
+# Whole xs/ tree — do not allow-list members (graft .c/.h omitted from Source0).
+cp -a "$ROOT/collector/xs/." "$STAGE/collector/xs/"
 if [[ -f "$ROOT/collector/README.md" ]]; then
   cp -a "$ROOT/collector/README.md" "$STAGE/collector/README.md"
 fi

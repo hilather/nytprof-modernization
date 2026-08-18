@@ -4,12 +4,15 @@
 **Date:** 2026-08-18  
 **Since:** [`v0.2.16`](https://github.com/hilather/nytprof-modernization/releases/tag/v0.2.16)
 
-Unsigned **Rocky 8 / EL8** `perl-NYTProfM` testdrive RPM **6.15-11** (upgrades `6.15-10`). **Not** PAUSE, **not** COPR, **not** GPG-signed, **not** CI-mock certified, **not** GA. **Not** a certified perf claim.
+**EL8 RPM:** 6.15-11 never attached (staged dist omitted graft XS). Operators install [`v0.2.18`](https://github.com/hilather/nytprof-modernization/releases/tag/v0.2.18) / **6.15-12**. Attach behavior below is what v0.2.17 landed on `main`.
+
+Unsigned **Rocky 8 / EL8** testdrive was intended as RPM **6.15-11**. **Not** PAUSE, **not** COPR, **not** GPG-signed, **not** CI-mock certified, **not** GA. **Not** a certified perf claim.
 
 GitHub Actions workflow [`Release EL8 RPM (test-drive)`](https://github.com/hilather/nytprof-modernization/blob/v0.2.17/.github/workflows/release-el8-rpm.yml) rebuilds the RPM in `rockylinux:8` and attaches it here. Local rebuild: [`scripts/packaging/build_el8_module_rpm.sh`](https://github.com/hilather/nytprof-modernization/blob/v0.2.17/scripts/packaging/build_el8_module_rpm.sh).
 
 ```text
-sudo rpm -Uvh perl-NYTProfM-6.15-11.el8.x86_64.rpm
+# 6.15-11 never published — use v0.2.18 / 6.15-12:
+sudo rpm -Uvh perl-NYTProfM-6.15-12.el8.x86_64.rpm
 NYTPROF=file=/tmp/nytprof.out perl -d:NYTProfM script.pl
 nytprofm-cli html /tmp/nytprof.out --out-dir /tmp/nytprof-html
 # rollback to Perl wrap if needed:
@@ -46,7 +49,7 @@ Also in this cut (stacked on v0.2.16, not released separately):
 
 **Packaging**
 
-- Module RPM **6.15-11**. Bundled EL8 `nytprofm-cli` unchanged (collector-only cut; source-sha256 matches).
+- Module RPM **6.15-11** (job failed; use **6.15-12**). Bundled EL8 `nytprofm-cli` unchanged (collector-only cut; source-sha256 matches).
 
 ## Engineering benches (claim: none)
 
@@ -63,7 +66,7 @@ Not BENCH certification. Same-host inner `Time::HiRes`, `stmts=0`, 120k leaf/mid
 
 ## Upgrade notes
 
-- `dnf upgrade` / `rpm -Uvh` to **6.15-11**.
+- `dnf upgrade` / `rpm -Uvh` to **6.15-12** (6.15-11 never attached).
 - Re-profile. Default attach is opcode; `caller()` is the real caller (wrap goto list is `wrap=1` only).
 - Rollback: `NYTPROF=file=…:wrap=1`.
 - Smaller call-heavy files come from aggregated `SUB_CALLERS` + existing `savesrc=0` / `stmts=0`.
