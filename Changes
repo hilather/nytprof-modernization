@@ -1,6 +1,10 @@
 Revision history for NYTProfM (product modernization)
 
 6.15  2026-08-18
+        v0.2.21 testdrive: TIME_LINE last-site clock restarts after
+        emit (6.15 DB_stmt). Tight if-modifier lines no longer report
+        profiled wall as statement time. Smoke g15. RPM 6.15-15.
+
         v0.2.20 testdrive: default slowops=2 matches 6.15 full
         slowops.h table (open/readline/subst/stat/… as pkg::CORE:op).
         slowops=full/=3 stay aliases. Exclusive is still thin (not 6.15

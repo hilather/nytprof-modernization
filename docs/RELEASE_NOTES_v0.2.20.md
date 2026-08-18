@@ -43,7 +43,7 @@ nytprofm-cli html /tmp/nytprof.out --out-dir /tmp/nytprof-html
 
 ## Upgrade notes
 
-- `dnf upgrade` / `rpm -Uvh` to **6.15-14**.
+- `dnf upgrade` / `rpm -Uvh` to **6.15-15** ([`v0.2.21`](https://github.com/hilather/nytprof-modernization/releases/tag/v0.2.21); statement TIME_LINE excludes hook/write cost).
 - Re-profile. Default HTML now lists `CORE:open` / `readline` / `subst` / … instead of folding those seconds into the parent.
 - To disable slowops: `NYTPROF=file=…:slowops=0`.
 - Rollback attach: `NYTPROF=file=…:wrap=1`.

@@ -33,6 +33,8 @@ my $xsrc = do { local $/; <$xsf> };
 close $xsf;
 like( $xsrc, qr/pp_product_dbstate_line/,
     'NYTProf.xs has pp_product_dbstate_line' );
+like( $xsrc, qr/product_seed_last_site/,
+    'NYTProf.xs restarts last-site clock after TIME_LINE emit' );
 
 my $out = qx{bash '$smoke' 2>&1};
 my $rc  = $? >> 8;

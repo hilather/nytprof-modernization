@@ -39,6 +39,10 @@ grep -q 'install_product_dbstate_timeline' "$NYTP_XS" \
   || fail "NYTProf.xs missing install_product_dbstate_timeline"
 grep -q 'pp_product_dbstate_line' "$NYTP_XS" \
   || fail "NYTProf.xs missing pp_product_dbstate_line"
+grep -q 'product_close_last_site' "$NYTP_XS" \
+  || fail "NYTProf.xs missing product_close_last_site"
+grep -q 'product_seed_last_site' "$NYTP_XS" \
+  || fail "NYTProf.xs missing product_seed_last_site (6.15 clock split)"
 grep -q 'PRODUCT_DBSTATE_LINE' "$NYTP_PM_SRC" \
   || fail "NYTProfM.pm missing PRODUCT_DBSTATE_LINE"
 grep -q 'install_product_dbstate_timeline' "$NYTP_PM_SRC" \
@@ -185,6 +189,76 @@ TLB=$(grep -c '"tag":"TIME_LINE"' "$DUMPB" || true)
 [[ "$TBB" -gt 0 ]] || fail "blocks=1 emitted no TIME_BLOCK"
 [[ "$TLB" -eq 0 ]] || fail "blocks=1 must not emit TIME_LINE ($TLB)"
 ok "blocks=1: stmt-ops TIME_BLOCK ($TBB), not C TIME_LINE hook"
+
+# Statement TIME_LINE must not swallow profiler wall (6.15 DB_stmt:
+# write elapsed, then restart the clock after hook/write).
+IFMOD="$WORKDIR/ifmod.pl"
+cat >"$IFMOD" <<'END_IF'
+use strict;
+use warnings;
+my $n = 200000;
+my $about = 1;
+my $is_about = 1;
+my $abc = 0;
+for my $i (1 .. $n) {
+    $abc = 1 if ( $about == $is_about );
+}
+print "ifmod_ok n=$n abc=$abc\n";
+END_IF
+IF_PROF="$WORKDIR/ifmod.out"
+IF_DUMP="$WORKDIR/ifmod.jsonl"
+IF_T0_START=$(date +%s%N)
+perl "$IFMOD" >/dev/null
+IF_T0_END=$(date +%s%N)
+IF_PROF_START=$(date +%s%N)
+set +e
+IF_OUT="$(
+  cd "$WORKDIR" && NYTPROF="file=${IF_PROF}" perl -I"$NYTP_DEST" -d:NYTProfM "$IFMOD" 2>&1
+)"
+IF_RC=$?
+set -e
+IF_PROF_END=$(date +%s%N)
+printf '%s\n' "$IF_OUT"
+[[ "$IF_RC" -eq 0 ]] || fail "if-modifier attach exited $IF_RC"
+grep -q '^ifmod_ok' <<<"$IF_OUT" || fail "if-modifier missing ifmod_ok"
+dump_profile "$IF_PROF" "$IF_DUMP"
+IF_NUMS="$(perl - "$IF_DUMP" <<'PERL'
+use strict;
+use warnings;
+use JSON::PP;
+my $dump = $ARGV[0];
+my $tps  = 10_000_000;
+my $sum  = 0;
+my $n    = 0;
+open my $fh, "<", $dump or die $!;
+while (<$fh>) {
+    my $j = decode_json($_);
+    my $tag = $j->{tag} // next;
+    my $a   = $j->{args} // [];
+    if ( $tag eq "ATTRIBUTE" && @$a >= 2 && $a->[0] eq "ticks_per_sec" ) {
+        $tps = 0 + $a->[1] if $a->[1];
+    }
+    next unless $tag eq "TIME_LINE" && @$a >= 3;
+    # Hottest line in this script is the if-modifier (fid of ifmod.pl).
+    $sum += $a->[0];
+    $n++;
+}
+close $fh;
+printf "if_line_events=%d\n", $n;
+printf "if_time_s=%.6f\n", ( $tps > 0 ? $sum / $tps : 0 );
+PERL
+)"
+printf '%s\n' "$IF_NUMS"
+IF_TS=$(perl -ne 'print $1 if /^if_time_s=([0-9.]+)/' <<<"$IF_NUMS")
+IF_NE=$(perl -ne 'print $1 if /^if_line_events=([0-9]+)/' <<<"$IF_NUMS")
+IF_T0=$(perl -e 'printf "%.6f", ('"$IF_T0_END"' - '"$IF_T0_START"')/1e9')
+IF_TP=$(perl -e 'printf "%.6f", ('"$IF_PROF_END"' - '"$IF_PROF_START"')/1e9')
+echo "if_unprofiled=${IF_T0}s if_profiled=${IF_TP}s TIME_LINE_sum=${IF_TS}s events=${IF_NE}"
+[[ "$IF_NE" -ge 100000 ]] || fail "if-modifier expected ~200k TIME_LINE, got $IF_NE"
+# TIME_LINE is statement time, not profiled wall (pre-fix: sum ≈ wall).
+perl -e 'exit( ($ARGV[0] < $ARGV[1] * 0.55) ? 0 : 1 )' "$IF_TS" "$IF_TP" \
+  || fail "TIME_LINE sum ${IF_TS}s is not < 55% of profiled wall ${IF_TP}s (hook cost charged to the line)"
+ok "if-modifier TIME_LINE ${IF_TS}s < 55% of profiled wall ${IF_TP}s (unprofiled ${IF_T0}s)"
 
 print_residuals
 ok "G15 C OP_DBSTATE TIME_LINE (no Perl DB::DB)"

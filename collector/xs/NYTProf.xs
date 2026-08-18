@@ -289,39 +289,70 @@ product_flush_last_site(void)
     return NYTP_OK;
 }
 
-nytp_status
-product_emit_attributed_time_line(nytp_fid fid, nytp_line line)
+/* Close previous interval, then seed this site *after* the emit so
+ * hook/write cost is not charged to TIME_LINE (6.15 DB_stmt order). */
+static nytp_status
+product_close_last_site(void)
 {
     nytp_ticks now = 0;
     nytp_status st;
 
-    if (product_sink == NULL) {
-        return NYTP_ERR_NULL;
+    if (!product_has_last_site || product_sink == NULL) {
+        return NYTP_OK;
     }
     st = nytp_clock_now(&now);
     if (st != NYTP_OK) {
         return st;
     }
-    if (line == 0) {
-        line = 1;
+    if (now < product_last_abs) {
+        return NYTP_ERR_OVERFLOW;
     }
-    if (product_has_last_site) {
-        if (now < product_last_abs) {
-            return NYTP_ERR_OVERFLOW;
-        }
-        st = product_emit_last_site_elapsed(now - product_last_abs);
-        if (st != NYTP_OK) {
-            return st;
-        }
+    st = product_emit_last_site_elapsed(now - product_last_abs);
+    if (st != NYTP_OK) {
+        return st;
+    }
+    product_has_last_site = 0;
+    (void)product_maybe_durable_seal(now);
+    return NYTP_OK;
+}
+
+static nytp_status
+product_seed_last_site(nytp_fid fid, nytp_line line, int is_block,
+                       nytp_line block_line, nytp_line sub_line)
+{
+    nytp_ticks now = 0;
+    nytp_status st;
+
+    st = nytp_clock_now(&now);
+    if (st != NYTP_OK) {
+        return st;
     }
     product_last_abs = now;
     product_last_site_fid = fid;
     product_last_site_line = line;
-    product_last_site_block_line = 0;
-    product_last_site_sub_line = 0;
-    product_last_site_is_block = 0;
+    product_last_site_block_line = block_line;
+    product_last_site_sub_line = sub_line;
+    product_last_site_is_block = is_block;
     product_has_last_site = 1;
-    return product_maybe_durable_seal(now);
+    return NYTP_OK;
+}
+
+nytp_status
+product_emit_attributed_time_line(nytp_fid fid, nytp_line line)
+{
+    nytp_status st;
+
+    if (product_sink == NULL) {
+        return NYTP_ERR_NULL;
+    }
+    if (line == 0) {
+        line = 1;
+    }
+    st = product_close_last_site();
+    if (st != NYTP_OK) {
+        return st;
+    }
+    return product_seed_last_site(fid, line, 0, 0, 0);
 }
 
 /* BASE-003: attribute now-last to the previous site, then seed this COP. */
@@ -329,15 +360,10 @@ nytp_status
 product_emit_attributed_time_block(nytp_fid fid, nytp_line line,
                                    nytp_line block_line, nytp_line sub_line)
 {
-    nytp_ticks now = 0;
     nytp_status st;
 
     if (product_sink == NULL) {
         return NYTP_ERR_NULL;
-    }
-    st = nytp_clock_now(&now);
-    if (st != NYTP_OK) {
-        return st;
     }
     if (line == 0) {
         line = 1;
@@ -348,23 +374,11 @@ product_emit_attributed_time_block(nytp_fid fid, nytp_line line,
     if (sub_line == 0) {
         sub_line = line;
     }
-    if (product_has_last_site) {
-        if (now < product_last_abs) {
-            return NYTP_ERR_OVERFLOW;
-        }
-        st = product_emit_last_site_elapsed(now - product_last_abs);
-        if (st != NYTP_OK) {
-            return st;
-        }
+    st = product_close_last_site();
+    if (st != NYTP_OK) {
+        return st;
     }
-    product_last_abs = now;
-    product_last_site_fid = fid;
-    product_last_site_line = line;
-    product_last_site_block_line = block_line;
-    product_last_site_sub_line = sub_line;
-    product_last_site_is_block = 1;
-    product_has_last_site = 1;
-    return product_maybe_durable_seal(now);
+    return product_seed_last_site(fid, line, 1, block_line, sub_line);
 }
 
 static nytp_status
@@ -1305,6 +1319,7 @@ product_emit_time_block_for_cop(pTHX_ COP *cop)
     line = (UV)CopLINE(cop);
     if (line == 0)
         line = 1;
+    (void)product_close_last_site();
     file_sv = newSVpv(file ? file : "-", 0);
     fid = product_fid_for_filename(aTHX_ file_sv);
     SvREFCNT_dec(file_sv);
@@ -1325,6 +1340,8 @@ product_emit_time_line_for_cop(pTHX_ COP *cop)
 
     if (product_sink == NULL || cop == NULL)
         return;
+    /* Close first so fid lookup is not charged to the previous line. */
+    (void)product_close_last_site();
     file = OutCopFILE(cop);
     line = (UV)CopLINE(cop);
     if (line == 0)
