@@ -2064,6 +2064,13 @@ entersub_is_installed()
         RETVAL
 
 int
+entersub_goto_is_installed()
+    CODE:
+        RETVAL = product_goto_is_installed();
+    OUTPUT:
+        RETVAL
+
+int
 entersub_emit_enabled()
     CODE:
         RETVAL = product_entersub_emit_enabled();

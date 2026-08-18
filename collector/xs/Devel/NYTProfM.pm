@@ -104,6 +104,9 @@ $Devel::NYTProfM::PRODUCT_WRAP          = 0;
 $Devel::NYTProfM::PRODUCT_ENTERSUB      = 0;
 # 1 only after file= actually installed OP_ENTERSUB (not wrap=1 win).
 $Devel::NYTProfM::PRODUCT_ENTERSUB_OPS  = 0;
+# 1 after the same install also hooked OP_GOTO (E2). Wrap list stays
+# wrap=1 / use_db_sub=1 only — not a substitute for opcode goto &sub.
+$Devel::NYTProfM::PRODUCT_GOTO_OPS      = 0;
 # Bench control only (not an NYTPROF colon option). 1 = old Perl
 # caller(0)+fid XSUB wrap so g16 can measure the C site crossing.
 $Devel::NYTProfM::PRODUCT_WRAP_SLOW =
@@ -216,6 +219,8 @@ sub _product_skip_sub {
 # see DB so `use vars qw($VERSION)` / `use constant` fail under strict.
 # Compile-time calls also goto (`$product_after_init` is 0 until INIT).
 # Never pair this with a pushed stack frame — goto unwinds the pad.
+# This list is wrap=1 / use_db_sub=1 only. Default opcode hooks
+# OP_GOTO (E2); do not treat wrap-list `goto &$raw` as a substitute.
 our %product_sub_disp;    # name => 0 wrap / 1 skip / 2 goto
 
 sub _product_sub_disp {
@@ -646,6 +651,7 @@ init_profiler();    # G03a: hold in-memory v5 sink — never writes nytprof.out
                 die "DB::install_product_entersub status=$st_es\n";
             }
             $Devel::NYTProfM::PRODUCT_ENTERSUB_OPS = 1;
+            $Devel::NYTProfM::PRODUCT_GOTO_OPS     = 1;
             if ( $^P & 0x01 ) {
                 die "NYTProfM: opcode entersub and wrap would both emit\n";
             }

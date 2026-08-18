@@ -1,6 +1,6 @@
 # Product XS graft provenance
 
-**Status:** E1b — default call attach is grafted `OP_ENTERSUB` (omit `entersub` ⇒ on); wrap escape is `wrap=1`  
+**Status:** E2 — default opcode hooks `OP_ENTERSUB` + `OP_GOTO` (`goto &sub` keeps original caller + goto-site fid:line); wrap list stays `wrap=1` only. DI-03 not fully done (E3 leave default 0, E4 full table opt-in, di02 27 remain).  
 **Annex:** [product-xs-graft-annex-v0.md](https://github.com/hilather/nytprof-modernization/blob/main/docs/schemas/product-xs-graft-annex-v0.md) A.1  
 **DI-03 design:** [DI03_OPCODE_ENTERSUB_ATTACH_v0.md](https://github.com/hilather/nytprof-modernization/blob/main/docs/plan/DI03_OPCODE_ENTERSUB_ATTACH_v0.md)  
 **ADR:** [0004-collector-packaging-source-tree.md](https://github.com/hilather/nytprof-modernization/blob/main/docs/adrs/0004-collector-packaging-source-tree.md)  
@@ -33,7 +33,9 @@ Pin `baseline/6.15/src/NYTProf.xs` is **not** present in this tree. Functions we
 | `subr_entry_setup` ~2390–2628 | `collector/xs/pp_entersub.c` (fid/clock/skip/emit gate) | E1a |
 | `resolve_sub_to_cv` ~2277–2341 | `collector/xs/pp_entersub.c` (no `tryAMAGICunDEREF`) | E1a |
 | `current_cv` ~2345–2386 | `collector/xs/pp_entersub.c` | E1a |
-| `pp_entersub_profiler` / `pp_subcall_profiler` ~2631–2928 | `collector/xs/pp_entersub.c` (`pp_product_entersub`; **no** `OP_GOTO`) | E1a |
+| `pp_entersub_profiler` / `pp_subcall_profiler` ~2631–2928 | `collector/xs/pp_entersub.c` (`pp_product_entersub`; E1a **no** `OP_GOTO`) | E1a |
+| `pp_subcall_profiler` `OP_GOTO` branch ~2667–2766 + setup clone ~2509–2513 | `collector/xs/pp_entersub.c` (template `subr_entry_t *tmpl`; separate `product_orig_pp_goto`; pin REFCNT_inc/mortalize) | E2 |
+| `PL_ppaddr[OP_GOTO] = pp_entersub_profiler` ~3257 | `product_install_entersub` / uninstall | E2 |
 | `NYTP_MAX_SUB_NAME_LEN` ~106–108 | `collector/xs/nytprof_pp.h` | E1a |
 
 ## Deltas vs pin (E1a)
@@ -52,7 +54,14 @@ Pin `baseline/6.15/src/NYTProf.xs` is **not** present in this tree. Functions we
 | Install `OP_ENTERSUB` at `file=`; emit only after INIT | KD-E17 / di02 **27** |
 | Opcode when `PRODUCT_ENTERSUB && !PRODUCT_WRAP`; E1b omit-default is opcode | KD-E01 / KD-E16 |
 | Keep pending-excl mailbox; `product_credit_child_excl` branches | KD-E12 |
-| E1b omits `OP_GOTO` / leave / full `slowops.h` | E2–E4 |
+| E1b omits `OP_GOTO` / leave / full `slowops.h` | E2–E4 (E2 landed) |
+| E2 `goto &CV` only; other gotos run orig | pin pre-condition ~2667–2670 |
+| E2 `subr_entry_ix == -1` → orig only | pin ~2670 |
+| E2 caller_* from copied frame; fid:line from goto COP | pin ~2731–2735 / ~2509–2513 |
+| E2 separate `product_orig_pp_goto` (never call orig ENTERSUB for `OP_GOTO`) | product adaptation |
+| E2 port pin REFCNT_inc/mortalize leak comment (no new leak “fix”) | pin ~2745 |
+| E2 wrap-list `goto &$raw` stays wrap=1 / `use_db_sub=1` only | not a substitute for opcode GOTO |
+| E2 omits leave / full `slowops.h` | E3–E4 |
 
 ## Security backports
 

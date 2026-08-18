@@ -459,7 +459,7 @@ sequenceDiagram
 
 ### DI-03 — Opcode / `entersub` attach (milestone E)
 
-**Status:** **in progress, not done.** E1b flipped the default: omit `entersub` installs `OP_ENTERSUB` → `nytp_emit_*` (emit after INIT; `$^P` 0x01 off). Escape is `wrap=1` / `use_db_sub=1` / `entersub=0`. E2 `OP_GOTO`, E3 leave, E4 full slowops, and di02 exact **27** (live wrap/opcode **21** after INIT) remain. Design: [`docs/plan/DI03_OPCODE_ENTERSUB_ATTACH_v0.md`](https://github.com/hilather/nytprof-modernization/blob/main/docs/plan/DI03_OPCODE_ENTERSUB_ATTACH_v0.md). Provenance: [`docs/graft/PROVENANCE.md`](https://github.com/hilather/nytprof-modernization/blob/main/docs/graft/PROVENANCE.md).
+**Status:** **in progress, not done.** E1b flipped the default: omit `entersub` installs `OP_ENTERSUB` → `nytp_emit_*` (emit after INIT; `$^P` 0x01 off). **E2 landed:** default opcode also hooks `OP_GOTO` so `goto &sub` keeps the original caller and the goto site’s fid:line (smoke [`g18_goto_sub_smoke.sh`](https://github.com/hilather/nytprof-modernization/blob/main/scripts/packaging/g18_goto_sub_smoke.sh)). Wrap list remains **`wrap=1` / `use_db_sub=1` only** — not a substitute for opcode GOTO. Escape is `wrap=1` / `use_db_sub=1` / `entersub=0`. E3 leave default **0**, E4 full slowops, and di02 exact **27** (live wrap/opcode **21** after INIT) remain. Design: [`docs/plan/DI03_OPCODE_ENTERSUB_ATTACH_v0.md`](https://github.com/hilather/nytprof-modernization/blob/main/docs/plan/DI03_OPCODE_ENTERSUB_ATTACH_v0.md). Provenance: [`docs/graft/PROVENANCE.md`](https://github.com/hilather/nytprof-modernization/blob/main/docs/graft/PROVENANCE.md).
 
 **When:** after **B-collection** is green and advertised-options residuals are listed. **Not** first GA-candidate.
 

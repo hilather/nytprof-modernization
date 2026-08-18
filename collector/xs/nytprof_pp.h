@@ -22,9 +22,10 @@ IV       product_opt_calls(pTHX);
 void     product_add_pending_child_excl(NV);
 NV       product_take_pending_child_excl(void);
 
-int  product_install_entersub(pTHX);
+int  product_install_entersub(pTHX);     /* OP_ENTERSUB + OP_GOTO (E2) */
 int  product_uninstall_entersub(pTHX);
 int  product_entersub_is_installed(void);
+int  product_goto_is_installed(void);
 int  product_entersub_emit_enabled(void);
 void product_entersub_set_emit_enabled(int on);
 void *product_current_subr_entry(void);

@@ -9,7 +9,8 @@
  * emit SUB_RETURN + SUB_CALLERS in ticks at return; no callers hash;
  * overhead contribution is 0; keep cumulative_subr_ticks
  * (g14 remainder); wrap recursion (full incl/excl, reci=0); skip DB::*
- * and Devel::NYTProfM; E1a omits OP_GOTO.
+ * and Devel::NYTProfM. E2 ports pin OP_GOTO (goto &CV keeps the original
+ * caller and the goto site's fid:line). Wrap-list goto stays wrap=1 only.
  */
 #define PERL_NO_GET_CONTEXT
 #include "EXTERN.h"
@@ -49,6 +50,7 @@ static NV product_cumulative_subr_ticks = 0.0;
 static int product_entersub_installed = 0;
 static int product_entersub_emit_on = 0;
 static Perl_ppaddr_t product_orig_pp_entersub = NULL;
+static Perl_ppaddr_t product_orig_pp_goto = NULL;
 #ifdef MULTIPLICITY
 static PerlInterpreter *product_entersub_orig_my_perl = NULL;
 #endif
@@ -60,6 +62,27 @@ int
 product_entersub_is_installed(void)
 {
     return product_entersub_installed ? 1 : 0;
+}
+
+int
+product_goto_is_installed(void)
+{
+    return (product_entersub_installed && product_orig_pp_goto != NULL)
+               ? 1
+               : 0;
+}
+
+static OP *
+product_run_orig_op(pTHX_ OPCODE op_type)
+{
+    if (op_type == OP_GOTO) {
+        if (product_orig_pp_goto == NULL)
+            return NORMAL;
+        return product_orig_pp_goto(aTHX);
+    }
+    if (product_orig_pp_entersub == NULL)
+        return NORMAL;
+    return product_orig_pp_entersub(aTHX);
 }
 
 int
@@ -320,7 +343,8 @@ product_incr_sub_inclusive_time_ix(pTHX_ void *subr_entry_ix_void)
 }
 
 static SSize_t
-product_subr_entry_setup(pTHX_ COP *prev_cop, OPCODE op_type, SV *subr_sv)
+product_subr_entry_setup(pTHX_ COP *prev_cop, subr_entry_t *tmpl,
+                        OPCODE op_type, SV *subr_sv)
 {
     int saved_errno = errno;
     subr_entry_t *subr_entry;
@@ -350,7 +374,7 @@ product_subr_entry_setup(pTHX_ COP *prev_cop, OPCODE op_type, SV *subr_sv)
     subr_entry->initial_call_ticks = t0;
     subr_entry->initial_subr_ticks = product_cumulative_subr_ticks;
 
-    if (op_type == OP_ENTERSUB) {
+    if (op_type == OP_ENTERSUB || op_type == OP_GOTO) {
         GV *called_gv = NULL;
         subr_entry->called_cv =
             product_resolve_sub_to_cv(aTHX_ subr_sv, &called_gv);
@@ -364,13 +388,18 @@ product_subr_entry_setup(pTHX_ COP *prev_cop, OPCODE op_type, SV *subr_sv)
         subr_entry->called_is_xs = NULL;
     }
 
+    /* fid:line from prev_cop — GOTO passes the goto-site COP. */
     file = prev_cop ? OutCopFILE(prev_cop) : NULL;
     subr_entry->caller_fid = (unsigned int)product_fid_for_file_ptr(aTHX_ file);
     subr_entry->caller_line = prev_cop ? (int)CopLINE(prev_cop) : 1;
     if (subr_entry->caller_line <= 0)
         subr_entry->caller_line = 1;
 
-    if (caller_se != NULL && caller_se->called_subpkg_pv != NULL
+    if (tmpl != NULL && tmpl->caller_subnam_sv != NULL) {
+        /* OP_GOTO: keep the original caller; do not inherit jumper. */
+        subr_entry->caller_subpkg_pv = tmpl->caller_subpkg_pv;
+        subr_entry->caller_subnam_sv = SvREFCNT_inc(tmpl->caller_subnam_sv);
+    } else if (caller_se != NULL && caller_se->called_subpkg_pv != NULL
         && caller_se->called_subnam_sv != NULL
         && SvOK(caller_se->called_subnam_sv)) {
         subr_entry->caller_subpkg_pv = caller_se->called_subpkg_pv;
@@ -411,7 +440,7 @@ pp_product_entersub(pTHX)
     COP *prev_cop = PL_curcop;
     OP *next_op = PL_op ? PL_op->op_next : NULL;
     OPCODE op_type = OP_ENTERSUB;
-    CV *called_cv;
+    CV *called_cv = NULL;
     dSP;
     SV *sub_sv;
     SSize_t this_ix;
@@ -419,38 +448,84 @@ pp_product_entersub(pTHX)
     const char *is_xs = NULL;
     char *stash_name = NULL;
 
-    if (PL_op == NULL || product_orig_pp_entersub == NULL)
+    if (PL_op == NULL)
         return NORMAL;
 
-    /* E2 owns OP_GOTO. Never take a non-ENTERSUB through this hook. */
-    if ((opcode)PL_op->op_type == OP_GOTO)
-        return product_orig_pp_entersub(aTHX);
+    /* Pin: pp_entersub can be called with op_type==0; treat as ENTERSUB.
+     * OP_GOTO shares this hook; never run orig ENTERSUB for a goto. */
+    op_type = ((opcode)PL_op->op_type == OP_GOTO) ? OP_GOTO : OP_ENTERSUB;
+    if (op_type == OP_GOTO && product_orig_pp_goto == NULL)
+        return NORMAL;
+    if (op_type != OP_GOTO && product_orig_pp_entersub == NULL)
+        return NORMAL;
 
 #ifdef MULTIPLICITY
     if (product_entersub_orig_my_perl != NULL
         && my_perl != product_entersub_orig_my_perl)
-        return product_orig_pp_entersub(aTHX);
+        return product_run_orig_op(aTHX_ op_type);
 #endif
 
     /* Install at file=; emit only after INIT (di02 27). */
     if (!product_entersub_emit_enabled())
-        return product_orig_pp_entersub(aTHX);
+        return product_run_orig_op(aTHX_ op_type);
 
     /* Fail closed: opcode + $^P 0x01 wrap would double SUB_RETURN. */
     if (PL_perldb & PERLDBf_SUB)
         croak("NYTProfM: opcode entersub and wrap would both emit");
 
     sub_sv = *SP;
-    if (sub_sv == &PL_sv_yes)
-        return product_orig_pp_entersub(aTHX);
+    if (op_type == OP_ENTERSUB && sub_sv == &PL_sv_yes)
+        return product_run_orig_op(aTHX_ op_type);
 
-    this_ix = product_subr_entry_setup(aTHX_ prev_cop, op_type, sub_sv);
-    if (this_ix < 0)
-        return product_orig_pp_entersub(aTHX);
+    /* Only profile goto &CV. Other gotos (label) run orig only.
+     * Goto out of a sub whose entry was not profiled: orig only. */
+    if (op_type == OP_GOTO
+        && (!(SvROK(sub_sv) && SvTYPE(SvRV(sub_sv)) == SVt_PVCV)
+            || product_subr_entry_ix == -1))
+        return product_run_orig_op(aTHX_ op_type);
 
-    SETERRNO(saved_errno, 0);
-    op = product_orig_pp_entersub(aTHX);
-    saved_errno = errno;
+    if (op_type != OP_GOTO) {
+        this_ix = product_subr_entry_setup(aTHX_ prev_cop, NULL, op_type,
+                                           sub_sv);
+        if (this_ix < 0)
+            return product_run_orig_op(aTHX_ op_type);
+
+        SETERRNO(saved_errno, 0);
+        op = product_run_orig_op(aTHX_ op_type);
+        saved_errno = errno;
+    } else {
+        /* goto &sub is return+call: copy current frame as template so
+         * the goto'd sub keeps the original caller; fid:line is the
+         * goto site (prev_cop). Port pin REFCNT_inc/mortalize (KD leak). */
+        COP prev_cop_copy;
+        subr_entry_t goto_subr_entry;
+        subr_entry_t *src = product_subr_entry_ix_ptr(product_subr_entry_ix);
+
+        if (src == NULL)
+            return product_run_orig_op(aTHX_ op_type);
+
+        prev_cop_copy = *prev_cop;
+        Copy(src, &goto_subr_entry, 1, subr_entry_t);
+
+        /* XXX if the goto op or goto'd xsub croaks then this'll leak */
+        (void)SvREFCNT_inc(goto_subr_entry.caller_subnam_sv);
+        (void)SvREFCNT_inc(goto_subr_entry.called_subnam_sv);
+        (void)SvREFCNT_inc(sub_sv);
+
+        called_cv = (CV *)SvRV(sub_sv);
+
+        SETERRNO(saved_errno, 0);
+        op = product_run_orig_op(aTHX_ op_type);
+        saved_errno = errno;
+
+        sv_2mortal(goto_subr_entry.caller_subnam_sv);
+        sv_2mortal(goto_subr_entry.called_subnam_sv);
+        this_ix = product_subr_entry_setup(aTHX_ &prev_cop_copy,
+                                           &goto_subr_entry, op_type, sub_sv);
+        SvREFCNT_dec(sub_sv);
+        if (this_ix < 0)
+            goto skip_sub_profile;
+    }
 
     subr_entry = product_subr_entry_ix_ptr(this_ix);
     if (subr_entry == NULL)
@@ -459,7 +534,9 @@ pp_product_entersub(pTHX)
     if (subr_entry->already_counted)
         goto skip_sub_profile;
 
-    if (op != next_op) {
+    if (op_type == OP_GOTO) {
+        is_xs = (called_cv != NULL && CvISXSUB(called_cv)) ? "xsub" : NULL;
+    } else if (op != next_op) {
         called_cv = cxstack[cxstack_ix].blk_sub.cv;
         is_xs = NULL;
     } else {
@@ -528,7 +605,9 @@ product_install_entersub(pTHX)
     if (product_entersub_installed)
         return 0;
     product_orig_pp_entersub = PL_ppaddr[OP_ENTERSUB];
+    product_orig_pp_goto = PL_ppaddr[OP_GOTO];
     PL_ppaddr[OP_ENTERSUB] = pp_product_entersub;
+    PL_ppaddr[OP_GOTO] = pp_product_entersub;
     product_entersub_installed = 1;
 #ifdef MULTIPLICITY
     product_entersub_orig_my_perl = my_perl;
@@ -543,7 +622,10 @@ product_uninstall_entersub(pTHX)
         return 0;
     if (product_orig_pp_entersub != NULL)
         PL_ppaddr[OP_ENTERSUB] = product_orig_pp_entersub;
+    if (product_orig_pp_goto != NULL)
+        PL_ppaddr[OP_GOTO] = product_orig_pp_goto;
     product_orig_pp_entersub = NULL;
+    product_orig_pp_goto = NULL;
     product_entersub_installed = 0;
     product_entersub_emit_on = 0;
     return 0;
