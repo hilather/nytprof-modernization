@@ -154,10 +154,12 @@ jobs:
 
       - name: Install Linux build dependencies
         if: runner.os == 'Linux'
+        timeout-minutes: 5
         run: |
           set -euo pipefail
-          sudo apt-get update
-          sudo apt-get install -y --no-install-recommends \
+          # Bound apt — runners have hung indefinitely on apt-get update.
+          sudo timeout 120 apt-get update
+          sudo timeout 180 apt-get install -y --no-install-recommends \
             build-essential \
             zlib1g-dev \
             libzstd-dev \
