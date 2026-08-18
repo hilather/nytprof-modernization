@@ -96,7 +96,7 @@
 | Memoize `caller` | **PR-12:** goto `Memoize::`. `memoize('fn')` uses `caller` as the package; wrap looks up `DB::fn` (`Cannot operate on nonexistent function`). Smoke [`g12_memoize_caller_smoke.sh`](https://github.com/hilather/nytprof-modernization/blob/main/scripts/packaging/g12_memoize_caller_smoke.sh). |
 | Logger `caller` | **PR-13:** do not `eval` around `&$raw` (`CXt_EVAL` is visible; package-DB subs are not). DESTROY emits `SUB_RETURN` on die. Smoke [`g13_logger_caller_smoke.sh`](https://github.com/hilather/nytprof-modernization/blob/main/scripts/packaging/g13_logger_caller_smoke.sh). |
 | Nested exclusive | **PR-14:** parent exclusive = incl − Σ child **inclusive**. `stmts=0` skips TIME_LINE. Smoke [`g14_nested_excl_smoke.sh`](https://github.com/hilather/nytprof-modernization/blob/main/scripts/packaging/g14_nested_excl_smoke.sh). |
-| C `OP_DBSTATE` TIME_LINE | **PR-15:** default `stmts=1` emits TIME_LINE from `pp_product_dbstate_line` + last-COP fid pointer cache. Do **not** hook NEXTSTATE/UNSTACK (that is `blocks=1`). `$DB::single=0`. Smoke [`g15_dbstate_timeline_smoke.sh`](https://github.com/hilather/nytprof-modernization/blob/main/scripts/packaging/g15_dbstate_timeline_smoke.sh). **Not** full opcode / `entersub`. |
+| C `OP_DBSTATE` TIME_LINE | **PR-15:** default `stmts=1` emits TIME_LINE from `pp_product_dbstate_line` + last-COP fid pointer cache. Do **not** hook NEXTSTATE/UNSTACK (that is `blocks=1`). `$DB::single=0`. Smoke [`g15_dbstate_timeline_smoke.sh`](https://github.com/hilather/nytprof-modernization/blob/main/scripts/packaging/g15_dbstate_timeline_smoke.sh). **Not** NEXTSTATE / `TIME_BLOCK` (that is `blocks=1`). Call attach is E1b opcode. |
 | C wrap push/pop | **PR-16 + E1b:** wrap assertions only under `wrap=1`. `DB::wrap_push`/`wrap_pop` (COP pin + fid + clock + pending-excl + `SUB_RETURN`/`SUB_CALLERS`). `NYTPROF_WRAP_SLOW=1` is nested under that escape. Smoke [`g16_wrap_enter_smoke.sh`](https://github.com/hilather/nytprof-modernization/blob/main/scripts/packaging/g16_wrap_enter_smoke.sh). Default attach is opcode (g17). **Not** E2 GOTO / stock 6.15 XS. |
 | `ATTRIBUTE application` | **$0** at `file=` enable (6.15 `output_header`). HTML primary file / “Profile of …” must not pick `Config_heavy.pl`. |
 | `DB::sub` | E1b default: **stub** (opcode `OP_ENTERSUB` emits). Wrap body only if `wrap=1` / `use_db_sub=1` / `entersub=0`. Goto list remains wrap-escape only. |
@@ -111,9 +111,12 @@
 
 | Residual | Rule |
 |----------|------|
-| Full 6.15 opcode / `entersub` / XSUB / goto / full `slowops.h` | Full `slowops.h` is **opt-in** `slowops=full`/`=3` (E4). Product default `slowops=2` stays PRINT/MATCH. Opcode `entersub` remains E1a opt-in. |
+| E1b `OP_ENTERSUB` (product sink) | **Landed** — default omit installs `OP_ENTERSUB`; wrap is `wrap=1`. Smoke [`g17_entersub_attach_smoke.sh`](https://github.com/hilather/nytprof-modernization/blob/main/scripts/packaging/g17_entersub_attach_smoke.sh) |
+| E2 `OP_GOTO` | **Landed** — smoke [`g18_goto_sub_smoke.sh`](https://github.com/hilather/nytprof-modernization/blob/main/scripts/packaging/g18_goto_sub_smoke.sh) |
+| E3 leave / E4 full `slowops.h` | **Opt-in landed** — `leave=1` (default 0); `slowops=full`/`=3` (`=2` stays PRINT/MATCH). |
+| XSUB / leave default 1 / live di02 **27** | **Residual** — DI-03 **not** done. |
 | G05 `format=v6` D1-A / D1-B fail-closed | **Landed** — [`g05_options_format_smoke.sh`](https://github.com/hilather/nytprof-modernization/blob/main/scripts/packaging/g05_options_format_smoke.sh) |
-| G06 fork / `addpid` / mid-deflate continue-in-child | **Residual** |
+| G06 fork / `addpid` | **Landed** — mid-deflate continue-in-child / TEST-018 remain residual |
 | blocks-calls1 line5 **780** | **Not** claimed |
 | FileHandle dual writer | **Not** added |
 | `collection_default` | Remains **v5** |
@@ -184,4 +187,4 @@ PERL5LIB=collector/build/xs-nytprof perl -Icollector/build/xs-nytprof \
 # → dump/report CORE:print and/or CORE:match incl/excl not both 0
 ```
 
-G05 `format=v6` tests landed. G06 fork/`addpid` and full 6.15 opcode/`entersub` remain residual.
+G05 `format=v6` tests landed. G06 fork/`addpid` landed (mid-deflate-in-child / TEST-018 residual). DI-03 residual is E2–E4 + live emit-after-INIT di02 **21** vs oracle start=begin **27** — not “entersub not grafted.”

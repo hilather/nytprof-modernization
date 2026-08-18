@@ -34,7 +34,7 @@ Recommended start: **milestone A** (Rocky installable attach-preview) in paralle
 
 | Surface | Evidence | Honesty |
 |---------|----------|---------|
-| Live attach MVP | `collector/xs/Devel/NYTProfM.pm` `DB` / `sub`; `g04_v5_parity_smoke.sh` | Perl hooks, not opcode |
+| Live attach MVP | `collector/xs/Devel/NYTProfM.pm` + `pp_entersub.c`; `g04_v5_parity_smoke.sh` / `g17_entersub_attach_smoke.sh` | E1b default `OP_ENTERSUB` on the product sink; wrap is `wrap=1`. DI-03 **not** done (E2–E4 / live emit-after-INIT **21** vs oracle start=begin **27**) |
 | Options + `format` | `g05_options_format_smoke.sh` | unknown + `dual` fail-closed; D1-B `format=v6` fail-closed; D1-A `xs-nytprof-v6` → `NYTPROF6` |
 | Fork + `addpid` | `CORE::GLOBAL::fork` → `nytp_fork_*`; `g06_fork_addpid_smoke.sh` | child **re-inits** a clean stream; mid-deflate-continue residual |
 | Identity | `NAME => Devel::NYTProfM`, `DISTNAME => NYTProfM`, `$VERSION` **6.15** | Option B; no `Provides: perl(Devel::NYTProf)` |
