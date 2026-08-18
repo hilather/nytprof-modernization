@@ -16,7 +16,7 @@ This design covers **how** to finish drop-in replacement and RPM deployment afte
 
 ## Overview
 
-Attach-preview is live: `perl -d:NYTProfM` with `NYTPROF file=` writes `NYTProf 5` via Perl `DB::DB` / `DB::sub` and shipped `nytp_emit_*`. Default-calls1-shaped work reports leaf **15** / mid **3** / mid→leaf **15**. That is **not** 6.15 opcode/`entersub` attach: product `DB::DB` always emits `TIME_LINE` (never live `TIME_BLOCK`), and `DB::sub` emits `SUB_RETURN` + `SUB_CALLERS` but never `SUB_ENTRY`. RPM specs exist (`perl-NYTProfM.spec`, `nytprof-cli.spec`) but are **not** mock-certified; `make dist` does not produce an ingestible `NYTProfM-6.15.tar.gz`; tools ingest of signed CI prebuilts is policy-only (ADR-0010).
+Attach-preview is live: `perl -d:NYTProfM` with `NYTPROF file=` writes `NYTProf 5` via shipped `nytp_emit_*`. E1b default call attach is grafted C `OP_ENTERSUB` (emit after INIT; `$^P` 0x01 off; `DB::sub` stub). Wrap is `wrap=1` (`use_db_sub=1` synonym). Default-calls1-shaped work reports leaf **15** / mid **3** / mid→leaf **15**. Default `stmts=1` TIME_LINE stays `OP_DBSTATE` only (never NEXTSTATE/`TIME_BLOCK` unless `blocks=1`). DI-03 is **not done**: E2 `OP_GOTO` / E3 leave default 0 / E4 full slowops / live emit-after-INIT di02 **21** vs oracle start=begin **27** remain. RPM specs exist (`perl-NYTProfM.spec`, `nytprof-cli.spec`) but are **not** mock-certified; `make dist` does not produce an ingestible `NYTProfM-6.15.tar.gz`; tools ingest of signed CI prebuilts is policy-only (ADR-0010).
 
 The completion plan is two independent tracks that meet at a **split** GA-candidate:
 
