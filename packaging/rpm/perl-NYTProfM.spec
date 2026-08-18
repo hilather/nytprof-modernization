@@ -9,7 +9,7 @@
 
 Name:           perl-NYTProfM
 Version:        6.15
-Release:        10%{?dist}
+Release:        11%{?dist}
 Summary:        NYTProfM 6.15 collection (D1-B v5-only default; -d:NYTProfM)
 License:        GPL+ or Artistic
 URL:            https://github.com/hilather/nytprof-modernization
@@ -115,6 +115,9 @@ fi
 %{_bindir}/nytprofm-dump
 
 %changelog
+* Tue Aug 18 2026 nytprof-modernization <devnull@example.com> - 6.15-11
+- Default opcode OP_ENTERSUB + OP_GOTO; wrap=1 escape; SUB_CALLERS
+  C-aggregated at finish; PR-15 C DBSTATE TIME_LINE
 * Mon Aug 17 2026 nytprof-modernization <devnull@example.com> - 6.15-10
 - Exclusive = incl − child inclusive; stmts=0 skips TIME_LINE;
   ATTRIBUTE application=$0 (HTML not Config_heavy.pl); refresh nytprof-cli
