@@ -1,6 +1,12 @@
 Revision history for NYTProfM (product modernization)
 
 6.15  2026-08-18
+        v0.2.20 testdrive: default slowops=2 matches 6.15 full
+        slowops.h table (open/readline/subst/stat/… as pkg::CORE:op).
+        slowops=full/=3 stay aliases. Exclusive is still thin (not 6.15
+        savestack). Smoke g19_slowops_full_smoke.sh. RPM 6.15-14.
+        Not a public perf claim.
+
         v0.2.19 testdrive: %check sums SUB_CALLERS.count (finish-flush).
         v0.2.18 RPM never attached (CALLERS=1 want 15). RPM 6.15-13.
 

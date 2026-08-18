@@ -113,7 +113,7 @@
 |----------|------|
 | E1b `OP_ENTERSUB` (product sink) | **Landed** — default omit installs `OP_ENTERSUB`; wrap is `wrap=1`. Smoke [`g17_entersub_attach_smoke.sh`](https://github.com/hilather/nytprof-modernization/blob/main/scripts/packaging/g17_entersub_attach_smoke.sh) |
 | E2 `OP_GOTO` | **Landed** — smoke [`g18_goto_sub_smoke.sh`](https://github.com/hilather/nytprof-modernization/blob/main/scripts/packaging/g18_goto_sub_smoke.sh) |
-| E3 leave / E4 full `slowops.h` | **Opt-in landed** — `leave=1` (default 0); `slowops=full`/`=3` (`=2` stays PRINT/MATCH). |
+| E3 leave / E4 full `slowops.h` | **E4 default flip landed** — `leave=1` (default 0); `slowops=2` / `full` / `=3` install the full 6.15 table. Exclusive remains thin. |
 | XSUB / leave default 1 / live di02 **27** | **Residual** — DI-03 **not** done. |
 | G05 `format=v6` D1-A / D1-B fail-closed | **Landed** — [`g05_options_format_smoke.sh`](https://github.com/hilather/nytprof-modernization/blob/main/scripts/packaging/g05_options_format_smoke.sh) |
 | G06 fork / `addpid` | **Landed** — mid-deflate continue-in-child / TEST-018 remain residual |

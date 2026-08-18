@@ -1,6 +1,6 @@
 # Product XS graft provenance
 
-**Status:** E2–E4 — default opcode hooks `OP_ENTERSUB` + `OP_GOTO`; `pp_leave.c` on `nytp_emit_discount` behind `leave=1` (default 0); `slowops.h` full table behind `slowops=full` / `=3` (`slowops=2` stays PRINT/MATCH). Wrap list stays `wrap=1` only. `SUB_CALLERS` aggregated in C (`product_callers.c`) and flushed at finish; `SUB_RETURN` stays 1:1. Residual: live di02 27, leave default not 6.15.  
+**Status:** E2–E4 — default opcode hooks `OP_ENTERSUB` + `OP_GOTO`; `pp_leave.c` on `nytp_emit_discount` behind `leave=1` (default 0); `slowops.h` full table is the **default** (`slowops=2`; `full`/`=3` aliases). Wrap list stays `wrap=1` only. `SUB_CALLERS` aggregated in C (`product_callers.c`) and flushed at finish; `SUB_RETURN` stays 1:1. Residual: thin exclusive on re-entrant slowops; live di02 27; leave default not 6.15.  
 
 
 **Annex:** [product-xs-graft-annex-v0.md](https://github.com/hilather/nytprof-modernization/blob/main/docs/schemas/product-xs-graft-annex-v0.md) A.1  
@@ -55,14 +55,14 @@ Pin `baseline/6.15/src/slowops.h` is **not** present / not edited. The table was
 
 | Delta | Status |
 |-------|--------|
-| Product `slowops=2` stays PRINT/MATCH only (`pp_product_slowop`) | KD-35 / KD-E15 — not a silent full-table flip |
-| `slowops=full` / `=3` installs the copied table | explicit opt-in |
+| Product `slowops=2` (default) installs the copied full table | 2026-08-18 default flip — matches 6.15 `=2` opcode set |
+| `slowops=full` / `=3` install the same table | aliases of default |
 | `slowops=1` still fail-closed (collapsed `CORE::` package) | unchanged residual |
 | Names stay `pkg::CORE:op` (`product_fill_slowop_name`) | not `CORE::op` |
 | Mailbox stays for wrap; opcode path uses `product_credit_child_excl` | KD-E12 |
 | Orig `PL_ppaddr` snapshot before any hook | needed so full-table PRINT/MATCH keep the real orig after BOOT thin install |
 | Parse accepts `0`, `2`, `3`, string `full`; rejects other values | advertised-options |
-| Thin emit (not 6.15 `pp_subcall_profiler(is_slowop=1)` savestack) | accepted E4 deviation. `=full` exclusive can double-count if a slowop re-enters Perl (`sort` / backtick / `(?{ })`); `product_in_slowop` is a skip flag, not a nest. Do **not** claim 6.15 exclusive on `=full`. Default `=2` / g08 / g09 unchanged. |
+| Thin emit (not 6.15 `pp_subcall_profiler(is_slowop=1)` savestack) | accepted E4 deviation. Default/`=full` exclusive can double-count if a slowop re-enters Perl (`sort` / backtick / `(?{ })`); `product_in_slowop` is a skip flag, not a nest. Do **not** claim 6.15 exclusive. |
 
 ## Deltas vs pin (E1a)
 
@@ -92,7 +92,7 @@ Pin `baseline/6.15/src/slowops.h` is **not** present / not edited. The table was
 | Last-site flush/seed via `product_emit_time_*_for_cop` (blocks=1 uses `product_fill_block_sub`) | E3; clock stays `nytp_clock_now` inside those helpers |
 | UNSTACK/LEAVELOOP stay on `pp_product_stmt` when `PRODUCT_BLOCKS` | KD-E14 |
 | Leave install only when `leave=1` + `stmts`; emit after INIT | E3 |
-| E4 full table is opt-in `slowops=full`/`=3` only | product `slowops=2` stays PRINT/MATCH |
+| E4 full table is the default (`slowops=2`; `full`/`=3` aliases) | 2026-08-18 flip — matches 6.15 opcode set; exclusive still thin |
 | `SUB_CALLERS` C table + finish flush (not Perl HV) | product-only; `SUB_RETURN` still ticks at return |
 
 ## Security backports

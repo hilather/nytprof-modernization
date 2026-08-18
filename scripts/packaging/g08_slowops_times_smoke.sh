@@ -100,7 +100,7 @@ resolve_cc() {
 }
 
 print_residuals() {
-  echo "E4: full 6.15 slowops.h is opt-in (slowops=full / =3); default stays PRINT/MATCH"
+  echo "E4: default slowops=2 is the full 6.15 table; exclusive remains thin"
   echo "NOT-YET: E1b default opcode / E2 GOTO / mid-deflate continue-in-child / TEST-018 / S2"
 }
 

@@ -42,8 +42,9 @@
  * DI-03 E3  — unstatic last-site flush/seed for grafted pp_leave.c.
  *           leave=1 only; default leave stays 0. UNSTACK/LEAVELOOP stay
  *           on pp_product_stmt when PRODUCT_BLOCKS. No NEXTSTATE here.
- * DI-03 E4  — full 6.15 slowops.h behind slowops=full / =3. Product
- *           slowops=2 stays PRINT/MATCH (KD-35). slowops=1 fail-closed.
+ * DI-03 E4  — default slowops=2 installs full 6.15 slowops.h
+ *           (pkg::CORE:op). 3/full are aliases. Exclusive is thin.
+ *           slowops=1 fail-closed.
  *
  * MODULE Devel::NYTProfM; PACKAGE = DB
  * Default link: libnytp_sink_v5.a + -lz only (D1-B).
@@ -1646,13 +1647,12 @@ pp_product_slowop(pTHX)
         return NORMAL;
 
     slowops = product_opt_slowops(aTHX);
-    if (slowops != 2)
+    if (slowops != 2 && slowops != 3)
         return orig(aTHX);
     return product_profile_one_slowop(aTHX_ orig, type);
 }
 
-/* Thin orig + nytp_emit_* + product_credit_child_excl; not 6.15 savestack.
- * Only when slowops==3. */
+/* Thin orig + nytp_emit_* + product_credit_child_excl; not 6.15 savestack. */
 static OP *
 pp_slowop_profiler(pTHX)
 {
@@ -1667,9 +1667,10 @@ pp_slowop_profiler(pTHX)
         return NORMAL;
 
     slowops = product_opt_slowops(aTHX);
-    if (slowops != 3)
+    /* 2 = 6.15 default (full table, pkg::CORE:op). 3/full is the same table. */
+    if (slowops != 2 && slowops != 3)
         return orig(aTHX);
-    /* Restore product_in_slowop if orig() dies. Default =2 path unchanged. */
+    /* Restore product_in_slowop if orig() dies. */
     ENTER;
     SAVEINT(product_in_slowop);
     ret = product_profile_one_slowop(aTHX_ orig, type);
@@ -1699,7 +1700,7 @@ product_install_slowops_full(pTHX)
     product_save_ppaddr_orig(aTHX);
     if (product_slowops_full_installed)
         return 0;
-    /* Pin table: only hooked when PRODUCT_SLOWOPS==3. */
+    /* Pin table: default slowops=2 and explicit 3/full. */
 #include "slowops.h"
     product_slowops_full_installed = 1;
     product_slowops_installed = 1;
@@ -2578,4 +2579,6 @@ name_cv(cvsv)
         RETVAL
 
 BOOT:
-    product_install_slowops(aTHX);
+    /* Full table at load so BEGIN/use ops copy pp_slowop_profiler.
+     * Emit stays off until file= sink + INIT. */ 
+    product_install_slowops_full(aTHX);

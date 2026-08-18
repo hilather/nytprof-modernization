@@ -161,6 +161,6 @@ grep -E -q '"tag":[[:space:]]*"TIME_LINE"|"tag":[[:space:]]*"SUB_RETURN"' "$WORK
 ok "compress=1 live attach: START_DEFLATE + dump/verify inflate"
 
 echo "E3: leave=1 opt-in (default stays 0); see g19_leave_discount_smoke.sh"
-echo "E4: full 6.15 slowops.h is opt-in (slowops=full / =3); default stays PRINT/MATCH"
+echo "E4: default slowops=2 is the full 6.15 table (pkg::CORE:op); exclusive remains thin"
 echo "NOT-YET: findcaller/evals / S2"
 ok "DI-09 advertised-options subset"

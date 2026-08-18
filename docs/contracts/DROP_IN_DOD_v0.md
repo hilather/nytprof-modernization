@@ -90,7 +90,7 @@ Sources: `baseline/6.15/src/NYTProf.xs` options table (~lines 249–283) + strin
 | `subs` | sub profiling | **work** (G03c) | work | |
 | `calls` | 0/1/2 entry-return | **live attach work** (`calls=2` SUB_ENTRY **27** + CORE:print/match) | work | XSUB/goto/exception residual OI-003-03; not full opcode |
 | `leave` | leave correction | **opt-in work** (`leave=1` → DISCOUNT + last-site flush) | work if green else residual | Default stays **0** (not 6.15 `leave=1`). Smoke [`g19_leave_discount_smoke.sh`](https://github.com/hilather/nytprof-modernization/blob/main/scripts/packaging/g19_leave_discount_smoke.sh). UNSTACK/LEAVELOOP stay on stmt-ops when `blocks=1`. |
-| `slowops` | slow op profiling | **work subset** | **work subset** | omit/`2` = PRINT/MATCH (KD-35); `0` disables; `1` fail-closed residual; `full`/`3` **opt-in** full 6.15 table (E4). Other values fail-closed. **Not** a silent `=2` full-table flip. |
+| `slowops` | slow op profiling | **6.15 table** | **6.15 table** | omit/`2`/`3`/`full` = full `slowops.h` (`pkg::CORE:op`); `0` disables; `1` fail-closed. Exclusive thin. Other values fail-closed. |
 | `usecputime` | removed in 6.15 | fail-closed / warn like 6.15 | same | 6.15 warns removed |
 | `clock` | clock_id | work default clock | work | platform matrix residual |
 | `trace` | debug trace | work or residual | residual OK | |

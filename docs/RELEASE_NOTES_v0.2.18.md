@@ -4,7 +4,7 @@
 **Date:** 2026-08-18  
 **Since:** [`v0.2.17`](https://github.com/hilather/nytprof-modernization/releases/tag/v0.2.17)
 
-**EL8 RPM:** 6.15-12 never attached (`%check` counted `SUB_CALLERS` tags, not `count`). Operators install [`v0.2.19`](https://github.com/hilather/nytprof-modernization/releases/tag/v0.2.19) / **6.15-13**.
+**EL8 RPM:** 6.15-12 never attached (`%check` counted `SUB_CALLERS` tags, not `count`). Operators install [`v0.2.20`](https://github.com/hilather/nytprof-modernization/releases/tag/v0.2.20) / **6.15-14**.
 
 Unsigned **Rocky 8 / EL8** testdrive was intended as RPM **6.15-12**. **Not** PAUSE, **not** COPR, **not** GPG-signed, **not** CI-mock certified, **not** GA.
 
@@ -25,7 +25,7 @@ nytprofm-cli html /tmp/nytprof.out --out-dir /tmp/nytprof-html
 - [`make_nytprofm_dist.sh`](https://github.com/hilather/nytprof-modernization/blob/v0.2.18/scripts/packaging/make_nytprofm_dist.sh) copies the whole `collector/xs/` tree.
 - [`rpm01_make_dist_smoke.sh`](https://github.com/hilather/nytprof-modernization/blob/v0.2.18/scripts/packaging/rpm01_make_dist_smoke.sh) asserts the graft members exist in the staged tarball and that the tag workflow NEVRA matches spec `Release`.
 - [`.github/workflows/release-el8-rpm.yml`](https://github.com/hilather/nytprof-modernization/blob/v0.2.18/.github/workflows/release-el8-rpm.yml) derives the module RPM filename from spec `Release` (no leftover `6.15-10` pin) and uses `docs/RELEASE_NOTES_${TAG}.md`.
-- Module RPM **6.15-12** (job failed; use **6.15-13**).
+- Module RPM **6.15-12** (job failed; use **6.15-14**).
 
 **Attach (unchanged from v0.2.17)**
 
@@ -37,5 +37,5 @@ Same as v0.2.17. `collection_default` stays **v5**. No certified perf claim.
 
 ## Upgrade notes
 
-- `dnf upgrade` / `rpm -Uvh` to **6.15-13** (6.15-11 and 6.15-12 never attached).
+- `dnf upgrade` / `rpm -Uvh` to **6.15-14** ([`v0.2.20`](https://github.com/hilather/nytprof-modernization/releases/tag/v0.2.20)).
 - Rollback attach: `NYTPROF=file=…:wrap=1`.

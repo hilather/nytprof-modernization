@@ -710,7 +710,7 @@ Rocky/CPAN: this series does **not** change RPM identity. Re-cert module RPM aft
 | **KD-E12** | Keep the pending-excl mailbox for the wrap escape. Opcode credits `subr_entry` via `product_credit_child_excl`. Do not delete the mailbox in E1. | g09 on `wrap=1` / g16 must stay green (PR-9). |
 | **KD-E13** | Grafted `incr_*` must **not** subtract statement-profiler overhead (`cumulative_overhead_ticks` = 0 / omitted). | Faithful copy would change exclusive vs wrap/g14. |
 | **KD-E14** | Product `leave` default remains **0** through this series. When `PRODUCT_BLOCKS`, UNSTACK/LEAVELOOP stay on `pp_product_stmt`. Matching 6.15 `leave=1` is a later honesty PR. | E3 must not steal DI-01 810. TIME_LINE multiplicity must not change “if green.” |
-| **KD-E15** | Product `slowops=2` stays PRINT/MATCH (KD-35). E4 adds an explicit full-table option (`slowops=full` / `=3`), not a silent redefinition of `=2`. | Advertised-options honesty; di02 / g08 / g09 extras. |
+| **KD-E15** | **Superseded 2026-08-18.** Product `slowops=2` now installs the 6.15 full table (operator request: method lists match the pin). `full`/`=3` remain aliases. Exclusive stays thin. | Advertised-options honesty; g19 asserts default emits CORE:stat/sleep/prtf. |
 | **KD-E16** | E1 is **opt-in then flip** (Alt-6). Do not change the product default in the same merge as the first C lines. | Makes E1 reviewable; isolates di02 27-risk. |
 | **KD-E17** | Install `OP_ENTERSUB` at `file=`; **emit only after INIT**. Preserve di02 exact **27** unless a later PR recounts with dual-path evidence. | OQ-1 vs Goal 6. |
 

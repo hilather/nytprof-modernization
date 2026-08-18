@@ -1,10 +1,11 @@
 #!/usr/bin/env bash
-# DI-03 E4 — Full 6.15 slowops.h behind NYTPROF slowops=full / =3.
+# DI-03 E4 + default flip — Full 6.15 slowops.h on slowops=2 (default).
 #
-# Product slowops=2 stays PRINT/MATCH (KD-35). =1 stays fail-closed.
-# Parse accepts 0, 2, 3, and string "full"; other values fail-closed.
-# Live attach: default has no extra CORE:stat/sleep/prtf; full/3 does.
-# Names stay pkg::CORE:op. Then re-drives g08 + g09 on default =2.
+# 6.15 slowops=2 installs the whole table and only changes naming
+# (pkg::CORE:op). Product default now matches that. =3/full is the same
+# table. =1 stays fail-closed. Parse accepts 0, 2, 3, and string "full".
+# Live attach: default emits extra CORE:stat/sleep/prtf (not PRINT/MATCH
+# only). Names stay pkg::CORE:op. Then re-drives g08 + g09 on default =2.
 #
 # Isolated product PERL5LIB=collector/build/xs-nytprof. Never crates/.
 # collection_default stays v5.
@@ -28,7 +29,7 @@ fail2() { printf 'ERROR: %s\n' "$*" >&2; exit 2; }
 
 echo "g19_slowops_full_smoke: repo root $ROOT"
 echo "collection_default remains v5; never crates/ on PERL5LIB"
-echo "E4: slowops=full/3 opt-in; default slowops=2 stays PRINT/MATCH"
+echo "E4: default slowops=2 is the full 6.15 table (pkg::CORE:op)"
 
 if [[ -n "${PERL5LIB:-}" ]]; then
   case ":${PERL5LIB}:" in
@@ -52,12 +53,16 @@ grep -q "lc( \$opts->{slowops} ) eq 'full'" "$NYTP_PM_SRC" \
   || fail "NYTProfM.pm missing slowops=full parse"
 grep -q 'install_product_slowops_full' "$NYTP_PM_SRC" \
   || fail "NYTProfM.pm missing install_product_slowops_full"
-# Product =2 path must remain the thin installer, not full.
-if ! grep -A20 'PRODUCT_SLOWOPS == 2' "$NYTP_PM_SRC" \
-  | grep -q 'install_product_slowops()'; then
-  fail "slowops=2 must still call install_product_slowops (thin PRINT/MATCH)"
+# Default =2 must install the full table (6.15), not thin PRINT/MATCH.
+if ! grep -A25 'PRODUCT_SLOWOPS >= 2' "$NYTP_PM_SRC" \
+  | grep -q 'install_product_slowops_full()'; then
+  fail "slowops=2 must call install_product_slowops_full (6.15 table)"
 fi
-ok "E4 sources: slowops.h + full installer + parse"
+if grep -A40 'PRODUCT_SLOWOPS >= 2' "$NYTP_PM_SRC" \
+  | grep -q 'install_product_slowops()'; then
+  fail "default slowops=2 must not call the thin PRINT/MATCH installer"
+fi
+ok "E4 sources: slowops.h + default full installer + parse"
 
 resolve_cc() {
   if [[ -n "${CC-}" ]] && command -v "$CC" >/dev/null 2>&1; then
@@ -74,9 +79,9 @@ resolve_cc() {
 }
 
 print_residuals() {
-  echo "E4: full 6.15 slowops.h is opt-in (slowops=full / =3); default stays PRINT/MATCH"
-  echo "RESIDUAL: =full exclusive is thin (not 6.15 savestack); sort/backtick/(?{}) can double-count parent excl"
-  echo "NOT-YET: E1b default opcode flip / E2 GOTO / leave=1 default"
+  echo "E4: default slowops=2 installs the full 6.15 slowops.h table (pkg::CORE:op)"
+  echo "RESIDUAL: exclusive is thin (not 6.15 savestack); sort/backtick/(?{}) can double-count parent excl"
+  echo "NOT-YET: leave=1 default / slowops=1 collapsed CORE:: names"
 }
 
 if ! CC_BIN="$(resolve_cc)"; then
@@ -218,50 +223,58 @@ run_script() {
   head -c 9 "$profile" | grep -q 'NYTProf 5' || fail "not NYTProf 5: $profile"
 }
 
-# --- default / slowops=2: PRINT/MATCH only (no extra table ops) ---
+assert_full_table() {
+  local label="$1" names="$2"
+  [[ "$(perl -ne 'print $1 if /^HAS_PRINT=(\d+)/' <<<"$names")" == "1" ]] \
+    || fail "${label} dump missing CORE:print"
+  [[ "$(perl -ne 'print $1 if /^HAS_MATCH=(\d+)/' <<<"$names")" == "1" ]] \
+    || fail "${label} dump missing CORE:match"
+  EXTRA=0
+  [[ "$(perl -ne 'print $1 if /^HAS_STAT=(\d+)/' <<<"$names")" == "1" ]] && EXTRA=1
+  [[ "$(perl -ne 'print $1 if /^HAS_SLEEP=(\d+)/' <<<"$names")" == "1" ]] && EXTRA=1
+  [[ "$(perl -ne 'print $1 if /^HAS_PRTF=(\d+)/' <<<"$names")" == "1" ]] && EXTRA=1
+  [[ "$EXTRA" -eq 1 ]] \
+    || fail "${label} must emit at least one extra CORE:stat/sleep/prtf (6.15 table)"
+  [[ "$(perl -ne 'print $1 if /^COLLAPSED_CORE=(\d+)/' <<<"$names")" == "0" ]] \
+    || fail "${label} used collapsed CORE:: names (want pkg::CORE:op)"
+  grep -E -q '::CORE:(print|match|stat|sleep|prtf)' <<<"$names" \
+    || fail "${label} names must be pkg::CORE:op"
+}
+
+# --- default / slowops=2: full 6.15 table (not PRINT/MATCH only) ---
 run_script "file=$WORKDIR/def.out" "$WORKDIR/def.out"
 DEF_NAMES="$(dump_core_names "$WORKDIR/def.out" "$WORKDIR/def.jsonl")"
 printf '%s\n' "$DEF_NAMES"
-[[ "$(perl -ne 'print $1 if /^HAS_PRINT=(\d+)/' <<<"$DEF_NAMES")" == "1" ]] \
-  || fail "default dump missing CORE:print"
-[[ "$(perl -ne 'print $1 if /^HAS_MATCH=(\d+)/' <<<"$DEF_NAMES")" == "1" ]] \
-  || fail "default dump missing CORE:match"
-[[ "$(perl -ne 'print $1 if /^HAS_STAT=(\d+)/' <<<"$DEF_NAMES")" == "0" ]] \
-  || fail "default slowops=2 must not emit CORE:stat (full table leaked)"
-[[ "$(perl -ne 'print $1 if /^HAS_SLEEP=(\d+)/' <<<"$DEF_NAMES")" == "0" ]] \
-  || fail "default slowops=2 must not emit CORE:sleep (full table leaked)"
-[[ "$(perl -ne 'print $1 if /^HAS_PRTF=(\d+)/' <<<"$DEF_NAMES")" == "0" ]] \
-  || fail "default slowops=2 must not emit CORE:prtf (full table leaked)"
-ok "default slowops=2: PRINT/MATCH only (no stat/sleep/prtf)"
+assert_full_table "default omit" "$DEF_NAMES"
+ok "default omit: full 6.15 table (stat/sleep/prtf + PRINT/MATCH)"
 
 run_script "file=$WORKDIR/s2.out:slowops=2" "$WORKDIR/s2.out"
 S2_NAMES="$(dump_core_names "$WORKDIR/s2.out" "$WORKDIR/s2.jsonl")"
-[[ "$(perl -ne 'print $1 if /^HAS_STAT=(\d+)/' <<<"$S2_NAMES")" == "0" ]] \
-  || fail "slowops=2 must not emit CORE:stat"
-ok "explicit slowops=2 stays PRINT/MATCH subset"
+printf '%s\n' "$S2_NAMES"
+assert_full_table "slowops=2" "$S2_NAMES"
+ok "explicit slowops=2 is the full 6.15 table"
 
-# --- slowops=full and =3: extra CORE: names, pkg::CORE:op shape ---
+# omit / =2 / =3 / full must emit the same CORE: name set
+core_name_set() {
+  perl -ne 'print "$1\n" if /^CORE_NAME (.+)/' <<<"$1" | sort
+}
+DEF_SET="$(core_name_set "$DEF_NAMES")"
+S2_SET="$(core_name_set "$S2_NAMES")"
+[[ "$DEF_SET" == "$S2_SET" ]] \
+  || fail "omit vs slowops=2 CORE: name sets differ"
+
+# --- slowops=full and =3: same table, pkg::CORE:op shape ---
 for mode in full 3; do
   run_script "file=$WORKDIR/${mode}.out:slowops=${mode}" "$WORKDIR/${mode}.out"
   NAMES="$(dump_core_names "$WORKDIR/${mode}.out" "$WORKDIR/${mode}.jsonl")"
   printf '%s\n' "$NAMES"
-  [[ "$(perl -ne 'print $1 if /^HAS_PRINT=(\d+)/' <<<"$NAMES")" == "1" ]] \
-    || fail "slowops=${mode} missing CORE:print"
-  [[ "$(perl -ne 'print $1 if /^HAS_MATCH=(\d+)/' <<<"$NAMES")" == "1" ]] \
-    || fail "slowops=${mode} missing CORE:match"
-  EXTRA=0
-  [[ "$(perl -ne 'print $1 if /^HAS_STAT=(\d+)/' <<<"$NAMES")" == "1" ]] && EXTRA=1
-  [[ "$(perl -ne 'print $1 if /^HAS_SLEEP=(\d+)/' <<<"$NAMES")" == "1" ]] && EXTRA=1
-  [[ "$(perl -ne 'print $1 if /^HAS_PRTF=(\d+)/' <<<"$NAMES")" == "1" ]] && EXTRA=1
-  [[ "$EXTRA" -eq 1 ]] \
-    || fail "slowops=${mode} must emit at least one extra CORE:stat/sleep/prtf"
-  [[ "$(perl -ne 'print $1 if /^COLLAPSED_CORE=(\d+)/' <<<"$NAMES")" == "0" ]] \
-    || fail "slowops=${mode} used collapsed CORE:: names (want pkg::CORE:op)"
-  grep -E -q '::CORE:(print|match|stat|sleep|prtf)' <<<"$NAMES" \
-    || fail "slowops=${mode} names must be pkg::CORE:op"
-  ok "slowops=${mode}: full table extra CORE: names, pkg::CORE:op"
+  assert_full_table "slowops=${mode}" "$NAMES"
+  MODE_SET="$(core_name_set "$NAMES")"
+  [[ "$DEF_SET" == "$MODE_SET" ]] \
+    || fail "omit vs slowops=${mode} CORE: name sets differ"
+  ok "slowops=${mode}: same full table, pkg::CORE:op"
 done
 
 print_residuals
-ok "G19 slowops=full opt-in (default still PRINT/MATCH)"
+ok "G19 default slowops=2 is the full 6.15 table"
 exit 0

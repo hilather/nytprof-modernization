@@ -4,15 +4,15 @@
 **Date:** 2026-08-18  
 **Since:** [`v0.2.16`](https://github.com/hilather/nytprof-modernization/releases/tag/v0.2.16)
 
-**EL8 RPM:** 6.15-11 never attached (staged dist omitted graft XS). Operators install [`v0.2.19`](https://github.com/hilather/nytprof-modernization/releases/tag/v0.2.19) / **6.15-13**. Attach behavior below is what v0.2.17 landed on `main`.
+**EL8 RPM:** 6.15-11 never attached (staged dist omitted graft XS). Operators install [`v0.2.20`](https://github.com/hilather/nytprof-modernization/releases/tag/v0.2.20) / **6.15-14**. Attach behavior below is what v0.2.17 landed on `main` (v0.2.20 later flipped default `slowops=2` to the full 6.15 table).
 
 Unsigned **Rocky 8 / EL8** testdrive was intended as RPM **6.15-11**. **Not** PAUSE, **not** COPR, **not** GPG-signed, **not** CI-mock certified, **not** GA. **Not** a certified perf claim.
 
 GitHub Actions workflow [`Release EL8 RPM (test-drive)`](https://github.com/hilather/nytprof-modernization/blob/v0.2.17/.github/workflows/release-el8-rpm.yml) rebuilds the RPM in `rockylinux:8` and attaches it here. Local rebuild: [`scripts/packaging/build_el8_module_rpm.sh`](https://github.com/hilather/nytprof-modernization/blob/v0.2.17/scripts/packaging/build_el8_module_rpm.sh).
 
 ```text
-# 6.15-11 never published — use v0.2.19 / 6.15-13:
-sudo rpm -Uvh perl-NYTProfM-6.15-13.el8.x86_64.rpm
+# 6.15-11 never published — use v0.2.20 / 6.15-14:
+sudo rpm -Uvh perl-NYTProfM-6.15-14.el8.x86_64.rpm
 NYTPROF=file=/tmp/nytprof.out perl -d:NYTProfM script.pl
 nytprofm-cli html /tmp/nytprof.out --out-dir /tmp/nytprof-html
 # rollback to Perl wrap if needed:
@@ -49,7 +49,7 @@ Also in this cut (stacked on v0.2.16, not released separately):
 
 **Packaging**
 
-- Module RPM **6.15-11** (job failed; use **6.15-13**). Bundled EL8 `nytprofm-cli` unchanged (collector-only cut; source-sha256 matches).
+- Module RPM **6.15-11** (job failed; use **6.15-14**). Bundled EL8 `nytprofm-cli` unchanged (collector-only cut; source-sha256 matches).
 
 ## Engineering benches (claim: none)
 
@@ -66,7 +66,7 @@ Not BENCH certification. Same-host inner `Time::HiRes`, `stmts=0`, 120k leaf/mid
 
 ## Upgrade notes
 
-- `dnf upgrade` / `rpm -Uvh` to **6.15-13** (6.15-11 and 6.15-12 never attached).
+- `dnf upgrade` / `rpm -Uvh` to **6.15-14** ([`v0.2.20`](https://github.com/hilather/nytprof-modernization/releases/tag/v0.2.20)).
 - Re-profile. Default attach is opcode; `caller()` is the real caller (wrap goto list is `wrap=1` only).
 - Rollback: `NYTPROF=file=…:wrap=1`.
 - Smaller call-heavy files come from aggregated `SUB_CALLERS` + existing `savesrc=0` / `stmts=0`.

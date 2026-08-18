@@ -1,7 +1,7 @@
 #!/usr/bin/env perl
 # Drive shipped g19_slowops_full_smoke.sh plus g08/g09 on default slowops=2.
-# Real perl -d:NYTProfM. Pre-fix: slowops=full/3 was unknown; product =2
-# must stay PRINT/MATCH.
+# Real perl -d:NYTProfM. Default =2 must install the 6.15 full table
+# (CORE:stat/sleep/prtf), not PRINT/MATCH only.
 use strict;
 use warnings;
 use File::Basename qw(dirname);
@@ -30,8 +30,8 @@ close $fh;
 like( $src, qr/eq 'full'/, 'NYTProfM.pm accepts slowops=full' );
 like( $src, qr/install_product_slowops_full/,
     'NYTProfM.pm installs full table' );
-like( $src, qr/PRODUCT_SLOWOPS == 2/,
-    'NYTProfM.pm still branches slowops=2' );
+like( $src, qr/PRODUCT_SLOWOPS >= 2/,
+    'NYTProfM.pm default/2/3 share the full-table installer' );
 
 my $h = File::Spec->catfile( $root, qw(collector xs slowops.h) );
 ok( -f $h, "collector/xs/slowops.h exists" );
@@ -48,11 +48,16 @@ ok( $rc == 0, "g19 smoke exits 0 (got $rc)" )
   or diag $out;
 like(
     $out,
-    qr/G19 slowops=full|SKIP: no C toolchain|SKIP: perl XS headers/,
+    qr/G19 default slowops=2 is the full 6\.15 table|SKIP: no C toolchain|SKIP: perl XS headers/,
     'g19 printed G19 success or an honest skip'
 );
-unlike( $out, qr/full table leaked/,
-    'g19 did not see full-table names on default slowops=2' );
+unlike( $out, qr/PRINT\/MATCH only \(no stat/,
+    'g19 no longer treats default as PRINT/MATCH-only' );
+like(
+    $out,
+    qr/full 6\.15 table|SKIP: no C toolchain|SKIP: perl XS headers/,
+    'g19 reports the 6.15 full table on default or honest skip'
+);
 
 # g08 + g09 must stay green on default slowops=2 (no ATTACH_OPTS).
 for my $pair ( [ $g08, qr/G08 slowops PRINT\/MATCH|SKIP: no C toolchain|SKIP: perl XS headers/ ],

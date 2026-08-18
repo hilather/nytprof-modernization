@@ -34,5 +34,5 @@ Same as v0.2.17. `collection_default` stays **v5**. No certified perf claim.
 
 ## Upgrade notes
 
-- `dnf upgrade` / `rpm -Uvh` to **6.15-13** (6.15-11 and 6.15-12 never attached).
+- `dnf upgrade` / `rpm -Uvh` to **6.15-14** ([`v0.2.20`](https://github.com/hilather/nytprof-modernization/releases/tag/v0.2.20); default `slowops=2` is the 6.15 full table).
 - Rollback attach: `NYTPROF=file=…:wrap=1`.

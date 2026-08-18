@@ -357,18 +357,17 @@ Keep skip list (`DB::`, `Devel::NYTProfM::`, `CORE::GLOBAL::fork`). Caller fid/l
 
 | `NYTPROF` value | Product behavior (B-collection) |
 |-----------------|----------------------------------|
-| **omit** / `slowops=2` (6.15 default) | **slowops=2 subset:** if `file=` attach and `calls>=1` and profiling on, install **only** `OP_PRINT` and `OP_MATCH`. Names = `CopSTASHPV` + `::CORE:` + `PL_op_name` (pin ~2475–2485). Optional XSUB-only `OP_ENTERSUB` may install on the same condition. |
+| **omit** / `slowops=2` (6.15 default) | **6.15 table (2026-08-18 flip):** if `file=` attach and `calls>=1`, install the copied `slowops.h` table. Names = `CopSTASHPV` + `::CORE:` + `PL_op_name`. Exclusive remains thin. |
 | `slowops=0` | **Do not** install PRINT/MATCH (or XSUB ENTERSUB). No `CORE:` events. **27 is not claimed** on this run. |
-| `slowops=1` | **Fail-closed** with: `slowops=1 (collapsed CORE:: package) is residual until full opcode attach; use default/slowops=2 (PRINT/MATCH subset) or slowops=0`. Do **not** implement package-collapsed `CORE::print` names in B2. |
-| `slowops=full` / `slowops=3` | **E4 opt-in:** install the copied 6.15 `slowops.h` table (`printf`/`prtf`, `system`, `stat`, …). Names stay `pkg::CORE:op`. Product **`slowops=2` stays PRINT/MATCH** (KD-35). Not a silent `=2` flip. Thin exclusive (not 6.15 savestack) — do not claim 6.15 exclusive on `=full`. |
+| `slowops=1` | **Fail-closed** with: `slowops=1 (collapsed CORE:: package) is residual until full opcode attach; use default/slowops=2 (6.15 full table) or slowops=0`. Do **not** implement package-collapsed `CORE::print` names. |
+| `slowops=full` / `slowops=3` | **Same table as default `=2`** (aliases). Thin exclusive (not 6.15 savestack) — do not claim 6.15 exclusive. |
 | other integer / unknown | Fail-closed as unknown or out-of-range (same as other unknown keys). |
 
 ```text
-# Default slowops=2: only OP_PRINT + OP_MATCH. Full table is E4 opt-in (full/3).
-# Install iff PRODUCT_SLOWOPS==2 && calls>=1 && PRODUCT_XS_ATTACH
-save PL_ppaddr[OP_PRINT] and PL_ppaddr[OP_MATCH]
-pp_product_slowop:
-  if profiling && calls>=1 && PRODUCT_SLOWOPS==2:
+# Default slowops=2: full 6.15 slowops.h (pkg::CORE:op). 3/full aliases.
+# Install iff PRODUCT_SLOWOPS>=2 && calls>=1 && PRODUCT_XS_ATTACH
+#include slowops.h → pp_slowop_profiler
+  if profiling && calls>=1 && (PRODUCT_SLOWOPS==2 || ==3):
       name = CopSTASHPV(PL_curcop) + "::CORE:" + PL_op_name[op]
       emit SUB_ENTRY if calls>=2
       run original op
@@ -459,7 +458,7 @@ sequenceDiagram
 
 ### DI-03 — Opcode / `entersub` attach (milestone E)
 
-**Status:** **in progress, not done.** E1b flipped the default: omit `entersub` installs `OP_ENTERSUB` → `nytp_emit_*` (emit after INIT; `$^P` 0x01 off). **E2 landed:** default opcode also hooks `OP_GOTO` so `goto &sub` keeps the original caller and the goto site’s fid:line (smoke [`g18_goto_sub_smoke.sh`](https://github.com/hilather/nytprof-modernization/blob/main/scripts/packaging/g18_goto_sub_smoke.sh)). **E3 landed:** opt-in `leave=1` (`pp_leave.c` → last-site flush + `nytp_emit_discount`; product default `leave` stays **0**; UNSTACK/LEAVELOOP stay on `pp_product_stmt` when `blocks=1`; smoke [`g19_leave_discount_smoke.sh`](https://github.com/hilather/nytprof-modernization/blob/main/scripts/packaging/g19_leave_discount_smoke.sh)). **E4 landed:** full `slowops.h` behind `slowops=full` / `=3`; product `slowops=2` stays PRINT/MATCH (KD-35). Wrap list remains **`wrap=1` / `use_db_sub=1` only**. Escape is `wrap=1` / `use_db_sub=1` / `entersub=0`. Residual: di02 exact **27** (live wrap/opcode **21** after INIT); leave default not 6.15 `leave=1`. Design: [`docs/plan/DI03_OPCODE_ENTERSUB_ATTACH_v0.md`](https://github.com/hilather/nytprof-modernization/blob/main/docs/plan/DI03_OPCODE_ENTERSUB_ATTACH_v0.md). Provenance: [`docs/graft/PROVENANCE.md`](https://github.com/hilather/nytprof-modernization/blob/main/docs/graft/PROVENANCE.md).
+**Status:** **in progress, not done.** E1b flipped the default: omit `entersub` installs `OP_ENTERSUB` → `nytp_emit_*` (emit after INIT; `$^P` 0x01 off). **E2 landed:** default opcode also hooks `OP_GOTO` so `goto &sub` keeps the original caller and the goto site’s fid:line (smoke [`g18_goto_sub_smoke.sh`](https://github.com/hilather/nytprof-modernization/blob/main/scripts/packaging/g18_goto_sub_smoke.sh)). **E3 landed:** opt-in `leave=1` (`pp_leave.c` → last-site flush + `nytp_emit_discount`; product default `leave` stays **0**; UNSTACK/LEAVELOOP stay on `pp_product_stmt` when `blocks=1`; smoke [`g19_leave_discount_smoke.sh`](https://github.com/hilather/nytprof-modernization/blob/main/scripts/packaging/g19_leave_discount_smoke.sh)). **E4 default flip:** `slowops=2` installs the full 6.15 `slowops.h` table (`full`/`=3` aliases). Wrap list remains **`wrap=1` / `use_db_sub=1` only**. Escape is `wrap=1` / `use_db_sub=1` / `entersub=0`. Residual: di02 exact **27** (live wrap/opcode **21** after INIT); leave default not 6.15 `leave=1`. Design: [`docs/plan/DI03_OPCODE_ENTERSUB_ATTACH_v0.md`](https://github.com/hilather/nytprof-modernization/blob/main/docs/plan/DI03_OPCODE_ENTERSUB_ATTACH_v0.md). Provenance: [`docs/graft/PROVENANCE.md`](https://github.com/hilather/nytprof-modernization/blob/main/docs/graft/PROVENANCE.md).
 
 **When:** after **B-collection** is green and advertised-options residuals are listed. **Not** first GA-candidate.
 
@@ -470,7 +469,7 @@ Phase the graft:
 1. NEXTSTATE/DBSTATE (if not already taken as DI-01 fallback)
 2. ENTERSUB + GOTO (replace the thin XSUB slice)
 3. leave ops (`leave=1`) — **E3 landed** (opt-in only; default stays 0)
-4. **Full** `slowops.h` table (printf, system, accept, …) — **E4 landed as opt-in** `slowops=full`/`=3`; product default **stays PRINT/MATCH** (KD-35). Not a silent `=2` flip.
+4. **Full** `slowops.h` table (printf, system, accept, …) — **default as of 2026-08-18** (`slowops=2`; `full`/`=3` aliases). Exclusive remains thin (not 6.15 savestack).
 5. Wrap escape remains `wrap=1` / forked `use_db_sub=1` (KD-E11) — not a 6.15 stmt-`DB::DB` hook path
 
 Do not enable opcode and Perl `DB::sub` for the same call (double SUB_RETURN).
@@ -590,7 +589,7 @@ Claim **only** rows that go green. Implementation pattern: each option gets a sm
 | Option | First-GA target | How |
 |--------|-----------------|-----|
 | `leave` | work **or** residual | Needs leave-op redirect (DI-03). For B: residual unless a cheap `DB::sub` leave-correction experiment is green on primary fixtures |
-| `slowops` | **work subset** (KD-35) | `0` disables PRINT/MATCH; omit/`2` = default subset (B2); `1` fail-closed residual message; `full`/`3` **opt-in** full 6.15 table (E4). Never silent ignore; never croak on `2`; never redefine `=2` as the full table |
+| `slowops` | **6.15 table** | `0` disables; omit/`2`/`3`/`full` = full `slowops.h` (`pkg::CORE:op`); `1` fail-closed residual. Exclusive is thin. |
 | `findcaller` | residual | opcode COP |
 | `nameevals` / `nameanonsubs` | work if cheap | already set `$^P` 0x100/0x200; add tests that eval/anon names match 6.15 shape |
 | `evals` | residual | |
@@ -905,10 +904,10 @@ No v6 wire ID changes (ADR-0006). Product still emits COL-006 v5. New files only
 | `NYTPROF=calls=2` | live SUB_ENTRY (DI-02) |
 | `NYTPROF=compress=1` | live `nytp_emit_start_deflate` (DI-09 subset) |
 | `NYTPROF=sigexit=1` | documented subset (DI-08) |
-| `NYTPROF=slowops=` omit/`2` | PRINT/MATCH subset + optional XSUB ENTERSUB (DI-02) |
+| `NYTPROF=slowops=` omit/`2` | Full 6.15 `slowops.h` table (`pkg::CORE:op`) |
 | `NYTPROF=slowops=0` | slice off; no CORE: events |
 | `NYTPROF=slowops=1` | fail-closed residual message (not DI-03 croak on `2`) |
-| `NYTPROF=slowops=full` / `=3` | E4 opt-in full `slowops.h` table; default `=2` stays PRINT/MATCH |
+| `NYTPROF=slowops=full` / `=3` | Same full table as default `=2` |
 | `NYTPROF=wrap=1` | product wrap escape (DI-03 E1b); `$^P` 0x01 + `wrap_push`; wins over default/`entersub=1` |
 | `NYTPROF=entersub=` omit / `=1` | E1b default opcode: install `OP_ENTERSUB`, emit after INIT, `$^P` 0x01 clear; `entersub=0` forces wrap |
 | `NYTPROF=use_db_sub=1` | **forked synonym for `wrap=1`**, **not** 6.15 stmt `DB::DB` + opcode calls (KD-E11) |
@@ -1087,7 +1086,7 @@ One page. Claim language is allowed **only** when every assert in that row is gr
 | **KD-32** (this design) | DI-04 = dual collect + **project both dumps onto MUST_KIND_SET**, then presence/absent rules; **not** unprojected multiset | Oracle-only DISCOUNT/SRC_LINE/… would always fail a raw bag compare |
 | **KD-33** (this design) | S2 prerequisite = **I01 + DI-01/02 green** | BUILD policy already says after G03a+I01; do not invent a BUILD-003 gate |
 | **KD-34** (this design) | Milestone A may be claimed **without public COPR** | A = maintainer-mock + installable dist; A5b is ceremony |
-| **KD-35** (this design) | Default attach = **`slowops=2` subset** (PRINT/MATCH only); `0` disables; `1` fail-closed residual; full table is **E4 opt-in** `slowops=full`/`=3` (not a silent `=2` flip). DI-03 opcode/`entersub` default remains open. | Matches 6.15 default option without claiming full `slowops.h` on product default |
+| **KD-35** (this design) | **Superseded 2026-08-18.** Default attach = **`slowops=2` full 6.15 table** (`pkg::CORE:op`); `0` disables; `1` fail-closed; `full`/`=3` aliases. Exclusive remains thin. | Operator request: method lists match the pin. |
 | **KD-36** (user-final) | PAUSE TRIAL = **`6.15_01`**; RPM Version **6.15**; first repo = **internal yum/dnf**; GPG holder later | OQ-TRIAL-ver / OQ-COPR closed 2026-08-13; OQ-GPG-who remains |
 
 ---
