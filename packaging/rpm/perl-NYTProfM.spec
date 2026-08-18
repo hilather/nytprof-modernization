@@ -9,7 +9,7 @@
 
 Name:           perl-NYTProfM
 Version:        6.15
-Release:        15%{?dist}
+Release:        16%{?dist}
 Summary:        NYTProfM 6.15 collection (D1-B v5-only default; -d:NYTProfM)
 License:        GPL+ or Artistic
 URL:            https://github.com/hilather/nytprof-modernization
@@ -115,6 +115,9 @@ fi
 %{_bindir}/nytprofm-dump
 
 %changelog
+* Tue Aug 18 2026 nytprof-modernization <devnull@example.com> - 6.15-16
+- Sub incl/excl subtract last-site close-to-seed hook cost
+  (6.15 cumulative_overhead_ticks). v0.2.22.
 * Tue Aug 18 2026 nytprof-modernization <devnull@example.com> - 6.15-15
 - TIME_LINE last-site clock restarts after emit (6.15 DB_stmt).
   Statement times no longer swallow hook/write cost. v0.2.21.

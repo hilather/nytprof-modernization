@@ -45,6 +45,9 @@
  * DI-03 E4  — default slowops=2 installs full 6.15 slowops.h
  *           (pkg::CORE:op). 3/full are aliases. Exclusive is thin.
  *           slowops=1 fail-closed.
+ * Last-site — close-then-seed TIME_LINE; close-to-seed gap is
+ *           product_cumulative_overhead_ticks and is subtracted from
+ *           opcode/wrap SUB_RETURN incl (6.15 DB_stmt / incr).
  *
  * MODULE Devel::NYTProfM; PACKAGE = DB
  * Default link: libnytp_sink_v5.a + -lz only (D1-B).
@@ -148,6 +151,12 @@ static int product_savesrc = 1;
 /* Slowop exclusive waiting to be absorbed by the current Perl DB::sub frame. */
 static double product_pending_child_excl = 0.0;
 
+/* 6.15 cumulative_overhead_ticks: wall between last-site close (pre-emit
+ * clock) and seed (post-emit clock). Subtracted from sub incl/excl. */
+static NV product_cumulative_overhead_ticks = 0.0;
+static nytp_ticks product_hook_t0 = 0;
+static int product_hook_open = 0;
+
 static void
 product_pending_child_excl_reset(void)
 {
@@ -169,6 +178,35 @@ product_take_pending_child_excl(void)
     return v;
 }
 
+NV
+product_overhead_ticks(void)
+{
+    return product_cumulative_overhead_ticks;
+}
+
+static void
+product_overhead_begin(nytp_ticks t0)
+{
+    product_hook_t0 = t0;
+    product_hook_open = 1;
+}
+
+static void
+product_overhead_end(nytp_ticks now)
+{
+    if (product_hook_open && now > product_hook_t0)
+        product_cumulative_overhead_ticks += (NV)(now - product_hook_t0);
+    product_hook_open = 0;
+}
+
+static void
+product_overhead_reset(void)
+{
+    product_cumulative_overhead_ticks = 0.0;
+    product_hook_t0 = 0;
+    product_hook_open = 0;
+}
+
 static void
 product_last_site_reset(void)
 {
@@ -181,6 +219,7 @@ product_last_site_reset(void)
     product_has_last_site = 0;
     product_last_seal_abs = 0;
     product_pending_child_excl_reset();
+    product_overhead_reset();
 }
 
 /* Emit leftover interval to the previous site (TIME_LINE or TIME_BLOCK). */
@@ -286,6 +325,15 @@ product_flush_last_site(void)
         return st;
     }
     product_has_last_site = 0;
+    /* No seed after flush — account emit cost immediately. */
+    product_overhead_begin(now);
+    {
+        nytp_ticks now2 = 0;
+        if (nytp_clock_now(&now2) == NYTP_OK)
+            product_overhead_end(now2);
+        else
+            product_overhead_end(now);
+    }
     return NYTP_OK;
 }
 
@@ -313,6 +361,7 @@ product_close_last_site(void)
     }
     product_has_last_site = 0;
     (void)product_maybe_durable_seal(now);
+    product_overhead_begin(now);
     return NYTP_OK;
 }
 
@@ -327,6 +376,7 @@ product_seed_last_site(nytp_fid fid, nytp_line line, int is_block,
     if (st != NYTP_OK) {
         return st;
     }
+    product_overhead_end(now);
     product_last_abs = now;
     product_last_site_fid = fid;
     product_last_site_line = line;
@@ -1173,6 +1223,7 @@ typedef struct {
     char called[PRODUCT_WRAP_NAME];
     char caller[PRODUCT_WRAP_NAME];
     nytp_ticks t0;
+    NV initial_overhead_ticks;
     double child_excl;
     UV fid;
     UV line;
@@ -2000,6 +2051,7 @@ wrap_push(called)
         if (ticks < 0)
             croak("DB::wrap_push: negative ticks");
         fr->t0 = ticks;
+        fr->initial_overhead_ticks = product_overhead_ticks();
         product_wrap_sp++;
         calls = product_opt_calls(aTHX);
         if (calls >= 2 && product_sink != NULL) {
@@ -2037,6 +2089,13 @@ wrap_pop()
             fr->child_excl += pending;
             incl_ticks = (now >= fr->t0) ? (now - fr->t0) : 0;
             incl = (double)incl_ticks;
+            {
+                NV oh = product_overhead_ticks() - fr->initial_overhead_ticks;
+                if (oh > 0.0)
+                    incl -= (double)oh;
+                if (incl < 0.0)
+                    incl = 0.0;
+            }
             excl = incl - fr->child_excl;
             if (excl < 0.0)
                 excl = 0.0;

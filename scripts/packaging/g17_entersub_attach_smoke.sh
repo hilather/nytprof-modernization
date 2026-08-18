@@ -61,9 +61,10 @@ grep -q 'product_callers_add' "$PP_C" \
   || fail "pp_entersub.c missing product_callers_add (SUB_CALLERS at finish)"
 grep -q 'product_cumulative_subr_ticks' "$PP_C" \
   || fail "pp_entersub.c missing cumulative_subr_ticks (g14)"
-if grep -q 'cumulative_overhead_ticks' "$PP_C"; then
-  fail "pp_entersub.c must omit cumulative_overhead_ticks"
-fi
+grep -q 'product_overhead_ticks' "$PP_C" \
+  || fail "pp_entersub.c missing product_overhead_ticks (sub incl discount)"
+grep -q 'initial_overhead_ticks' "$PP_C" \
+  || fail "pp_entersub.c missing initial_overhead_ticks"
 if grep -q 'sub_callers_hv' "$PP_C"; then
   fail "pp_entersub.c must omit sub_callers_hv"
 fi

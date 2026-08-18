@@ -224,7 +224,7 @@ DB::emit_time_line( 1, $fid, $line || 1 );
 
 **Not in PR-1 (KD-O):** `product_emit_time_block_for_cop` still writes `(nytp_ticks)1`. When `install_product_stmt_ops()` succeeds, Perl `DB` returns immediately (`return if $PRODUCT_STMT_OPS`), so A.2 does **not** measure `blocks=1`. Same for `pp_product_slowop` zeros. Follow-up (PR-8) wires those writers to the same XS clock / last-site / excl rule.
 
-**Discount:** 6.15 subtracts statement-profiler overhead from inclusive sub time via `cumulative_overhead_ticks`. First metrics slice may emit **no extra DISCOUNT** if we measure sub incl as wall around `&$raw` **including** nested `DB::DB` time (then excl = incl − children still ranks correctly). Optional later: `DB::emit_discount` around hook bodies (A3 multiplicity already tested on oracle fixtures). Do **not** invent a new exclusive-time policy; follow oracle `excl = incl - called_sub_ticks` (`incr_sub_inclusive_time`).
+**Discount:** 6.15 subtracts statement-profiler overhead from inclusive sub time via `cumulative_overhead_ticks`. Product now does the same for last-site close-to-seed (`product_overhead_ticks` on opcode `incr_*` and wrap `wrap_pop`). That is not a `DISCOUNT` tag; exclusive stays `excl = incl − called_sub_ticks`. Optional later: `DB::emit_discount` around leave/continuation (A3 multiplicity already tested on oracle fixtures). Do **not** invent a new exclusive-time policy.
 
 **Overhead honesty:** Perl `DB::DB` is heavier than 6.15 opcode redirection. Times will be **larger** than oracle on the same script. That is acceptable: COMPAT-003 does not freeze tick strings; tests check **direction** (hot loop ticks ≫ setup ticks; `tokenize` excl > 0 on the lab scanner). Document residual: not 6.15 opcode timing.
 

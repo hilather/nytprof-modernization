@@ -8,8 +8,9 @@
  * Product adaptations (binding): nytp_clock_now; product_fid_for_file_ptr;
  * emit SUB_RETURN in ticks at return; SUB_CALLERS aggregated in C
  * (product_callers_add) and flushed at finish; no Perl callers HV;
- * overhead contribution is 0; keep cumulative_subr_ticks
- * (g14 remainder); wrap recursion (full incl/excl, reci=0); skip DB::*
+ * last-site hook overhead subtracted from incl (KD-E13
+ * superseded); keep cumulative_subr_ticks (g14 remainder);
+ * wrap recursion (full incl/excl, reci=0); skip DB::*
  * and Devel::NYTProfM. E2 ports pin OP_GOTO (goto &CV keeps the original
  * caller and the goto site's fid:line). Wrap-list goto stays wrap=1 only.
  */
@@ -27,13 +28,15 @@
 #define OutCopFILE CopFILE
 #endif
 
-/* Drop FileHandle-only / overhead fields from the pin subr_entry_t. */
+/* FileHandle-only pin fields omitted; initial_overhead_ticks
+ * snapshots product_overhead_ticks at entry. */
 typedef struct subr_entry_st subr_entry_t;
 struct subr_entry_st {
     unsigned int already_counted;
     U32 subr_prof_depth;
     SSize_t prev_subr_entry_ix;
     nytp_ticks initial_call_ticks;
+    NV initial_overhead_ticks;
     NV initial_subr_ticks;
     unsigned int caller_fid;
     int caller_line;
@@ -297,7 +300,15 @@ product_incr_sub_inclusive_time(pTHX_ subr_entry_t *subr_entry)
         incl_subr_ticks =
             (NV)(now - subr_entry->initial_call_ticks);
 
-    /* Overhead contribution is 0 (KD-E13). Do not subtract stmt profiler cost. */
+    /* Last-site close-to-seed gap is not statement time. */
+    {
+        NV overhead_ticks =
+            product_overhead_ticks() - subr_entry->initial_overhead_ticks;
+        if (overhead_ticks > 0.0)
+            incl_subr_ticks -= overhead_ticks;
+        if (incl_subr_ticks < 0.0)
+            incl_subr_ticks = 0.0;
+    }
     excl_subr_ticks = incl_subr_ticks - called_sub_ticks;
     if (excl_subr_ticks < 0.0)
         excl_subr_ticks = 0.0;
@@ -374,6 +385,7 @@ product_subr_entry_setup(pTHX_ COP *prev_cop, subr_entry_t *tmpl,
     if (nytp_clock_now(&t0) != NYTP_OK)
         t0 = 0;
     subr_entry->initial_call_ticks = t0;
+    subr_entry->initial_overhead_ticks = product_overhead_ticks();
     subr_entry->initial_subr_ticks = product_cumulative_subr_ticks;
 
     if (op_type == OP_ENTERSUB || op_type == OP_GOTO) {

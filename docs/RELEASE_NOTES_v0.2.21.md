@@ -37,6 +37,6 @@ nytprofm-cli html /tmp/nytprof.out --out-dir /tmp/nytprof-html
 
 ## Upgrade notes
 
-- `dnf upgrade` / `rpm -Uvh` to **6.15-15**.
+- `dnf upgrade` / `rpm -Uvh` to **6.15-16** ([`v0.2.22`](https://github.com/hilather/nytprof-modernization/releases/tag/v0.2.22); sub incl/excl subtract last-site hook cost).
 - Re-profile. Hot statement lines should track application work, not the collector write path.
 - Rollback attach: `NYTPROF=file=…:wrap=1`.

@@ -11,6 +11,7 @@ Hybrid modernization of [Devel::NYTProf](https://metacpan.org/dist/Devel-NYTProf
 | [`docs/FIRST_SLICE_BOARD.md`](https://github.com/hilather/nytprof-modernization/blob/main/docs/FIRST_SLICE_BOARD.md) | Ordered first-slice work board |
 | [`docs/RELEASE_NOTES_R2_PREVIEW.md`](https://github.com/hilather/nytprof-modernization/blob/main/docs/RELEASE_NOTES_R2_PREVIEW.md) | **R2-preview** packaging notes (v6 **opt-in only**; not R3 / R4) |
 | [`docs/RELEASE_NOTES_R2_STABLE.md`](https://github.com/hilather/nytprof-modernization/blob/main/docs/RELEASE_NOTES_R2_STABLE.md) | **R2-stable** packaging notes (Phase C tools + residual honesty; not R3/R4; public perf waived) |
+| [`docs/RELEASE_NOTES_v0.2.22.md`](https://github.com/hilather/nytprof-modernization/blob/main/docs/RELEASE_NOTES_v0.2.22.md) | **v0.2.22** testdrive: sub incl/excl subtract last-site hook cost, EL8 RPM 6.15-16 |
 | [`docs/RELEASE_NOTES_v0.2.21.md`](https://github.com/hilather/nytprof-modernization/blob/main/docs/RELEASE_NOTES_v0.2.21.md) | **v0.2.21** testdrive: statement TIME_LINE excludes hook/write cost, EL8 RPM 6.15-15 |
 | [`docs/RELEASE_NOTES_v0.2.20.md`](https://github.com/hilather/nytprof-modernization/blob/main/docs/RELEASE_NOTES_v0.2.20.md) | **v0.2.20** testdrive: default `slowops=2` is the 6.15 full table, EL8 RPM 6.15-14 |
 | [`docs/RELEASE_NOTES_v0.2.19.md`](https://github.com/hilather/nytprof-modernization/blob/main/docs/RELEASE_NOTES_v0.2.19.md) | **v0.2.19** testdrive: EL8 RPM 6.15-13 (`%check` sums `SUB_CALLERS.count`; v0.2.17 attach) |

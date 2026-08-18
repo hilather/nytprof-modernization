@@ -35,6 +35,16 @@ like( $xsrc, qr/pp_product_dbstate_line/,
     'NYTProf.xs has pp_product_dbstate_line' );
 like( $xsrc, qr/product_seed_last_site/,
     'NYTProf.xs restarts last-site clock after TIME_LINE emit' );
+like( $xsrc, qr/product_overhead_ticks/,
+    'NYTProf.xs accumulates last-site hook overhead for sub incl' );
+
+my $pp = File::Spec->catfile( $root, qw(collector xs pp_entersub.c) );
+ok( -f $pp, "pp_entersub.c exists" );
+open my $ppf, '<', $pp or die "open $pp: $!";
+my $ppsrc = do { local $/; <$ppf> };
+close $ppf;
+like( $ppsrc, qr/initial_overhead_ticks/,
+    'opcode incr subtracts last-site overhead from sub incl' );
 
 my $out = qx{bash '$smoke' 2>&1};
 my $rc  = $? >> 8;

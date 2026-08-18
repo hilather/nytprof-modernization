@@ -74,7 +74,7 @@ Pin `baseline/6.15/src/slowops.h` is **not** present / not edited. The table was
 | `nytp_emit_sub_return` **and** `nytp_emit_sub_callers` in **ticks at return** | KD-E03; no `sub_callers_hv`; no finalize `/ ticks_per_sec` |
 | Clock = `nytp_clock_now`; fid = `product_fid_for_file_ptr` | KD-E07 |
 | `cumulative_subr_ticks` + `initial_subr_ticks` **copied** | required for g14 remainder |
-| `cumulative_overhead_ticks` **omitted** (overhead = 0) | KD-E13 |
+| `cumulative_overhead_ticks` **copied** as `product_overhead_ticks` (last-site close-to-seed; subtracted from opcode/wrap incl) | KD-E13 superseded 2026-08-18 |
 | Recursion: wrap semantics (`reci=0`, `rec_depth=0`, full incl/excl) | not pin `called_cv_depth <= 1` |
 | Skip `DB::*` and `Devel::NYTProfM` internals | product identity |
 | Install `OP_ENTERSUB` at `file=`; emit only after INIT | KD-E17 / di02 **27** |

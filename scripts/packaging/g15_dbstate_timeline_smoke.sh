@@ -43,6 +43,16 @@ grep -q 'product_close_last_site' "$NYTP_XS" \
   || fail "NYTProf.xs missing product_close_last_site"
 grep -q 'product_seed_last_site' "$NYTP_XS" \
   || fail "NYTProf.xs missing product_seed_last_site (6.15 clock split)"
+grep -q 'product_overhead_ticks' "$NYTP_XS" \
+  || fail "NYTProf.xs missing product_overhead_ticks (sub incl discount)"
+grep -q 'initial_overhead_ticks' "$NYTP_XS" \
+  || fail "NYTProf.xs wrap frames missing initial_overhead_ticks"
+PP_C="$COLLECTOR/xs/pp_entersub.c"
+[[ -f "$PP_C" ]] || fail "missing $PP_C"
+grep -q 'initial_overhead_ticks' "$PP_C" \
+  || fail "pp_entersub.c missing initial_overhead_ticks"
+grep -q 'product_overhead_ticks()' "$PP_C" \
+  || fail "pp_entersub.c does not subtract last-site overhead from incl"
 grep -q 'PRODUCT_DBSTATE_LINE' "$NYTP_PM_SRC" \
   || fail "NYTProfM.pm missing PRODUCT_DBSTATE_LINE"
 grep -q 'install_product_dbstate_timeline' "$NYTP_PM_SRC" \
@@ -190,19 +200,24 @@ TLB=$(grep -c '"tag":"TIME_LINE"' "$DUMPB" || true)
 [[ "$TLB" -eq 0 ]] || fail "blocks=1 must not emit TIME_LINE ($TLB)"
 ok "blocks=1: stmt-ops TIME_BLOCK ($TBB), not C TIME_LINE hook"
 
-# Statement TIME_LINE must not swallow profiler wall (6.15 DB_stmt:
-# write elapsed, then restart the clock after hook/write).
+# Statement TIME_LINE and the enclosing sub incl/excl must not swallow
+# profiler wall (6.15 DB_stmt: write elapsed, restart clock, then
+# subtract close-to-seed from incr_sub_inclusive_time).
 IFMOD="$WORKDIR/ifmod.pl"
 cat >"$IFMOD" <<'END_IF'
 use strict;
 use warnings;
-my $n = 200000;
-my $about = 1;
-my $is_about = 1;
-my $abc = 0;
-for my $i (1 .. $n) {
-    $abc = 1 if ( $about == $is_about );
+sub do_ifmod {
+    my $n = 200000;
+    my $about = 1;
+    my $is_about = 1;
+    my $abc = 0;
+    for my $i (1 .. $n) {
+        $abc = 1 if ( $about == $is_about );
+    }
+    return ($n, $abc);
 }
+my ($n, $abc) = do_ifmod();
 print "ifmod_ok n=$n abc=$abc\n";
 END_IF
 IF_PROF="$WORKDIR/ifmod.out"
@@ -222,7 +237,9 @@ printf '%s\n' "$IF_OUT"
 [[ "$IF_RC" -eq 0 ]] || fail "if-modifier attach exited $IF_RC"
 grep -q '^ifmod_ok' <<<"$IF_OUT" || fail "if-modifier missing ifmod_ok"
 dump_profile "$IF_PROF" "$IF_DUMP"
-IF_NUMS="$(perl - "$IF_DUMP" <<'PERL'
+
+parse_ifmod_dump() {
+  perl - "$1" <<'PERL'
 use strict;
 use warnings;
 use JSON::PP;
@@ -230,6 +247,7 @@ my $dump = $ARGV[0];
 my $tps  = 10_000_000;
 my $sum  = 0;
 my $n    = 0;
+my ($incl, $excl, $rets) = (0, 0, 0);
 open my $fh, "<", $dump or die $!;
 while (<$fh>) {
     my $j = decode_json($_);
@@ -238,27 +256,80 @@ while (<$fh>) {
     if ( $tag eq "ATTRIBUTE" && @$a >= 2 && $a->[0] eq "ticks_per_sec" ) {
         $tps = 0 + $a->[1] if $a->[1];
     }
-    next unless $tag eq "TIME_LINE" && @$a >= 3;
-    # Hottest line in this script is the if-modifier (fid of ifmod.pl).
-    $sum += $a->[0];
-    $n++;
+    if ( $tag eq "TIME_LINE" && @$a >= 3 ) {
+        $sum += $a->[0];
+        $n++;
+    }
+    if ( $tag eq "SUB_RETURN" && @$a >= 4 ) {
+        my $name = $a->[3] // next;
+        next unless $name =~ /(?:^|::)do_ifmod\z/;
+        $incl += $a->[1] // 0;
+        $excl += $a->[2] // 0;
+        $rets++;
+    }
 }
 close $fh;
 printf "if_line_events=%d\n", $n;
 printf "if_time_s=%.6f\n", ( $tps > 0 ? $sum / $tps : 0 );
+printf "if_sub_returns=%d\n", $rets;
+printf "if_sub_incl_s=%.6f\n", ( $tps > 0 ? $incl / $tps : 0 );
+printf "if_sub_excl_s=%.6f\n", ( $tps > 0 ? $excl / $tps : 0 );
 PERL
-)"
+}
+
+check_ifmod_times() {
+  local label="$1"
+  local nums="$2"
+  local wall="$3"
+  local ts ne rets incl excl
+  ts=$(perl -ne 'print $1 if /^if_time_s=([0-9.]+)/' <<<"$nums")
+  ne=$(perl -ne 'print $1 if /^if_line_events=([0-9]+)/' <<<"$nums")
+  rets=$(perl -ne 'print $1 if /^if_sub_returns=([0-9]+)/' <<<"$nums")
+  incl=$(perl -ne 'print $1 if /^if_sub_incl_s=([0-9.]+)/' <<<"$nums")
+  excl=$(perl -ne 'print $1 if /^if_sub_excl_s=([0-9.]+)/' <<<"$nums")
+  echo "$label TIME_LINE_sum=${ts}s events=${ne} do_ifmod incl=${incl}s excl=${excl}s returns=${rets} wall=${wall}s"
+  [[ "$ne" -ge 100000 ]] || fail "$label expected ~200k TIME_LINE, got $ne"
+  [[ "$rets" -ge 1 ]] || fail "$label missing SUB_RETURN for do_ifmod"
+  perl -e 'exit( ($ARGV[0] > 0 && $ARGV[1] > 0) ? 0 : 1 )' "$incl" "$excl" \
+    || fail "$label do_ifmod incl/excl must be > 0 (got incl=${incl} excl=${excl})"
+  # Hook cost must leave both statement and sub time (not wall, not zero).
+  perl -e 'exit( ($ARGV[0] < $ARGV[1] * 0.55) ? 0 : 1 )' "$ts" "$wall" \
+    || fail "$label TIME_LINE sum ${ts}s is not < 55% of profiled wall ${wall}s (hook cost charged to the line)"
+  perl -e 'exit( ($ARGV[0] < $ARGV[1] * 0.55) ? 0 : 1 )' "$incl" "$wall" \
+    || fail "$label do_ifmod incl ${incl}s is not < 55% of profiled wall ${wall}s (hook cost still in sub time)"
+  perl -e 'exit( ($ARGV[0] < $ARGV[1] * 0.55) ? 0 : 1 )' "$excl" "$wall" \
+    || fail "$label do_ifmod excl ${excl}s is not < 55% of profiled wall ${wall}s (hook cost still in sub time)"
+  perl -e 'exit( ($ARGV[0] >= $ARGV[1] * 0.5) ? 0 : 1 )' "$incl" "$ts" \
+    || fail "$label do_ifmod incl ${incl}s is < 50% of TIME_LINE ${ts}s (over-subtracted)"
+  ok "$label TIME_LINE ${ts}s and do_ifmod incl ${incl}s / excl ${excl}s < 55% of wall ${wall}s"
+}
+
+IF_NUMS="$(parse_ifmod_dump "$IF_DUMP")"
 printf '%s\n' "$IF_NUMS"
-IF_TS=$(perl -ne 'print $1 if /^if_time_s=([0-9.]+)/' <<<"$IF_NUMS")
-IF_NE=$(perl -ne 'print $1 if /^if_line_events=([0-9]+)/' <<<"$IF_NUMS")
 IF_T0=$(perl -e 'printf "%.6f", ('"$IF_T0_END"' - '"$IF_T0_START"')/1e9')
 IF_TP=$(perl -e 'printf "%.6f", ('"$IF_PROF_END"' - '"$IF_PROF_START"')/1e9')
-echo "if_unprofiled=${IF_T0}s if_profiled=${IF_TP}s TIME_LINE_sum=${IF_TS}s events=${IF_NE}"
-[[ "$IF_NE" -ge 100000 ]] || fail "if-modifier expected ~200k TIME_LINE, got $IF_NE"
-# TIME_LINE is statement time, not profiled wall (pre-fix: sum ≈ wall).
-perl -e 'exit( ($ARGV[0] < $ARGV[1] * 0.55) ? 0 : 1 )' "$IF_TS" "$IF_TP" \
-  || fail "TIME_LINE sum ${IF_TS}s is not < 55% of profiled wall ${IF_TP}s (hook cost charged to the line)"
-ok "if-modifier TIME_LINE ${IF_TS}s < 55% of profiled wall ${IF_TP}s (unprofiled ${IF_T0}s)"
+echo "if_unprofiled=${IF_T0}s if_profiled=${IF_TP}s"
+check_ifmod_times "opcode" "$IF_NUMS" "$IF_TP"
+
+# wrap=1 escape must apply the same last-site overhead discount.
+IF_WRAP="$WORKDIR/ifmod_wrap.out"
+IF_WRAP_DUMP="$WORKDIR/ifmod_wrap.jsonl"
+IF_WRAP_START=$(date +%s%N)
+set +e
+IF_WRAP_OUT="$(
+  cd "$WORKDIR" && NYTPROF="file=${IF_WRAP}:wrap=1" perl -I"$NYTP_DEST" -d:NYTProfM "$IFMOD" 2>&1
+)"
+IF_WRAP_RC=$?
+set -e
+IF_WRAP_END=$(date +%s%N)
+printf '%s\n' "$IF_WRAP_OUT"
+[[ "$IF_WRAP_RC" -eq 0 ]] || fail "if-modifier wrap=1 attach exited $IF_WRAP_RC"
+grep -q '^ifmod_ok' <<<"$IF_WRAP_OUT" || fail "if-modifier wrap=1 missing ifmod_ok"
+dump_profile "$IF_WRAP" "$IF_WRAP_DUMP"
+IF_WRAP_NUMS="$(parse_ifmod_dump "$IF_WRAP_DUMP")"
+printf '%s\n' "$IF_WRAP_NUMS"
+IF_WRAP_TP=$(perl -e 'printf "%.6f", ('"$IF_WRAP_END"' - '"$IF_WRAP_START"')/1e9')
+check_ifmod_times "wrap=1" "$IF_WRAP_NUMS" "$IF_WRAP_TP"
 
 print_residuals
 ok "G15 C OP_DBSTATE TIME_LINE (no Perl DB::DB)"

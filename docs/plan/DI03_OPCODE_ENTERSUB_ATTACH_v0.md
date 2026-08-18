@@ -118,7 +118,7 @@ It is **not** allowed to claim first GA-candidate, full TEST-003 `compare_jsonl`
 3. **Identity.** `-d:NYTProfM` / `Devel::NYTProfM` 6.15. Do not ship stock `Devel::NYTProf` as the product `.so`.
 4. **No double SUB_RETURN.** Opcode `entersub` and Perl `DB::sub` wrap must not run on the same call.
 5. **Default `stmts=1`** must not hook `NEXTSTATE`/`UNSTACK` (that is `blocks=1` 780 path / DI-01).
-6. **Exclusive honesty.** Parent excl = incl − Σ child **inclusive** (PR-14 / g14). Slowop children fold via the **kept** `product_pending_child_excl` mailbox on the wrap escape and via the current `subr_entry` on the opcode path. Do **not** “fix” exclusive seconds to match 6.15 HTML units. Do **not** subtract statement-profiler overhead from incl (`cumulative_overhead_ticks` stays 0 unless a later clock ADR).
+6. **Exclusive honesty.** Parent excl = incl − Σ child **inclusive** (PR-14 / g14). Slowop children fold via the **kept** `product_pending_child_excl` mailbox on the wrap escape and via the current `subr_entry` on the opcode path. Do **not** “fix” exclusive seconds to match 6.15 HTML units. Last-site close-to-seed hook cost **is** subtracted from sub incl/excl (`product_overhead_ticks`, 6.15 `cumulative_overhead_ticks`; KD-E13 superseded). Do **not** rescale remaining ticks to match 6.15 HTML units.
 7. Tests must drive real `perl -d:NYTProfM` + shipped dump/report. No fixture-only theater.
 8. No public perf SLO / BENCH certification claim. Engineering benches stay `claim: none`.
 9. Agents own tasks, not architectural truth. Model adaptations in this document are proposals constrained by ADRs/charter/fixtures.
@@ -167,7 +167,7 @@ Copy **functions and tables**, not the stock module. Line ranges below are pin `
 | Pin source (`baseline/6.15/src/`, read-only) | Product destination | Adapt |
 |----------------------------------------------|---------------------|--------|
 | `pp_entersub_profiler` / `pp_subcall_profiler` (~2631–2928) | `collector/xs/pp_entersub.c` (new) | See helper inventory. `NYTP_write_call_entry` → `nytp_emit_sub_entry` (only if `calls>=2` **and** emit gate on). Do **not** emit via FileHandle. |
-| `subr_entry_t` + `incr_sub_inclusive_time` / `_ix` (~1950–2274) | same `.c` + `collector/xs/nytprof_pp.h` | **Binding adaptations (KD-E03 / KD-E13):** clock = `nytp_clock_now`; fid = `product_fid_for_file_ptr`; emit `nytp_emit_sub_return` **and** `nytp_emit_sub_callers` in **ticks at return**; **do not** create `sub_callers_hv`; **do not** add a finalize `SUB_CALLERS` walk; **overhead contribution = 0** (do not introduce `cumulative_overhead_ticks` unless a later clock ADR). Keep `already_counted` + destructor-vs-XS double-call guard. Recursion: **wrap semantics** — every return writes full incl/excl, `reci=0`, `rec_depth=0`. Do not silently port `called_cv_depth <= 1` / `NYTP_SCi_RECI_RTIME` (seconds). |
+| `subr_entry_t` + `incr_sub_inclusive_time` / `_ix` (~1950–2274) | same `.c` + `collector/xs/nytprof_pp.h` | **Binding adaptations (KD-E03):** clock = `nytp_clock_now`; fid = `product_fid_for_file_ptr`; emit `nytp_emit_sub_return` **and** `nytp_emit_sub_callers` in **ticks at return**; **do not** create `sub_callers_hv`; **do not** add a finalize `SUB_CALLERS` walk. **KD-E13 superseded:** subtract last-site close-to-seed via `product_overhead_ticks` / `initial_overhead_ticks` (6.15 `cumulative_overhead_ticks`). Keep `already_counted` + destructor-vs-XS double-call guard. Recursion: **wrap semantics** — every return writes full incl/excl, `reci=0`, `rec_depth=0`. Do not silently port `called_cv_depth <= 1` / `NYTP_SCi_RECI_RTIME` (seconds). |
 | `subr_entry_setup` (**~2390–2628**, not the incr range) | same `.c` | Savestack `SSNEWa` + `subr_entry_ix` / `subr_entry_ix_ptr` (not `product_wrap_stack`). Product fid/clock. Skip `DB::*` / product internals. `opt_calls>=2` → `nytp_emit_sub_entry` only when emit gate is on. |
 | `pp_stmt_profiler` + `DB_stmt` | **Already product** (`pp_product_dbstate_line` / `pp_product_stmt`) | Do **not** replace default with 6.15’s NEXTSTATE+DBSTATE pair. Do **not** copy `init_profiler`’s `if (opt_use_db_sub)` stmt switch. |
 | `pp_leave_profiler` + `DB_leave` + `NYTP_write_discount` | later `collector/xs/pp_leave.c` | `nytp_emit_discount`; only when `leave=1`; UNSTACK/LEAVELOOP stay on `pp_product_stmt` when `PRODUCT_BLOCKS` (KD-E14) |
@@ -206,7 +206,7 @@ Provenance: extend / create [`docs/graft/PROVENANCE.md`](https://github.com/hila
 | `reinit_if_forked` / `CHECK_SAWAMPERSAND` | stmt/sub preambles | **Omit** in E1 (G06 fork already product; sawampersand residual) |
 | last-site TIME_* | product already | **Do not** call last-site from entersub return |
 | `sub_callers_hv` + finalize walk ~3661–3674 | pin finish | **Omit** (KD-E03) |
-| `cumulative_overhead_ticks` / `incl -= overhead` | incr ~2118–2129 | **Omit** (KD-E13); treat overhead as 0. **Do not** omit `cumulative_subr_ticks` with this row. |
+| `cumulative_overhead_ticks` / `incl -= overhead` | incr ~2118–2129 | **Copied** (KD-E13 superseded). Product name: `product_overhead_ticks` + `initial_overhead_ticks` on opcode `subr_entry` and wrap frames. Accumulator is last-site close-to-seed (and flush emit). **Do not** omit `cumulative_subr_ticks` with this row. |
 | `init_profiler` `if (opt_use_db_sub)` stmt block ~3218–3239 | pin | **Omit** — do not copy as the wrap switch (KD-E11) |
 | `PL_ppaddr[OP_ENTERSUB]` assign ~3256 | pin | **Rewrite** as `product_install_entersub()` |
 
@@ -309,7 +309,7 @@ That global cumulative of **descendant exclusive** is algebraically the same as 
 | Pin behavior | Product E1 |
 |--------------|------------|
 | `called_sub_ticks = cumulative_subr_ticks - initial_subr_ticks`; `cumulative_subr_ticks += excl` | **Copy.** Required for g14 remainder. `initial_subr_ticks` lives on the frame. |
-| `incl_subr_ticks -= overhead_ticks` (`cumulative_overhead_ticks`) | **Forbidden.** Overhead contribution is **0**. Do not introduce that accumulator unless a later clock ADR + annex A.5 test. Do **not** treat this omit as “no accumulators.” |
+| `incl_subr_ticks -= overhead_ticks` (`cumulative_overhead_ticks`) | **Required** (KD-E13 superseded; last-site close-then-seed). Opcode `product_incr_sub_inclusive_time` and wrap `wrap_pop` subtract `product_overhead_ticks() − initial_overhead_ticks`. g15 if-modifier named-sub incl/excl must stay under 55% of profiled wall. |
 | Aggregate `sub_callers_hv`; write `SUB_CALLERS` at finalize as seconds (`/ ticks_per_sec`, ~3661–3674) | **Forbidden.** No `sub_callers_hv`. `nytp_emit_sub_return` **and** `nytp_emit_sub_callers` in **ticks at return** (same as `wrap_pop`). Product `finish_profiler` stays last-site + `SRC_LINE` + `SUB_INFO` + `PID_END` — no CALLERS walk. |
 | `called_cv_depth <= 1` vs `reci` (reci stored in **seconds**) | **Do not port in E1.** Match wrap: every return writes full incl/excl; `reci=0`; `rec_depth=0`. Recursion honesty is a later PR. |
 | `already_counted` + XS explicit incr + destructor | **Keep** (prevents double SUB_RETURN on XS). |
@@ -669,7 +669,7 @@ Rocky/CPAN: this series does **not** change RPM identity. Re-cert module RPM aft
 | Default NEXTSTATE “accidentally” grafted with stmt profiler | High | Do not copy `init_profiler`’s `PL_ppaddr[OP_NEXTSTATE]` assignment; g15 remains the bar |
 | Delete pending-excl mailbox; g09 red on `wrap=1` | High | Keep mailbox; `product_credit_child_excl` branches (KD-E12) |
 | Emit at `file=` profiles BEGIN; **di02 27** fails | High | Install ppaddr at `file=`; **gate emits** on `product_after_init`. Do not silently recount 27. |
-| Exclusive drift vs wrap (destructor timing / overhead subtract) | Med | g09 + g14 on **both** paths; overhead = 0; no HTML rescale |
+| Exclusive drift vs wrap (destructor timing / overhead subtract) | Med | g09 + g14 on **both** paths; last-site overhead subtracted on both (g15); no HTML rescale |
 | `goto &sub` leak of `caller_subnam_sv` (6.15 XXX comment) | Med | Port the REFCNT_inc/mortalize block in E2 |
 | DateTime/`%^H` still broken on opcode path | Low | Opcode path does not enter `DB::sub`; g10 must stay green on `entersub=1` |
 | Call bench does not move vs wrap | Med | Keep `claim: none`; do not merge E1b “done” if g17 shows no direction **and** opcode is not actually installed |
@@ -699,7 +699,7 @@ Rocky/CPAN: this series does **not** change RPM identity. Re-cert module RPM aft
 | **KD-E01** | After **E1b**, default call attach = grafted C `OP_ENTERSUB`. Canonical wrap escape is **`wrap=1`**. | Drops the Perl `DB::sub` frame (~3.4× vs pin on the call microbench). Escape must not pretend to be 6.15 `use_db_sub`. |
 | **KD-E02** | Copy pin `pp_*` / `subr_entry_*` into `collector/xs/` per the helper inventory; replace call writes with `nytp_emit_sub_*`. Never ship pin `.so`. Never edit `baseline/6.15/src`. | Annex A.3 + ADR-0004 + identity. A3 hook-rewrite already rejected (RSK-001). |
 | **KD-E03** | Product `SUB_RETURN` **and** `SUB_CALLERS` stay **tick NVs emitted at return**. No `sub_callers_hv`. No finalize `/ ticks_per_sec`. | Avoids a model unit flip and OI-003-02 product contamination. |
-| **KD-E04** | Exclusive stays collection-written: incl − Σ child inclusive (opcode may use 6.15 cumulative-excl **without** overhead subtract). Model does not recompute or rescale to 6.15 HTML seconds. | PR-14 / g14 / AGENTS.md §5. |
+| **KD-E04** | Exclusive stays collection-written: incl − Σ child inclusive (opcode uses 6.15 cumulative-excl **and** last-site overhead subtract). Model does not recompute or rescale to 6.15 HTML seconds. | PR-14 / g14 / AGENTS.md §5. |
 | **KD-E05** | Default `stmts=1` stays DBSTATE-only. This series **starts at ENTERSUB**, not a stmt-hook expansion. | Constraint 5; PR-15/DI-01 already own stmt/blocks. |
 | **KD-E06** | After E1b: no `$^P` `0x01` on the default; `DB::sub` is a stub; goto list is `wrap=1` only. E1a default still wrap. | Matches 6.15 `.pm` on the opcode path; constraint 4. |
 | **KD-E07** | One clock (`nytp_clock_now`) and one fid table (product). | Annex A.5; di01 resolved-fid honesty. |
@@ -708,7 +708,7 @@ Rocky/CPAN: this series does **not** change RPM identity. Re-cert module RPM aft
 | **KD-E10** | Success = opcode on the product sink + green attach gates (incl. di02 **27**) + measured wrap/entersub bench with **`claim: none`**. | Honesty: not BENCH cert, not GA-candidate, not “beat 6.15.” |
 | **KD-E11** | Product `use_db_sub=1` is an **intentional fork**: synonym for `wrap=1`, **not** 6.15 stmt `DB::DB` + opcode calls. Do **not** copy `init_profiler`’s `if (opt_use_db_sub)` block. Document in the operator runbook in E0. | 6.15 installs ENTERSUB unconditionally; using the same name as wrap rollback would mislead 6.15 operators **and** implementers. |
 | **KD-E12** | Keep the pending-excl mailbox for the wrap escape. Opcode credits `subr_entry` via `product_credit_child_excl`. Do not delete the mailbox in E1. | g09 on `wrap=1` / g16 must stay green (PR-9). |
-| **KD-E13** | Grafted `incr_*` must **not** subtract statement-profiler overhead (`cumulative_overhead_ticks` = 0 / omitted). | Faithful copy would change exclusive vs wrap/g14. |
+| **KD-E13** | **Superseded 2026-08-18.** Last-site close-then-seed made TIME_LINE honest; sub incl/excl now subtract the same close-to-seed gap (`product_overhead_ticks`, 6.15 `cumulative_overhead_ticks`) on opcode and wrap. g15 named-sub incl/excl < 55% of profiled wall. Parent excl remains incl − Σ child inclusive (g14). | TIME_LINE-only discount left HTML sub times ≈ profiled wall. |
 | **KD-E14** | Product `leave` default remains **0** through this series. When `PRODUCT_BLOCKS`, UNSTACK/LEAVELOOP stay on `pp_product_stmt`. Matching 6.15 `leave=1` is a later honesty PR. | E3 must not steal DI-01 810. TIME_LINE multiplicity must not change “if green.” |
 | **KD-E15** | **Superseded 2026-08-18.** Product `slowops=2` now installs the 6.15 full table (operator request: method lists match the pin). `full`/`=3` remain aliases. Exclusive stays thin. | Advertised-options honesty; g19 asserts default emits CORE:stat/sleep/prtf. |
 | **KD-E16** | E1 is **opt-in then flip** (Alt-6). Do not change the product default in the same merge as the first C lines. | Makes E1 reviewable; isolates di02 27-risk. |

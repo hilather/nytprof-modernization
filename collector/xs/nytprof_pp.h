@@ -23,6 +23,8 @@ IV       product_opt_stmts(pTHX);
 IV       product_opt_blocks(pTHX);
 void     product_add_pending_child_excl(NV);
 NV       product_take_pending_child_excl(void);
+/* Last-site hook gap (close-to-seed), subtracted from sub incl like 6.15. */
+NV       product_overhead_ticks(void);
 
 /* Last-site clock (PR-8). Leave graft flushes via these — do not add a
  * second TIME_* writer in pp_leave.c. Continuation seed uses the
