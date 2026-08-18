@@ -51,4 +51,13 @@ int  product_leave_is_installed(void);
 int  product_leave_emit_enabled(void);
 void product_leave_set_emit_enabled(int on);
 
+/* Aggregate SUB_CALLERS in C; flush once at finish (ACTIVE, before finalize). */
+nytp_status product_callers_add(nytp_fid fid, nytp_line line, uint32_t count,
+                                double incl, double excl, double reci,
+                                uint32_t rec_depth, const char *called,
+                                const char *caller);
+nytp_status product_callers_flush(nytp_sink *sink);
+void        product_callers_reset(void);
+uint32_t    product_callers_len(void);
+
 #endif /* NYTPROF_PP_H */

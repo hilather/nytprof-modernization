@@ -6,7 +6,8 @@
  * are required for XS exceptions.
  *
  * Product adaptations (binding): nytp_clock_now; product_fid_for_file_ptr;
- * emit SUB_RETURN + SUB_CALLERS in ticks at return; no callers hash;
+ * emit SUB_RETURN in ticks at return; SUB_CALLERS aggregated in C
+ * (product_callers_add) and flushed at finish; no Perl callers HV;
  * overhead contribution is 0; keep cumulative_subr_ticks
  * (g14 remainder); wrap recursion (full incl/excl, reci=0); skip DB::*
  * and Devel::NYTProfM. E2 ports pin OP_GOTO (goto &CV keeps the original
@@ -315,19 +316,20 @@ product_incr_sub_inclusive_time(pTHX_ subr_entry_t *subr_entry)
     }
 
     if (product_sink != NULL) {
-        /* Ticks at return, same as wrap_pop. No finalize callers walk. */
+        /* Ticks at return. Callers rows wait for finish (one emit per edge). */
         (void)nytp_emit_sub_return(product_sink,
                                    (nytp_depth)subr_entry->subr_prof_depth,
                                    incl_subr_ticks, excl_subr_ticks,
                                    nytp_sv_cstr(called_buf));
-        (void)nytp_emit_sub_callers(product_sink,
-                                    (nytp_fid)subr_entry->caller_fid,
-                                    (nytp_line)(subr_entry->caller_line
-                                                    ? subr_entry->caller_line
-                                                    : 1),
-                                    1U, incl_subr_ticks, excl_subr_ticks, 0.0,
-                                    0U, nytp_sv_cstr(called_buf),
-                                    nytp_sv_cstr(caller_buf));
+        if (product_callers_add((nytp_fid)subr_entry->caller_fid,
+                                (nytp_line)(subr_entry->caller_line
+                                                ? subr_entry->caller_line
+                                                : 1),
+                                1U, incl_subr_ticks, excl_subr_ticks, 0.0, 0U,
+                                called_buf, caller_buf)
+            != NYTP_OK) {
+            croak("NYTProfM: SUB_CALLERS aggregate overflow");
+        }
     }
 
     product_subr_entry_destroy(aTHX_ subr_entry);

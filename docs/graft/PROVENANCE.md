@@ -1,6 +1,6 @@
 # Product XS graft provenance
 
-**Status:** E2–E4 — default opcode hooks `OP_ENTERSUB` + `OP_GOTO`; `pp_leave.c` on `nytp_emit_discount` behind `leave=1` (default 0); `slowops.h` full table behind `slowops=full` / `=3` (`slowops=2` stays PRINT/MATCH). Wrap list stays `wrap=1` only. Residual: live di02 27, leave default not 6.15.  
+**Status:** E2–E4 — default opcode hooks `OP_ENTERSUB` + `OP_GOTO`; `pp_leave.c` on `nytp_emit_discount` behind `leave=1` (default 0); `slowops.h` full table behind `slowops=full` / `=3` (`slowops=2` stays PRINT/MATCH). Wrap list stays `wrap=1` only. `SUB_CALLERS` aggregated in C (`product_callers.c`) and flushed at finish; `SUB_RETURN` stays 1:1. Residual: live di02 27, leave default not 6.15.  
 
 
 **Annex:** [product-xs-graft-annex-v0.md](https://github.com/hilather/nytprof-modernization/blob/main/docs/schemas/product-xs-graft-annex-v0.md) A.1  
@@ -93,6 +93,7 @@ Pin `baseline/6.15/src/slowops.h` is **not** present / not edited. The table was
 | UNSTACK/LEAVELOOP stay on `pp_product_stmt` when `PRODUCT_BLOCKS` | KD-E14 |
 | Leave install only when `leave=1` + `stmts`; emit after INIT | E3 |
 | E4 full table is opt-in `slowops=full`/`=3` only | product `slowops=2` stays PRINT/MATCH |
+| `SUB_CALLERS` C table + finish flush (not Perl HV) | product-only; `SUB_RETURN` still ticks at return |
 
 ## Security backports
 

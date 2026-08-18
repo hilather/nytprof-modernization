@@ -57,8 +57,8 @@ grep -q 'product_install_entersub' "$PP_C" \
   || fail "pp_entersub.c missing product_install_entersub"
 grep -q 'nytp_emit_sub_return' "$PP_C" \
   || fail "pp_entersub.c missing nytp_emit_sub_return"
-grep -q 'nytp_emit_sub_callers' "$PP_C" \
-  || fail "pp_entersub.c missing nytp_emit_sub_callers"
+grep -q 'product_callers_add' "$PP_C" \
+  || fail "pp_entersub.c missing product_callers_add (SUB_CALLERS at finish)"
 grep -q 'product_cumulative_subr_ticks' "$PP_C" \
   || fail "pp_entersub.c missing cumulative_subr_ticks (g14)"
 if grep -q 'cumulative_overhead_ticks' "$PP_C"; then
@@ -328,7 +328,7 @@ perl -e '
     unless $r > 0.5 && $r < 2;
   print "UNIT_RATIO_OK $r\n";
 ' "$RATIO" || fail "unit-ratio guard failed (see $DUMP)"
-ok "unit-ratio $RATIO ~1 (ticks on SUB_RETURN and SUB_CALLERS)"
+ok "unit-ratio $RATIO ~1 (ticks on SUB_RETURN; SUB_CALLERS excl summed at finish)"
 
 # --- re-drive g09 / g14 / di02 on default opcode ---
 unset NYTPROF_ATTACH_OPTS || true

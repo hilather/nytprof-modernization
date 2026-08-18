@@ -811,6 +811,7 @@ nytp_product_sink_hold(const char *path, int compress_level, int durable)
     nytp_product_sink_drop();
     product_fid_reset(aTHX);
     product_wrap_reset();
+    product_callers_reset();
     product_durable = durable ? 1 : 0;
     product_compress_level = compress_level;
     if (product_compress_level < 0 || product_compress_level > 9) {
@@ -869,6 +870,7 @@ nytp_product_sink_reopen_open(void)
     {
         dTHX;
         product_fid_reset(aTHX);
+        product_callers_reset();
     }
     return nytp_product_sink_hold(have_path ? path_copy : NULL,
                                   product_compress_level, product_durable);
@@ -920,6 +922,7 @@ nytp_product_fork_resume_child(nytp_pid child_pid)
     {
         dTHX;
         product_fid_reset(aTHX);
+        product_callers_reset();
     }
     return nytp_sink_activate(product_sink);
 }
@@ -1614,10 +1617,11 @@ product_profile_one_slowop(pTHX_ Perl_ppaddr_t orig, U16 type)
     incl_nv = (double)incl;
     (void)nytp_emit_sub_return(product_sink, (nytp_depth)1, incl_nv,
                                incl_nv, nytp_sv_cstr(name));
-    (void)nytp_emit_sub_callers(product_sink, (nytp_fid)fid,
-                                (nytp_line)line, 1U, incl_nv, incl_nv, 0.0,
-                                0U, nytp_sv_cstr(name),
-                                nytp_sv_cstr(caller));
+    if (product_callers_add((nytp_fid)fid, (nytp_line)line, 1U, incl_nv,
+                            incl_nv, 0.0, 0U, name, caller)
+        != NYTP_OK) {
+        croak("NYTProfM: SUB_CALLERS aggregate overflow");
+    }
     /* Opcode credits the current subr_entry; wrap still uses mailbox. */
     product_credit_child_excl(incl_nv);
     product_in_slowop = 0;
@@ -1888,6 +1892,7 @@ enable_sink_v6(path)
             nytp_product_sink_drop();
             product_fid_reset(aTHX);
             product_wrap_reset();
+            product_callers_reset();
             product_sink = nytp_v6_sink_create(path);
             if (product_sink == NULL) {
                 croak("DB::enable_sink_v6: nytp_v6_sink_create(%s) failed",
@@ -2025,10 +2030,12 @@ wrap_pop()
                 (void)nytp_emit_sub_return(product_sink, (nytp_depth)depth,
                                            incl, excl,
                                            nytp_sv_cstr(fr->called));
-                (void)nytp_emit_sub_callers(
-                    product_sink, (nytp_fid)fr->fid, (nytp_line)fr->line, 1U,
-                    incl, excl, 0.0, 0U, nytp_sv_cstr(fr->called),
-                    nytp_sv_cstr(fr->caller));
+                if (product_callers_add((nytp_fid)fr->fid, (nytp_line)fr->line,
+                                        1U, incl, excl, 0.0, 0U, fr->called,
+                                        fr->caller)
+                    != NYTP_OK) {
+                    croak("NYTProfM: SUB_CALLERS aggregate overflow");
+                }
             }
             RETVAL = 0;
         }
@@ -2485,6 +2492,7 @@ finish_profiler()
                 /* Still close the sink so the file is not left incomplete. */
             }
             if (product_sink != NULL) {
+                (void)product_callers_flush(product_sink);
                 (void)nytp_sink_begin_finalize(product_sink);
                 if (product_savesrc) {
                     product_emit_src_lines(aTHX);
@@ -2495,6 +2503,7 @@ finish_profiler()
             nytp_product_sink_drop();
             product_fid_reset(aTHX);
             product_wrap_reset();
+            product_callers_reset();
             RETVAL = 1;
         }
     OUTPUT:
