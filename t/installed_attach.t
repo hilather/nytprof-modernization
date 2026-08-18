@@ -51,16 +51,9 @@ die "mid->leaf CALLERS=$edge want 15\n" unless $edge == 15;
 print "OK: installed attach leaf=15 mid=3 edge=15\n";
 
 {
-    open my $fh, '<:raw', $profile or die "open $profile: $!\n";
-    local $/;
-    my $bytes = <$fh>;
-    close $fh;
-    die "omitted compress must write START_DEFLATE z\n"
-      unless defined $bytes && $bytes =~ /^NYTProf 5 0\n/ && index( $bytes, 'z' ) >= 0;
-    my $zi = index( $bytes, 'z' );
-    my $cmf = ord( substr( $bytes, $zi + 1, 1 ) );
+    my ( $cmf, $deflate ) = read_start_deflate($profile);
     die "omitted compress zlib CMF=$cmf want 0x78\n" unless $cmf == 0x78;
-    my $plain = substr( $bytes, 0, $zi ) . inflate_v5_zlib( substr( $bytes, $zi + 1 ) );
+    my $plain = inflate_v5_zlib($deflate);
     $plain =~ /HASH\(/
       and die "profile must not contain HASH( caller names\n";
 }
@@ -145,6 +138,114 @@ sub inflate_v5_zlib {
     die "inflate incomplete (no Z_STREAM_END)\n";
 }
 
+# Walk tags until START_DEFLATE. Do not index() for 'z' — fid paths can
+# contain that byte (this repo: "modernization").
+sub read_start_deflate {
+    my ($path) = @_;
+    open my $fh, '<:raw', $path or die "open $path: $!\n";
+    my $hdr = <$fh>;
+    die "bad magic (not NYTProf 5)\n" unless defined $hdr && $hdr =~ /^NYTProf 5 0\n/;
+    while (1) {
+        my $tag;
+        last unless read( $fh, $tag, 1 );
+        last if $tag eq '';
+        if ( $tag eq ':' || $tag eq '!' || $tag eq '#' ) {
+            my $rest = <$fh>;
+            die "truncated text tag\n" unless defined $rest;
+            next;
+        }
+        if ( $tag eq 'z' ) {
+            local $/;
+            my $rest = <$fh>;
+            $rest = '' unless defined $rest;
+            die "empty START_DEFLATE\n" unless length $rest;
+            return ( ord( substr( $rest, 0, 1 ) ), $rest );
+        }
+        skip_known_tag( $fh, $tag );
+    }
+    die "omitted compress must write START_DEFLATE z\n";
+}
+
+sub skip_known_tag {
+    my ( $fh, $tag ) = @_;
+    if ( $tag eq '<' ) {
+        read_u32($fh);
+        skip_nv($fh);
+        skip_nv($fh);
+        skip_str($fh);
+        return;
+    }
+    if ( $tag eq 'c' ) {
+        read_u32($fh);
+        skip_u32($fh);
+        skip_str($fh);
+        skip_u32($fh);
+        skip_nv($fh);
+        skip_nv($fh);
+        skip_nv($fh);
+        skip_u32($fh);
+        skip_str($fh);
+        return;
+    }
+    if ( $tag eq '+' ) {
+        read_u32($fh);
+        skip_u32($fh);
+        skip_u32($fh);
+        return;
+    }
+    if ( $tag eq '*' ) {
+        read_u32($fh);
+        skip_u32($fh);
+        skip_u32($fh);
+        skip_u32($fh);
+        skip_u32($fh);
+        return;
+    }
+    if ( $tag eq '-' ) {
+        return;
+    }
+    if ( $tag eq '>' ) {
+        read_u32($fh);
+        skip_u32($fh);
+        return;
+    }
+    if ( $tag eq '@' ) {
+        read_u32($fh);
+        skip_u32($fh);
+        skip_u32($fh);
+        skip_u32($fh);
+        skip_u32($fh);
+        skip_u32($fh);
+        skip_str($fh);
+        return;
+    }
+    if ( $tag eq 'S' ) {
+        read_u32($fh);
+        skip_u32($fh);
+        skip_str($fh);
+        return;
+    }
+    if ( $tag eq 's' ) {
+        read_u32($fh);
+        skip_str($fh);
+        skip_u32($fh);
+        skip_u32($fh);
+        return;
+    }
+    if ( $tag eq 'P' ) {
+        read_u32($fh);
+        skip_u32($fh);
+        skip_nv($fh);
+        return;
+    }
+    if ( $tag eq 'p' ) {
+        read_u32($fh);
+        skip_nv($fh);
+        return;
+    }
+    die sprintf( "unknown v5 tag 0x%02x (fail closed)\n", ord($tag) );
+}
+
 sub scan_profile {
     my ($path) = @_;
     open my $fh, '<:raw', $path or die "open $path: $!\n";
@@ -193,13 +294,14 @@ sub scan_tags {
             read_u32($fh);    # fid
             skip_u32($fh);    # line
             my $caller = read_str($fh);
-            skip_u32($fh);    # count
+            # Sum count — finish-flush emits one `c` per distinct edge.
+            my $count = read_u32($fh);
             skip_nv($fh);
             skip_nv($fh);
             skip_nv($fh);
             skip_u32($fh);    # rec_depth
             my $called = read_str($fh);
-            $edge += 1 if $caller eq 'main::mid' && $called eq 'main::leaf';
+            $edge += $count if $caller eq 'main::mid' && $called eq 'main::leaf';
             next;
         }
         if ( $tag eq '+' ) {

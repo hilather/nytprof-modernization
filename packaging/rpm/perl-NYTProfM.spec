@@ -9,7 +9,7 @@
 
 Name:           perl-NYTProfM
 Version:        6.15
-Release:        12%{?dist}
+Release:        13%{?dist}
 Summary:        NYTProfM 6.15 collection (D1-B v5-only default; -d:NYTProfM)
 License:        GPL+ or Artistic
 URL:            https://github.com/hilather/nytprof-modernization
@@ -115,6 +115,9 @@ fi
 %{_bindir}/nytprofm-dump
 
 %changelog
+* Tue Aug 18 2026 nytprof-modernization <devnull@example.com> - 6.15-13
+- %check sums SUB_CALLERS.count (finish-flush one `c` per edge).
+  v0.2.18 RPM never attached (%check CALLERS=1 want 15).
 * Tue Aug 18 2026 nytprof-modernization <devnull@example.com> - 6.15-12
 - Stage full collector/xs/ (nytprof_pp.h, pp_entersub.c, pp_leave.c,
   product_callers.c, slowops.h). v0.2.17 RPM never attached.

@@ -48,8 +48,9 @@ ARCH-008: agents must not settle this inside implementation patches.
   `crates/nytprof-model/src/lib.rs` ~255–268
 - di01 bar is **TIME_BLOCK event occupancy 780**, not ticks:
   `scripts/packaging/di01_blocks_780_smoke.sh`
-- `%check` 15/3/15 is **per-tag** (`scan_profile` increments edge once
-  per `c`, skipping the count field): `t/installed_attach.t`
+- `%check` 15/3/15 mid→leaf is **`SUB_CALLERS.count` sum** (finish-flush
+  emits one `c` per distinct edge): `t/installed_attach.t`. TIME_LINE /
+  TIME_BLOCK stay per-interval; `aggregate=1` stays fail-closed.
 - Product last-site still emits one `+`/`*` per closed interval:
   `collector/xs/NYTProf.xs` `product_emit_last_site_elapsed`
 - Field (not-in-repo) 25s scanner files remain megabytes of per-interval

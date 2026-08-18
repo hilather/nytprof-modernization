@@ -132,4 +132,19 @@ fi
 [[ -f "$UNPACK/collector/build/xs-nytprof/auto/Devel/NYTProfM/NYTProfM.so" ]] \
   || fail "xs-nytprof did not build NYTProfM.so"
 ok "staged tree built xs-nytprof (D1-B)"
+
+# Same layout as spec %install + %check (v0.2.18 died here: callers count).
+PREFIX="$WORK/check-prefix"
+mkdir -p "$PREFIX/lib/perl5/Devel/NYTProfM" "$PREFIX/lib/perl5/auto/Devel/NYTProfM"
+install -m 644 "$UNPACK/collector/build/xs-nytprof/Devel/NYTProfM.pm" \
+  "$PREFIX/lib/perl5/Devel/NYTProfM.pm"
+install -m 644 "$UNPACK/collector/build/xs-nytprof/Devel/NYTProfM/Core.pm" \
+  "$PREFIX/lib/perl5/Devel/NYTProfM/Core.pm"
+install -m 755 "$UNPACK/collector/build/xs-nytprof/auto/Devel/NYTProfM/NYTProfM.so" \
+  "$PREFIX/lib/perl5/auto/Devel/NYTProfM/NYTProfM.so"
+unset PERL5OPT || true
+echo "running: staged t/installed_attach.t (fake prefix, 15/3/15)"
+PERL5LIB="$PREFIX/lib/perl5" perl "$UNPACK/t/installed_attach.t" \
+  || fail "staged installed_attach.t failed (SUB_CALLERS count / 15/3/15)"
+ok "staged installed attach 15/3/15"
 ok "rpm01_make_dist_smoke"
