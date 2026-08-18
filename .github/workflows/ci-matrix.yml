@@ -157,9 +157,25 @@ jobs:
         timeout-minutes: 5
         run: |
           set -euo pipefail
-          # Bound apt — runners have hung indefinitely on apt-get update.
-          sudo timeout 120 apt-get update
-          sudo timeout 180 apt-get install -y --no-install-recommends \
+          # Azure Ubuntu mirrors sometimes stall (v0.2.22 tag: timeout 120
+          # exit 124 on azure.archive.ubuntu.com). Retry, then fall back.
+          apt_update() { sudo timeout 90 apt-get -o Acquire::Retries=3 update; }
+          ok=0
+          for i in 1 2 3; do
+            if apt_update; then ok=1; break; fi
+            echo "apt-get update attempt ${i} failed; retrying"
+            sleep $((i * 8))
+          done
+          if [[ "$ok" -ne 1 ]]; then
+            echo "default mirrors failed; retry via archive.ubuntu.com"
+            sudo sed -i \
+              's|http://azure.archive.ubuntu.com/ubuntu|http://archive.ubuntu.com/ubuntu|g' \
+              /etc/apt/sources.list /etc/apt/sources.list.d/* \
+              /etc/apt/apt-mirrors.txt 2>/dev/null || true
+            apt_update
+          fi
+          sudo timeout 180 apt-get -o Acquire::Retries=3 install -y \
+            --no-install-recommends \
             build-essential \
             zlib1g-dev \
             libzstd-dev \

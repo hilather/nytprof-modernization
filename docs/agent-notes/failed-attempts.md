@@ -8,7 +8,7 @@ Add a **new row near the top** when an implementation, optimization (including *
 
 | Date | Slug | Area | Tried | Why failed / residual | Detail |
 |------|------|------|-------|----------------------|--------|
-| 2026-08-18 | gha-apt-get-hang | ci / matrix | `offline_gate (linux)` `sudo apt-get update` | v0.2.17/v0.2.19 main hung 20+ min on that step; tag linux finished. Step `timeout-minutes: 5` + `timeout 120 apt-get update`. Do not wait out the 90 min job cap. | — |
+| 2026-08-18 | gha-apt-get-hang | ci / matrix | `offline_gate (linux)` `sudo apt-get update` | v0.2.17/v0.2.19 hung 20+ min; `timeout 120` still exit **124** on v0.2.22 **tag** (`azure.archive.ubuntu.com` Ign then stall). Main same SHA was green. Retry 3× then fall back to `archive.ubuntu.com`. Do not wait out the 90 min job cap. | — |
 | 2026-08-18 | rpm-check-index-z | packaging / test | `installed_attach.t` CMF used `index($bytes,'z')` | First `z` can be inside a fid path (`modernization` → CMF=97). Walk tags to `START_DEFLATE`. | — |
 | 2026-08-18 | rpm-check-callers-per-tag | packaging / rpm | v0.2.18 `%check` `t/installed_attach.t` `$edge += 1` per `c` (skipped count) | Finish-flush aggregator emits one mid→leaf `c` with count=15; `%check` died `CALLERS=1 want 15`. Sum `SUB_CALLERS.count`. rpm01 now runs staged `installed_attach.t`. Do not treat 15/3/15 edge as tag occupancy. | — |
 | 2026-08-18 | el8-workflow-pin-nevra | ci / release | `release-el8-rpm.yml` `test -f …6.15-10.el8…rpm` | Bumping spec `Release` without the pin fails the tag job after a successful rpmbuild (v0.2.17 died earlier, so this never ran). Derive NEVRA from spec `Release`; rpm01 asserts no stale pin. | — |
